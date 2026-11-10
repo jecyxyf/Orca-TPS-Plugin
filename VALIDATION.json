@@ -1,7 +1,7 @@
 {
-  "pluginVersion": "1.3.0",
-  "orcaVersion": "1.4.251",
-  "date": "2026-11-07",
+  "pluginVersion": "1.4.0",
+  "orcaVersion": "1.4.255",
+  "date": "2026-11-10",
   "ccSwitchParity": {
     "claude": "5/5 real requests matched cc-switch.db output_tokens, latency_ms, and first_token_ms to 0ms delta; subagents/*.jsonl and subagents/workflows/*/*.jsonl supported",
     "codex": "6/6 real multi-step requests matched cc-switch.db output_tokens, latency_ms, and first_token_ms to 0ms delta via RequestTimer + token_usage_record",
