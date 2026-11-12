@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, mkdir, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
-  UNIT_KEY_PREFIX, accumulateRecords, createUsageIndex, dayKeyAgo, localDayKey, realTokens, summarizeUsage, usageCutoffMs
+  UNIT_KEY_PREFIX, USAGE_SCHEMA, accumulateRecords, createUsageIndex, dayKeyAgo, localDayKey, realTokens, summarizeUsage, usageCutoffMs
 } from '../src/usage-summary.mjs';
 import { discoverUsageUnits } from '../src/data.mjs';
 
@@ -351,4 +351,75 @@ test('large files that are still growing are re-read at most once per interval',
   clock += 11 * 60_000;
   await index.refresh();
   assert.equal(reads, 2, 'after the interval the file is read again');
+});
+
+test('model speed averages per-request TPS across agents, ranks fastest first, and skips sparse or unnamed models', () => {
+  const now = at(2026, 11, 8, 9), days = {};
+  const turn = (completedAt, model, tokensPerSecond, isEstimatedSpeed = false) => ({
+    completedAt, model, freshInputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0,
+    tokensPerSecond, isEstimatedSpeed
+  });
+  accumulateRecords(days, 'claude', [
+    ...Array.from({ length: 6 }, (_, i) => turn(at(2026, 11, 8, 8) + i, 'fast-model', 120)),
+    turn(at(2026, 11, 8, 7), 'fast-model', null),
+    turn(at(2026, 11, 4, 8), 'fast-model', 240),
+    ...Array.from({ length: 4 }, (_, i) => turn(at(2026, 11, 8, 6) + i, 'sparse-model', 300)),
+    turn(at(2026, 11, 8, 5), '', 500)
+  ]);
+  accumulateRecords(days, 'codex', Array.from({ length: 5 }, (_, i) => turn(at(2026, 11, 8, 4) + i, 'mid-model', 60)));
+  accumulateRecords(days, 'opencode', Array.from({ length: 5 }, (_, i) => turn(at(2026, 11, 8, 3) + i, 'mid-model', 40, true)));
+
+  const windows = summarizeUsage([days], now);
+  const today = windows.today;
+  assert.deepEqual(today.speeds.map(entry => entry.model), ['fast-model', 'mid-model'], 'fastest first; sparse and unnamed models are not ranked');
+  assert.equal(today.speedSparse, 1, 'a model below the sample minimum is counted, not ranked');
+  assert.equal(today.speedHidden, 0);
+  assert.deepEqual(today.speeds[0], { model: 'fast-model', tokensPerSecond: 120, samples: 6, estimated: false, providers: ['claude'] });
+  assert.equal(today.speeds[1].tokensPerSecond, 50, 'mean of per-request TPS across agents');
+  assert.equal(today.speeds[1].samples, 10);
+  assert.equal(today.speeds[1].estimated, true, 'mostly log-estimated samples are marked as estimates');
+  assert.deepEqual(today.speeds[1].providers, ['codex', 'opencode']);
+  assert.equal(today.requests, 22, 'requests still count records without a speed, sparse models and unnamed models');
+  assert.equal(windows.week.speeds[0].samples, 7, 'the week window includes the older fast sample');
+  assert.ok(Math.abs(windows.week.speeds[0].tokensPerSecond - 960 / 7) < 1e-9);
+});
+
+test('model speed lists at most ten models and counts the rest', () => {
+  const now = at(2026, 11, 8, 9), days = {};
+  for (let model = 0; model < 11; model += 1) {
+    accumulateRecords(days, 'pi', Array.from({ length: 5 }, (_, i) => ({
+      completedAt: at(2026, 11, 8, 8) + i, model: `m${model}`, outputTokens: 1, tokensPerSecond: model + 1
+    })));
+  }
+  const today = summarizeUsage([days], now).today;
+  assert.equal(today.speeds.length, 10);
+  assert.equal(today.speeds[0].model, 'm10', 'fastest model first');
+  assert.equal(today.speedHidden, 1);
+});
+
+test('index units stored before speed counters keep their totals, are re-read once, then rank speed', async () => {
+  const now = at(2026, 11, 8, 9), today = localDayKey(now);
+  const storage = fakeStorage(), reads = [];
+  // A unit as the previous schema stored it: five counters per cell and no schema field.
+  await storage.set(`${UNIT_KEY_PREFIX}old`, { stamp: 's1', readAt: 1, days: { [today]: { claude: { 'claude-opus-5-5': [2, 100, 50, 0, 0] } } } });
+  const unit = {
+    key: 'old', stamp: 's1', bytes: 100, mtimeMs: 1,
+    read: async () => {
+      reads.push('old');
+      return { [today]: { claude: { 'claude-opus-5-5': [2, 100, 50, 0, 0, 5, 600, 0] } } };
+    }
+  };
+  const index = createUsageIndex({ storage, discover: async () => [unit], now: () => now });
+  await index.ready();
+  assert.equal(index.summary().windows.today.tokens, 150, 'totals stay visible before the re-read');
+  assert.equal(index.summary().windows.today.speeds.length, 0);
+
+  assert.deepEqual(await index.refresh(), { pending: 0 });
+  assert.deepEqual(reads, ['old']);
+  assert.equal(index.summary().windows.today.tokens, 150);
+  assert.equal(index.summary().windows.today.speeds[0].tokensPerSecond, 120);
+  assert.equal(storage.map.get(`${UNIT_KEY_PREFIX}old`).schema, USAGE_SCHEMA);
+
+  await index.refresh();
+  assert.deepEqual(reads, ['old'], 'a current-schema unit is not read again');
 });

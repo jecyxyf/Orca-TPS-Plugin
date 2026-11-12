@@ -150,6 +150,13 @@
     .war-meta span { white-space: nowrap; }
     .war-empty { margin: 10px 2px 2px; color: var(--muted); font-size: 12px; text-align: center; }
     .war-empty[hidden] { display: none; }
+    .usage-tabs { margin-top: 10px; }
+    .speed { margin-top: 8px; }
+    .speed-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .speed-title { font-size: 12px; font-weight: 700; }
+    .speed-sub { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .speed-rank { flex-shrink: 0; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .speed-value { flex-shrink: 0; color: var(--green); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .heat { position: relative; margin: 8px 0 0; padding: 10px 14px 8px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
     .heat-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .usage { margin-top: 12px; }
@@ -216,12 +223,12 @@
         <span class="usage-title">用量统计</span>
         <span class="usage-brief" id="usage-brief" data-testid="usage-brief">正在统计…</span>
       </summary>
-    <section class="war" id="war" aria-label="用量战况">
-      <div class="war-tabs" role="tablist" aria-label="统计范围">
+      <div class="war-tabs usage-tabs" role="tablist" aria-label="统计范围">
         <button class="war-tab" type="button" role="tab" data-range="today" aria-selected="true" data-testid="range-today">当日战况</button>
         <button class="war-tab" type="button" role="tab" data-range="week" aria-selected="false" data-testid="range-week">近一周战况</button>
         <button class="war-tab" type="button" role="tab" data-range="month" aria-selected="false" data-testid="range-month">近一月战况</button>
       </div>
+    <section class="war" id="war" aria-label="用量战况">
       <div class="war-totals">
         <div>
           <span class="war-label">消耗 token（含缓存读写）</span>
@@ -235,6 +242,15 @@
       <p class="war-note" id="war-note" data-testid="war-note" hidden></p>
       <ol class="war-rows" id="war-rows" data-testid="war-rows" aria-label="按 agent 与模型的消耗"></ol>
       <p class="war-empty" id="war-empty" data-testid="war-empty" hidden>这段时间还没有用量记录</p>
+    </section>
+    <section class="war speed" id="speed" aria-label="模型均速排名" data-testid="speed">
+      <div class="speed-head">
+        <span class="speed-title">模型均速</span>
+        <span class="speed-sub">单次请求输出速度的平均 · 基于会话日志</span>
+      </div>
+      <ol class="war-rows" id="speed-rows" data-testid="speed-rows" aria-label="按模型的平均输出速度，从高到低"></ol>
+      <p class="war-empty" id="speed-empty" data-testid="speed-empty" hidden>这段时间还没有样本充足的模型</p>
+      <p class="war-note" id="speed-note" data-testid="speed-note" hidden></p>
     </section>
     <section class="heat" id="heat" data-testid="heatmap">
       <div class="heat-head">
@@ -491,7 +507,56 @@
         if (range && numeric(range.hiddenRows) && range.hiddenRows > 0) notes.push(`另有 ${range.hiddenRows} 个模型未列出`);
         byId('war-note').textContent = notes.join(' · ');
         byId('war-note').hidden = notes.length === 0;
+        renderSpeeds(range);
         renderHeatmap();
+      }
+      // 模型均速: mean per-request TPS per model over the selected window, fastest first; ranking comes from tps.summary.
+      function speedText(tps) {
+        return tps >= 1 ? Math.round(tps).toLocaleString('zh-CN') : tps.toFixed(1);
+      }
+      function speedRow(entry, index, max) {
+        const item = document.createElement('li');
+        item.className = 'war-row';
+        const head = document.createElement('div');
+        head.className = 'war-row-head';
+        const rank = document.createElement('span');
+        rank.className = 'speed-rank';
+        rank.textContent = String(index + 1);
+        const model = document.createElement('span');
+        model.className = 'war-model';
+        model.textContent = entry.model;
+        model.title = entry.model;
+        const value = document.createElement('span');
+        value.className = 'speed-value';
+        value.textContent = `${entry.estimated ? '≈' : ''}${speedText(entry.tokensPerSecond)} tokens/s`;
+        head.append(rank, model, value);
+        const track = document.createElement('div');
+        track.className = 'war-track';
+        const fill = document.createElement('div');
+        fill.className = 'war-fill';
+        fill.style.width = `${max > 0 ? Math.max(2, Math.round((entry.tokensPerSecond / max) * 100)) : 0}%`;
+        track.append(fill);
+        const meta = document.createElement('div');
+        meta.className = 'war-meta';
+        const agents = [...new Set((entry.providers ?? []).map(provider => AGENT_LABELS[provider] ?? String(provider).slice(0, 40)))];
+        for (const part of [`${formatCount(entry.samples)} 次请求`, ...agents]) {
+          const span = document.createElement('span');
+          span.textContent = part;
+          meta.append(span);
+        }
+        item.append(head, track, meta);
+        return item;
+      }
+      function renderSpeeds(range) {
+        const list = Array.isArray(range?.speeds) ? range.speeds : [];
+        const max = list.reduce((top, entry) => Math.max(top, numeric(entry.tokensPerSecond) ? entry.tokensPerSecond : 0), 0);
+        byId('speed-rows').replaceChildren(...list.map((entry, index) => speedRow(entry, index, max)));
+        byId('speed-empty').hidden = !usageSummary || list.length > 0;
+        const notes = [];
+        if (range && numeric(range.speedSparse) && range.speedSparse > 0) notes.push(`${range.speedSparse} 个模型请求数不足，未参与排名`);
+        if (range && numeric(range.speedHidden) && range.speedHidden > 0) notes.push(`另有 ${range.speedHidden} 个模型未列出`);
+        byId('speed-note').textContent = notes.join(' · ');
+        byId('speed-note').hidden = notes.length === 0;
       }
       async function loadUsage() {
         if (!bridge || disposed || typeof bridge.request !== 'function') return;

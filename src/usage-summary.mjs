@@ -8,7 +8,14 @@ export const MAX_WINDOW_DAYS = 30;
 // The heatmap shows a year, so the index keeps a year of per-day counts; windows still use the spans above.
 export const HISTORY_DAYS = 365;
 const ROW_LIMIT = 30;
-const COUNTERS = 5; // requests, fresh input, output, cache read, cache write
+const SPEED_ROW_LIMIT = 10;
+// Per day, provider and model: requests, fresh input, output, cache read, cache write, then speed samples:
+// requests that had a per-request TPS, the sum of those TPS values, and how many were session-log estimates.
+const COUNTERS = 8;
+const SPEED_AT = 5;
+// Units stored with an older schema keep their totals for display but are read again to fill the speed counters.
+export const USAGE_SCHEMA = 2;
+export const SPEED_MIN_SAMPLES = 5;
 
 /** Local calendar day as YYYY-MM-DD. */
 export function localDayKey(ms) {
@@ -42,6 +49,12 @@ export function accumulateRecords(days, provider, records, { minDay = '' } = {})
     cell[2] += numberOr0(record.outputTokens);
     cell[3] += numberOr0(record.cacheReadTokens);
     cell[4] += numberOr0(record.cacheCreationTokens);
+    const speed = record.tokensPerSecond;
+    if (Number.isFinite(speed) && speed > 0) {
+      cell[SPEED_AT] += 1;
+      cell[SPEED_AT + 1] += speed;
+      if (record.isEstimatedSpeed) cell[SPEED_AT + 2] += 1;
+    }
   }
   return days;
 }
@@ -65,7 +78,7 @@ export function summarizeUsage(dayMaps, nowMs) {
   for (const [name, span] of WINDOWS) {
     const first = dayKeyAgo(nowMs, span - 1);
     const totals = { requests: 0, freshInput: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-    const rows = new Map();
+    const rows = new Map(), speeds = new Map();
     for (const days of dayMaps) {
       for (const [day, byProvider] of Object.entries(days)) {
         if (day < first || day > today) continue;
@@ -76,21 +89,57 @@ export function summarizeUsage(dayMaps, nowMs) {
             const row = rows.get(key) ?? { provider, model, requests: 0, freshInput: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
             addCounters(row, cell);
             rows.set(key, row);
+            if (model) addSpeed(speeds, provider, model, cell);
           }
         }
       }
     }
     const list = [...rows.values()].map(row => ({ ...row, tokens: realTokens(row) }))
       .sort((a, b) => b.tokens - a.tokens || b.requests - a.requests);
+    const speed = rankSpeeds(speeds);
     windows[name] = {
       ...totals,
       tokens: realTokens(totals),
       cacheHitRate: cacheHitRate(totals),
       rows: list.slice(0, ROW_LIMIT),
-      hiddenRows: Math.max(0, list.length - ROW_LIMIT)
+      hiddenRows: Math.max(0, list.length - ROW_LIMIT),
+      speeds: speed.speeds,
+      speedHidden: speed.hidden,
+      speedSparse: speed.sparse
     };
   }
   return windows;
+}
+
+/** Speed samples for one model, merged across agents; a cell without speed counters (older schema) adds nothing. */
+function addSpeed(speeds, provider, model, cell) {
+  const samples = cell[SPEED_AT] ?? 0;
+  if (!samples) return;
+  const entry = speeds.get(model) ?? { model, samples: 0, sum: 0, estimated: 0, providers: new Set() };
+  entry.samples += samples;
+  entry.sum += cell[SPEED_AT + 1] ?? 0;
+  entry.estimated += cell[SPEED_AT + 2] ?? 0;
+  entry.providers.add(provider);
+  speeds.set(model, entry);
+}
+
+/** Models ranked by mean per-request TPS, fastest first; models with too few samples are counted, not ranked. */
+function rankSpeeds(speeds) {
+  const ranked = [];
+  let sparse = 0;
+  for (const entry of speeds.values()) {
+    if (entry.samples < SPEED_MIN_SAMPLES) { sparse += 1; continue; }
+    ranked.push({
+      model: entry.model,
+      tokensPerSecond: entry.sum / entry.samples,
+      samples: entry.samples,
+      // Shown with ≈ when most of the samples are session-log estimates.
+      estimated: entry.estimated * 2 >= entry.samples,
+      providers: [...entry.providers].sort()
+    });
+  }
+  ranked.sort((a, b) => b.tokensPerSecond - a.tokensPerSecond || b.samples - a.samples || (a.model < b.model ? -1 : a.model > b.model ? 1 : 0));
+  return { speeds: ranked.slice(0, SPEED_ROW_LIMIT), hidden: Math.max(0, ranked.length - SPEED_ROW_LIMIT), sparse };
 }
 
 /** One entry per local day that has usage in the last HISTORY_DAYS, oldest first; drives the heatmap. */
@@ -165,7 +214,7 @@ export function createUsageIndex({ storage, discover, now = () => Date.now(), bu
     };
     const needsRead = descriptor => {
       const current = units.get(descriptor.key);
-      return !current || current.failed || current.stamp !== descriptor.stamp;
+      return !current || current.failed || current.stamp !== descriptor.stamp || current.schema !== USAGE_SCHEMA;
     };
     const waitingRetry = descriptor => {
       const current = units.get(descriptor.key);
@@ -180,7 +229,7 @@ export function createUsageIndex({ storage, discover, now = () => Date.now(), bu
       processed += 1;
       let unit;
       try {
-        unit = { stamp: descriptor.stamp, days: await descriptor.read(), readAt: now() };
+        unit = { stamp: descriptor.stamp, days: await descriptor.read(), readAt: now(), schema: USAGE_SCHEMA };
       } catch (error) {
         // Keep the last successful counts and retry even when a transient failure leaves the file unchanged.
         // Persist the retry deadline as well, so a worker restart cannot turn the failure into an empty success.
