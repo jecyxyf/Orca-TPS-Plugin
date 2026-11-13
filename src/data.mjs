@@ -11,6 +11,7 @@ import {
   createCodexParser,
   antigravitySessionIdFromPath,
   antigravityStepStart,
+  mergeChannelProxyRecords,
   mergeProxyRecords,
   parseJsonl,
   parseOpenCodeRows,
@@ -331,9 +332,13 @@ async function readDatabase(candidate, maxSessions, warnings, target) {
       const selection = `SELECT id,${select('title')},${select('directory')},${select('time_updated')} FROM ${table}`;
       let metadata;
       if (target?.cwdFilter) {
-        metadata = db.prepare(`${selection} ${parentFilter} ORDER BY ${order} LIMIT 500`).all()
-          .filter(meta => typeof meta.directory === 'string' && normalizeComparePath(meta.directory, target.platform) === target.cwdFilter)
-          .slice(0, maxSessions);
+        metadata = [];
+        // Limit matching sessions, not unrelated projects; iteration bounds retained metadata.
+        for (const meta of db.prepare(`${selection} ${parentFilter} ORDER BY ${order}`).iterate()) {
+          if (typeof meta.directory !== 'string' || normalizeComparePath(meta.directory, target.platform) !== target.cwdFilter) continue;
+          metadata.push(meta);
+          if (metadata.length >= maxSessions) break;
+        }
       } else if (target) {
         metadata = db.prepare(`${selection} WHERE id=?`).all(target.sessionId);
       } else {
@@ -456,7 +461,9 @@ async function headerMeta(candidate, budget) {
       const text = buffer.subarray(0, result.bytesRead).toString('utf8');
       const nl = text.lastIndexOf('\n');
       if (nl >= 0) parsed = parseJsonl(text.slice(0, nl + 1), candidate.provider);
-      if ((nl >= 0 && parsed.sessionId && parsed.cwd) || length >= maxBytes || (maxBytes - length) > budget.remaining) break;
+      if ((nl >= 0 && parsed.sessionId && parsed.cwd) || length >= maxBytes) break;
+      // Budget exhaustion is temporary: do not cache an incomplete header as missing metadata.
+      if ((maxBytes - length) > budget.remaining) return null;
       length = maxBytes;
     }
     const meta = { stamp, sessionId: parsed.sessionId ?? null, cwd: parsed.cwd ?? null };
@@ -507,7 +514,7 @@ async function readSingleTargetSession(target, options = {}) {
   };
   const finish = async session => {
     if (!session) {
-      if (!options.suppressNotFoundWarning) warnings.add('当前会话的本机记录暂未找到，未显示其他会话的数据。');
+      warnings.add('当前会话的本机记录暂未找到，未显示其他会话的数据。');
       return { session: null, warnings: [...warnings] };
     }
     let records = session.records;
@@ -593,8 +600,7 @@ async function readChannelSessions(target, options = {}) {
   for (const entry of explicitSessions) {
     const res = await readSingleTargetSession(entry, {
       ...options,
-      skipProxyMerge: true,
-      suppressNotFoundWarning: true
+      skipProxyMerge: true
     });
     for (const w of res.warnings) warnings.add(w);
     if (res.session) preferBetterSession(bySessionId, res.session);
@@ -652,26 +658,21 @@ async function readChannelSessions(target, options = {}) {
     ? options.ccSwitchDb
     : (options.includeDefaults !== false ? defaultRoots().ccSwitchDb : null);
 
-  const combined = new Map();
+  const proxyEntries = [];
   let maxUpdatedAt = 0;
   for (const session of bySessionId.values()) {
     if (session.updatedAt > maxUpdatedAt) maxUpdatedAt = session.updatedAt;
     const rawSessionId = session.id.slice(session.provider.length + 1);
-    let records = session.records;
-    if (ccSwitchDb && rawSessionId) {
-      const proxyRows = await readCcSwitchProxyRows(ccSwitchDb, session.provider, rawSessionId, records);
-      if (proxyRows.length) records = mergeProxyRecords(records, proxyRows, session.provider, rawSessionId);
-    }
-    for (const rec of records) {
-      if (!rec) continue;
-      const mergeKey = rec.dataSource === 'proxy' ? rec.id : `${session.id}:${rec.id}`;
-      if (!combined.has(mergeKey)) combined.set(mergeKey, { ...rec, provider: session.provider });
-    }
+    const proxyRows = ccSwitchDb && rawSessionId
+      ? await readCcSwitchProxyRows(ccSwitchDb, session.provider, rawSessionId, session.records)
+      : [];
+    proxyEntries.push({ provider: session.provider, sessionId: rawSessionId, records: session.records, proxyRows });
   }
 
-  const mergedRecords = [...combined.values()]
-    .sort((a, b) => b.completedAt - a.completedAt)
-    .slice(0, 100);
+  const mergedRecords = mergeChannelProxyRecords(proxyEntries);
+  // A failed source can hold the channel's only requests, even if other empty logs were readable.
+  // Let the controller retain its last good snapshot; genuinely empty channels still succeed.
+  if (!mergedRecords.length && warnings.size) return { session: null, warnings: [...warnings] };
 
   return {
     session: {

@@ -996,6 +996,20 @@ function stripProxyInternalFields(entry) {
   return clean;
 }
 
+function proxyMatchesUsage(proxy, session, provider) {
+  return Math.abs(proxy.createdAtSec - session.createdAtSec) <= SESSION_PROXY_DEDUP_WINDOW_SECONDS &&
+    proxy.freshInputTokens === session.freshInputTokens &&
+    proxy.outputTokens === session.outputTokens &&
+    proxy.cacheReadTokens === session.cacheReadTokens &&
+    proxy.cacheCreationTokens === session.cacheCreationTokens &&
+    modelsMatchForDedup(proxy, session, provider);
+}
+
+function upgradeFromProxy(session, proxy) {
+  const completedAt = Math.abs(proxy.completedAt - session.completedAt) < 2000 ? session.completedAt : proxy.completedAt;
+  return stripProxyInternalFields({ ...proxy, completedAt, ...(session.isSubagent ? { isSubagent: true } : {}) });
+}
+
 /** Deduplicate session-log records against 2xx CC Switch local-proxy logs (exact ID or ±600s semantic match). */
 export function mergeProxyRecords(sessionRecords, proxyRows, provider, targetSessionId) {
   if (!Array.isArray(proxyRows) || !proxyRows.length) return recentRecords(sessionRecords);
@@ -1012,22 +1026,12 @@ export function mergeProxyRecords(sessionRecords, proxyRows, provider, targetSes
       matched = parsedProxy.find(p =>
         !usedProxyIds.has(p.id) &&
         (!p.sessionId || !targetSessionId || p.sessionId === targetSessionId) &&
-        Math.abs(p.createdAtSec - sRec.createdAtSec) <= SESSION_PROXY_DEDUP_WINDOW_SECONDS &&
-        p.freshInputTokens === sRec.freshInputTokens &&
-        p.outputTokens === sRec.outputTokens &&
-        p.cacheReadTokens === sRec.cacheReadTokens &&
-        p.cacheCreationTokens === sRec.cacheCreationTokens &&
-        modelsMatchForDedup(p, sRec, provider)
+        proxyMatchesUsage(p, sRec, provider)
       );
     }
     if (matched) {
       usedProxyIds.add(matched.id);
-      const completedAt = Math.abs(matched.completedAt - sRec.completedAt) < 2000 ? sRec.completedAt : matched.completedAt;
-      merged.push(stripProxyInternalFields({
-        ...matched,
-        completedAt,
-        ...(sRec.isSubagent ? { isSubagent: true } : {})
-      }));
+      merged.push(upgradeFromProxy(sRec, matched));
     } else {
       merged.push(sRec);
     }
@@ -1040,4 +1044,76 @@ export function mergeProxyRecords(sessionRecords, proxyRows, provider, targetSes
   }
 
   return recentRecords(merged);
+}
+
+/** Match proxy requests once across a channel, preserving logs that have no unique proxy match. */
+export function mergeChannelProxyRecords(entries) {
+  const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  const sessions = entries.map(entry => ({
+    ...entry,
+    key: JSON.stringify([entry.provider, entry.sessionId]),
+    proxies: new Map((entry.proxyRows ?? []).map(buildProxyRecord).filter(Boolean).map(proxy => [proxy.id, proxy]))
+  })).sort((a, b) => compare(a.key, b.key));
+  const sources = new Map();
+  for (const entry of sessions) for (const log of entry.records ?? []) {
+    if (!log) continue;
+    const key = JSON.stringify([entry.provider, entry.sessionId, log.id]);
+    sources.set(key, { key, entry, log });
+  }
+
+  const used = new Set(), matches = new Map();
+  function assign(predicate) {
+    const candidates = [];
+    for (const source of sources.values()) {
+      if (matches.has(source.key)) continue;
+      for (const proxy of source.entry.proxies.values()) {
+        if (used.has(proxy.id) || !predicate(source, proxy)) continue;
+        candidates.push({ source, proxy, distance: Math.abs(proxy.createdAtSec - source.log.createdAtSec) });
+      }
+    }
+    candidates.sort((a, b) => a.distance - b.distance || compare(a.source.key, b.source.key) || compare(a.proxy.id, b.proxy.id));
+    for (const { source, proxy } of candidates) {
+      if (matches.has(source.key) || used.has(proxy.id)) continue;
+      matches.set(source.key, proxy);
+      used.add(proxy.id);
+    }
+  }
+
+  // Reserve exact identities globally before a nearby, similar request can consume their proxy row.
+  assign(({ log }, proxy) => Boolean(log.rawId) && log.rawId === proxy.rawId);
+  // Copied/forked histories may contain the same real request in multiple sessions. Only alias
+  // sources with their own exact proxy evidence in the same provider family, never token-only matches.
+  const exactKey = source => JSON.stringify([
+    source.entry.provider === 'opencode2' ? 'opencode' : source.entry.provider, source.log.rawId
+  ]);
+  const exactMatches = new Map();
+  for (const source of sources.values()) {
+    const proxy = matches.get(source.key);
+    if (proxy) exactMatches.set(exactKey(source), proxy.id);
+  }
+  for (const source of sources.values()) {
+    if (matches.has(source.key)) continue;
+    const proxy = source.entry.proxies.get(exactMatches.get(exactKey(source)));
+    if (proxy && source.log.rawId === proxy.rawId) matches.set(source.key, proxy);
+  }
+  assign(({ log, entry }, proxy) => Boolean(proxy.sessionId) && proxy.sessionId === entry.sessionId &&
+    proxyMatchesUsage(proxy, log, entry.provider));
+  assign(({ log, entry }, proxy) => !proxy.sessionId && proxyMatchesUsage(proxy, log, entry.provider));
+
+  const merged = new Map();
+  for (const source of sources.values()) {
+    const proxy = matches.get(source.key);
+    const value = proxy ? upgradeFromProxy(source.log, proxy) : source.log;
+    const key = value.dataSource === 'proxy' ? value.id : source.key;
+    merged.set(key, { ...value, provider: source.entry.provider });
+  }
+  for (const entry of sessions) for (const proxy of entry.proxies.values()) {
+    if (!used.has(proxy.id) && entry.sessionId && proxy.sessionId === entry.sessionId) {
+      used.add(proxy.id);
+      merged.set(proxy.id, { ...stripProxyInternalFields(proxy), provider: entry.provider });
+    }
+  }
+  return [...merged.entries()]
+    .sort(([keyA, a], [keyB, b]) => b.completedAt - a.completedAt || compare(keyA, keyB))
+    .slice(0, 100).map(([, value]) => value);
 }

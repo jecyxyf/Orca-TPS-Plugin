@@ -5,6 +5,7 @@ import {
   formatHitRatePercent,
   formatSpeedDisplay,
   formatTokensPerSecond,
+  mergeChannelProxyRecords,
   mergeProxyRecords,
   normalizeCodexModel,
   parseJsonl,
@@ -285,6 +286,101 @@ test('mergeProxyRecords upgrades matching session records to exact post-TTFT pro
   assert.equal(merged[0].generationMs, 2000);
   assert.equal(merged[0].tokensPerSecond, 75);
   assert.equal(formatSpeedDisplay(merged[0]), '75');
+});
+
+const channelProxy = (id, seconds, overrides = {}) => ({
+  request_id: id, app_type: 'codex', model: 'gpt-6.1-sol',
+  input_tokens: 80, output_tokens: 300, cache_read_tokens: 20, cache_creation_tokens: 0,
+  latency_ms: 5000, first_token_ms: 1000, created_at: epoch / 1000 + seconds,
+  ...overrides
+});
+function channelEntry(sessionId, seconds, proxyRows, overrides = {}) {
+  const records = parseJsonl(text([
+    { type: 'session_meta', payload: { id: sessionId } },
+    row(seconds - 2, { type: 'turn_context', payload: { model: 'gpt-6.1-sol' } }),
+    event(seconds, usage(300, 300))
+  ]), 'codex').records.map(record => ({ ...record, ...overrides }));
+  return { provider: 'codex', sessionId, records, proxyRows };
+}
+
+test('channel proxy matching assigns anonymous rows once and uses the nearest request regardless of input order', () => {
+  const proxies = [channelProxy('newer', 12, { latency_ms: 6000 }), channelProxy('older', 2, { latency_ms: 4000 })];
+  const entries = [channelEntry('a', 2, proxies, { isSubagent: true }), channelEntry('b', 12, proxies)];
+  const merged = mergeChannelProxyRecords(entries);
+  assert.deepEqual(merged.map(record => [record.id, record.tokensPerSecond, Boolean(record.isSubagent)]), [
+    ['proxy:newer', 60, false], ['proxy:older', 100, true]
+  ]);
+  assert.ok(merged.every(record => record.provider === 'codex' && !record.isEstimatedSpeed));
+  assert.deepEqual(mergeChannelProxyRecords(entries.slice().reverse().map(entry => ({ ...entry, proxyRows: proxies.slice().reverse() }))), merged);
+});
+
+test('one anonymous proxy row does not erase the other session request', () => {
+  const proxyRows = [channelProxy('only', 12)];
+  const merged = mergeChannelProxyRecords([channelEntry('a', 2, proxyRows), channelEntry('b', 12, proxyRows)]);
+  assert.equal(merged.length, 2);
+  assert.deepEqual(merged.map(record => record.id), ['proxy:only', 'codex_session:a:1']);
+  assert.equal(merged[1].isEstimatedSpeed, true);
+});
+
+test('channel matching reserves exact request IDs before semantic matches in another session', () => {
+  const proxyRows = [channelProxy('exact-request', 2)];
+  const entries = [channelEntry('a', 2, proxyRows), channelEntry('b', 12, proxyRows, { rawId: 'exact-request', isSubagent: true })];
+  const merged = mergeChannelProxyRecords(entries);
+  assert.equal(merged.length, 2);
+  assert.ok(merged.some(record => record.id === 'codex_session:a:1'));
+  assert.equal(merged.find(record => record.id === 'proxy:exact-request').isSubagent, true);
+  assert.deepEqual(mergeChannelProxyRecords(entries.slice().reverse()), merged);
+});
+
+test('channel matching counts copied Claude requests once when both sources have the same exact proxy evidence', () => {
+  const proxyRows = [channelProxy('same-request', 6, { app_type: 'claude', model: 'claude-sonnet-5-5' })];
+  const claudeEntry = sessionId => ({
+    provider: 'claude', sessionId, proxyRows,
+    records: parseJsonl(text([
+      row(1, { type: 'user', uuid: 'user', sessionId }),
+      row(6, { type: 'assistant', uuid: 'assistant', parentUuid: 'user', message: {
+        id: 'same-request', model: 'claude-sonnet-5-5', stop_reason: 'end_turn',
+        usage: { input_tokens: 80, output_tokens: 300, cache_read_input_tokens: 20 }
+      } })
+    ]), 'claude').records
+  });
+  const original = claudeEntry('original'), fork = claudeEntry('fork');
+  const merged = mergeChannelProxyRecords([original, fork]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].id, 'proxy:same-request');
+  assert.equal(merged[0].provider, 'claude');
+  assert.deepEqual(mergeChannelProxyRecords([fork, original]), merged);
+
+  const unrelated = channelEntry('different-provider', 6, [], { rawId: 'same-request' });
+  const noEvidence = { ...fork, sessionId: 'no-proxy-evidence', proxyRows: [] };
+  const isolated = mergeChannelProxyRecords([original, unrelated, noEvidence]);
+  assert.equal(isolated.length, 3, 'rawId alone must not suppress another provider or a source without exact proxy evidence');
+  assert.equal(isolated.filter(record => record.dataSource === 'proxy').length, 1);
+});
+
+test('channel matching prefers session-scoped proxies and only appends proxies belonging to known sessions', () => {
+  const proxyRows = [
+    channelProxy('anonymous', 12),
+    channelProxy('owned', 2, { session_id: 'b' }),
+    channelProxy('extra', 20, { session_id: 'b', output_tokens: 500 }),
+    channelProxy('unrelated', 21, { session_id: 'elsewhere', output_tokens: 500 }),
+    channelProxy('unclaimed', 22, { output_tokens: 500 })
+  ];
+  const entries = [channelEntry('a', 2, proxyRows), channelEntry('b', 12, proxyRows, { isSubagent: true })];
+  const merged = mergeChannelProxyRecords(entries);
+  assert.equal(merged.length, 3);
+  assert.deepEqual(new Set(merged.map(record => record.id)), new Set(['proxy:owned', 'proxy:anonymous', 'proxy:extra']));
+  assert.equal(merged.find(record => record.id === 'proxy:owned').isSubagent, true);
+  assert.equal(merged.find(record => record.id === 'proxy:anonymous').isSubagent, undefined);
+  assert.ok(merged.every(record => record.sessionId === undefined && record.proxyModel === undefined));
+  assert.deepEqual(mergeChannelProxyRecords(entries.slice().reverse()), merged);
+});
+
+test('channel merging preserves equal log IDs from different sessions and providers', () => {
+  const a = channelEntry('a', 2, [], { id: 'same-log-id' });
+  const b = channelEntry('b', 12, [], { id: 'same-log-id' });
+  const otherProvider = { ...a, provider: 'pi' };
+  assert.equal(mergeChannelProxyRecords([a, b, otherProvider]).length, 3);
 });
 
 test('history is limited to the newest hundred requests', () => {

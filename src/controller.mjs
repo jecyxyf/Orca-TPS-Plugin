@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { formatHitRatePercent, formatSpeedDisplay } from './parsers.mjs';
 
 const PROVIDERS = ['codex', 'claude', 'opencode', 'pi', 'antigravity'];
@@ -33,6 +33,8 @@ const targetKey = target => {
   if (isChannelTarget(target)) return JSON.stringify(['channel', target.key ?? null, target.worktreeId ?? null, target.worktreePath ?? null]);
   return JSON.stringify([target.key, target.provider, target.sessionId, target.transcriptPath, target.dbPath]);
 };
+// Channel keys contain profile and worktree paths; expose only an opaque identity to the panel.
+const publicChannelId = target => `channel:${createHash('sha256').update(targetKey(target)).digest('hex').slice(0, 24)}`;
 const sessionsSignature = target => isChannelTarget(target) ? JSON.stringify(target.sessions ?? []) : '';
 const matchesTarget = (session, target) => {
   if (!session || !target) return false;
@@ -69,7 +71,7 @@ export function createTpsController(orca, {
     return {
       instanceId, generation,
       activeSession: target ? (isChannelTarget(target) ? {
-        id: `channel:${target.worktreeId || target.key || 'active'}`,
+        id: publicChannelId(target),
         title: cleanText(target.title || session?.title || '当前频道'),
         provider: 'channel'
       } : {
