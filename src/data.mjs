@@ -19,8 +19,8 @@ import {
 import { HISTORY_DAYS, accumulateRecords, dayKeyAgo } from './usage-summary.mjs';
 
 const MAX_FILES = 1500, MAX_DIRECTORIES = 500, MAX_DEPTH = 8, MAX_SUBAGENT_FILES = 200;
-const MAX_FILE_BYTES = 16 * 1024 * 1024, MAX_SCAN_BYTES = 64 * 1024 * 1024;
-const parseCache = new Map(), discoveryCache = new Map(), databaseCache = new Map(), locationCache = new Map(), ccSwitchCache = new Map();
+const MAX_FILE_BYTES = 16 * 1024 * 1024, MAX_SCAN_BYTES = 64 * 1024 * 1024, MAX_HEADER_BYTES = 262_144;
+const parseCache = new Map(), headerCache = new Map(), discoveryCache = new Map(), databaseCache = new Map(), locationCache = new Map(), ccSwitchCache = new Map();
 const skippedDirectories = new Set(['node_modules', '.git', 'subagents', 'cache', 'plugins', 'skills', 'auth', 'credentials']);
 const shortError = error => typeof error?.code === 'string' ? error.code : '读取失败';
 const identity = value => createHash('sha256').update(value).digest('hex').slice(0, 24);
@@ -28,8 +28,24 @@ const safeTitle = value => typeof value === 'string' ? value.replace(/[\u0000-\u
 const safeSegment = value => typeof value === 'string' && value.length > 0 && value.length <= 256 &&
   value !== '.' && value !== '..' && !/[\\/\u0000]/.test(value);
 
-function trimCache(cache) {
-  while (cache.size > 200) cache.delete(cache.keys().next().value);
+function trimCache(cache, limit = 200) {
+  while (cache.size > limit) cache.delete(cache.keys().next().value);
+}
+
+export function normalizeComparePath(rawPath, platform = process.platform) {
+  if (typeof rawPath !== 'string') return null;
+  const trimmed = rawPath.trim();
+  if (!trimmed || trimmed.length > 4096 || /[\u0000\r\n]/.test(trimmed)) return null;
+  const isWin = platform === 'win32' || /^[A-Za-z]:[\\/]/.test(trimmed);
+  if (isWin) {
+    const leadingUnc = /^[/\\]{2}/.test(trimmed) ? '\\\\' : '';
+    let body = trimmed.replace(/^[/\\]+/, '').replace(/[/\\]+/g, '\\').replace(/\\+$/, '');
+    const full = (leadingUnc + body).toLowerCase();
+    return /^[a-z]:$/.test(full) ? `${full}\\` : full;
+  }
+  let norm = trimmed.replace(/\/+/g, '/');
+  if (norm.length > 1) norm = norm.replace(/\/+$/, '');
+  return norm;
 }
 
 function replayWarnings(warnings, cached) {
@@ -58,9 +74,9 @@ async function discoverAntigravityTranscripts(root, sourceWarnings) {
   return files;
 }
 
-async function discover(provider, root, warnings) {
+async function discover(provider, root, warnings, { maxAgeMs = 20_000 } = {}) {
   const key = `${provider}:${root}`, cached = discoveryCache.get(key);
-  if (cached && Date.now() - cached.at < 20_000) {
+  if (maxAgeMs > 0 && cached && Date.now() - cached.at < maxAgeMs) {
     replayWarnings(warnings, cached);
     return cached.files;
   }
@@ -188,7 +204,7 @@ async function readJsonl(candidate, budget, warnings, expectedSessionId, { isSub
     if (offset > 0) {
       const firstLine = text.indexOf('\n');
       text = firstLine < 0 ? '' : text.slice(firstLine + 1);
-      const start = Buffer.alloc(Math.min(16_384, candidate.info.size));
+      const start = Buffer.alloc(Math.min(MAX_HEADER_BYTES, candidate.info.size));
       const head = await file.read(start, 0, start.length, 0);
       header = start.subarray(0, head.bytesRead).toString('utf8');
       sourceWarnings.push(`${candidate.provider}：较大会话只读取末尾 16 MiB，缺少开头的轮次不计入。`);
@@ -288,7 +304,9 @@ function projectedData() {
 async function readDatabase(candidate, maxSessions, warnings, target) {
   const wal = await info(`${candidate.path}-wal`);
   const stamp = `${candidate.info.size}:${candidate.info.mtimeMs}:${wal?.size ?? 0}:${wal?.mtimeMs ?? 0}:${maxSessions}`;
-  const cacheKey = target ? JSON.stringify([candidate.path, target.provider, target.sessionId]) : candidate.path;
+  const cacheKey = target?.cwdFilter
+    ? JSON.stringify([candidate.path, 'cwd', target.cwdFilter, target.platform || ''])
+    : target ? JSON.stringify([candidate.path, target.provider, target.sessionId]) : candidate.path;
   const cached = databaseCache.get(cacheKey);
   if (cached?.stamp === stamp) { replayWarnings(warnings, cached); return cached.sessions; }
   let DatabaseSync;
@@ -300,19 +318,27 @@ async function readDatabase(candidate, maxSessions, warnings, target) {
     db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=1000; PRAGMA trusted_schema=OFF;');
     const available = tables(db), sessions = [], seen = new Set(), sourceWarnings = new Set();
     for (const v2 of [true, false]) {
-      if (target && (target.provider === 'opencode2') !== v2) continue;
+      if (target && !target.cwdFilter && (target.provider === 'opencode2') !== v2) continue;
       const table = v2 ? 'session_v2' : 'session', messageTable = v2 ? 'session_message' : 'message';
       if (!available.has(table) || !available.has(messageTable)) continue;
       const sessionColumns = columns(db, table), messageColumns = columns(db, messageTable);
       if (!['id'].every(key => sessionColumns.has(key)) || !['id', 'session_id', 'data', 'time_created'].every(key => messageColumns.has(key))) continue;
       if (v2 && !['seq', 'type'].every(key => messageColumns.has(key))) continue;
+      if (target?.cwdFilter && !sessionColumns.has('directory')) continue;
       const select = column => sessionColumns.has(column) ? `"${column}"` : `NULL AS "${column}"`;
       const order = sessionColumns.has('time_updated') ? 'time_updated DESC' : 'id DESC';
       const parentFilter = sessionColumns.has('parent_id') ? "WHERE parent_id IS NULL OR parent_id = ''" : '';
       const selection = `SELECT id,${select('title')},${select('directory')},${select('time_updated')} FROM ${table}`;
-      const metadata = target
-        ? db.prepare(`${selection} WHERE id=?`).all(target.sessionId)
-        : db.prepare(`${selection} ${parentFilter} ORDER BY ${order} LIMIT ?`).all(maxSessions);
+      let metadata;
+      if (target?.cwdFilter) {
+        metadata = db.prepare(`${selection} ${parentFilter} ORDER BY ${order} LIMIT 500`).all()
+          .filter(meta => typeof meta.directory === 'string' && normalizeComparePath(meta.directory, target.platform) === target.cwdFilter)
+          .slice(0, maxSessions);
+      } else if (target) {
+        metadata = db.prepare(`${selection} WHERE id=?`).all(target.sessionId);
+      } else {
+        metadata = db.prepare(`${selection} ${parentFilter} ORDER BY ${order} LIMIT ?`).all(maxSessions);
+      }
       for (const meta of metadata) {
         if (seen.has(meta.id)) continue;
         seen.add(meta.id);
@@ -408,22 +434,51 @@ function bestSession(sessions) {
     || b.records.length - a.records.length || b.updatedAt - a.updatedAt)[0] ?? null;
 }
 
-async function headerSessionId(candidate, budget) {
-  const cached = parseCache.get(`${candidate.provider}:${candidate.path}:main`);
-  if (cached?.stamp === `${candidate.info.size}:${candidate.info.mtimeMs}`) return cached.sourceSessionId;
-  const length = Math.min(candidate.info.size, 16_384);
-  if (length > budget.remaining) return null;
-  budget.remaining -= length;
+async function headerMeta(candidate, budget) {
+  const cacheKey = `${candidate.provider}:${candidate.path}`;
+  const stamp = `${candidate.info.size}:${candidate.info.mtimeMs}`;
+  const mainCached = parseCache.get(`${cacheKey}:main`);
+  if (mainCached?.stamp === stamp) {
+    return { stamp, sessionId: mainCached.sourceSessionId ?? null, cwd: mainCached.session?.cwd ?? null };
+  }
+  const cached = headerCache.get(cacheKey);
+  if (cached?.stamp === stamp) return cached;
+  const maxBytes = Math.min(candidate.info.size, MAX_HEADER_BYTES);
+  const firstBytes = Math.min(candidate.info.size, 32_768);
+  if (firstBytes > budget.remaining) return null;
   const file = await open(candidate.path, 'r');
   try {
-    const buffer = Buffer.alloc(length), result = await file.read(buffer, 0, length, 0);
-    const text = buffer.subarray(0, result.bytesRead).toString('utf8');
-    return parseJsonl(text.slice(0, text.lastIndexOf('\n') + 1), candidate.provider).sessionId;
+    let length = firstBytes;
+    let parsed = { sessionId: null, cwd: null };
+    while (true) {
+      budget.remaining -= length === firstBytes ? firstBytes : (length - firstBytes);
+      const buffer = Buffer.alloc(length), result = await file.read(buffer, 0, length, 0);
+      const text = buffer.subarray(0, result.bytesRead).toString('utf8');
+      const nl = text.lastIndexOf('\n');
+      if (nl >= 0) parsed = parseJsonl(text.slice(0, nl + 1), candidate.provider);
+      if ((nl >= 0 && parsed.sessionId && parsed.cwd) || length >= maxBytes || (maxBytes - length) > budget.remaining) break;
+      length = maxBytes;
+    }
+    const meta = { stamp, sessionId: parsed.sessionId ?? null, cwd: parsed.cwd ?? null };
+    headerCache.set(cacheKey, meta); trimCache(headerCache, 2000);
+    return meta;
   } finally { await file.close(); }
 }
 
-/** Read only the explicitly selected conversation; absence never selects another session. */
-export async function readTargetSession(target, options = {}) {
+async function headerSessionId(candidate, budget) {
+  return (await headerMeta(candidate, budget))?.sessionId ?? null;
+}
+
+function preferBetterSession(map, session) {
+  if (!session) return;
+  const previous = map.get(session.id);
+  const completed = session.records[0]?.completedAt ?? 0, oldCompleted = previous?.records[0]?.completedAt ?? 0;
+  if (!previous || completed > oldCompleted || (completed === oldCompleted && session.records.length > previous.records.length)) {
+    map.set(session.id, session);
+  }
+}
+
+async function readSingleTargetSession(target, options = {}) {
   const warnings = new Set(), budget = { remaining: MAX_SCAN_BYTES };
   if (!target || !['codex', 'claude', 'opencode', 'opencode2', 'pi', 'antigravity'].includes(target.provider)
       || typeof target.sessionId !== 'string' || !target.sessionId || target.sessionId.length > 256) {
@@ -432,9 +487,11 @@ export async function readTargetSession(target, options = {}) {
   const isDatabase = target.provider === 'opencode' || target.provider === 'opencode2';
   const rootProvider = isDatabase ? 'opencode' : target.provider;
   const explicitPath = isDatabase ? target.dbPath : target.transcriptPath;
-  const ccSwitchDb = options.ccSwitchDb !== undefined
-    ? options.ccSwitchDb
-    : (options.includeDefaults !== false ? defaultRoots().ccSwitchDb : null);
+  const ccSwitchDb = options.skipProxyMerge
+    ? null
+    : options.ccSwitchDb !== undefined
+      ? options.ccSwitchDb
+      : (options.includeDefaults !== false ? defaultRoots().ccSwitchDb : null);
 
   const read = async candidate => {
     try {
@@ -450,7 +507,7 @@ export async function readTargetSession(target, options = {}) {
   };
   const finish = async session => {
     if (!session) {
-      warnings.add('当前会话的本机记录暂未找到，未显示其他会话的数据。');
+      if (!options.suppressNotFoundWarning) warnings.add('当前会话的本机记录暂未找到，未显示其他会话的数据。');
       return { session: null, warnings: [...warnings] };
     }
     let records = session.records;
@@ -458,6 +515,7 @@ export async function readTargetSession(target, options = {}) {
       const proxyRows = await readCcSwitchProxyRows(ccSwitchDb, target.provider, target.sessionId, records);
       if (proxyRows.length) records = mergeProxyRecords(records, proxyRows, target.provider, target.sessionId);
     }
+    records = records.map(rec => rec ? { ...rec, provider: session.provider } : rec).filter(Boolean);
     const enriched = {
       ...session,
       records,
@@ -474,7 +532,7 @@ export async function readTargetSession(target, options = {}) {
   const providerRoots = (roots[rootProvider] ?? []).slice(0, 100);
   const lookupKey = JSON.stringify([target.provider, target.sessionId, providerRoots]);
   const savedLocation = locationCache.get(lookupKey);
-  if (savedLocation && Date.now() - savedLocation.at < 20_000) {
+  if (!options.fresh && savedLocation && Date.now() - savedLocation.at < 20_000) {
     const sessions = [];
     for (const file of savedLocation.paths) {
       const candidate = await candidateFor(target.provider, file);
@@ -486,7 +544,8 @@ export async function readTargetSession(target, options = {}) {
   }
 
   const files = new Set();
-  for (const root of providerRoots) for (const file of await discover(rootProvider, root, warnings)) files.add(file);
+  const maxAgeMs = options.fresh ? 0 : 20_000;
+  for (const root of providerRoots) for (const file of await discover(rootProvider, root, warnings, { maxAgeMs })) files.add(file);
   const filenameMatches = file => {
     // Antigravity's file is always transcript.jsonl; the conversation id is its directory name.
     if (target.provider === 'antigravity') return antigravitySessionIdFromPath(file) === target.sessionId;
@@ -514,6 +573,124 @@ export async function readTargetSession(target, options = {}) {
     trimCache(locationCache);
   }
   return finish(bestSession(sessions));
+}
+
+/**
+ * Aggregate all sessions belonging to the active project channel (worktree):
+ * combines Orca-registered terminal pane sessions with local sessions whose CWD matches worktreePath.
+ */
+async function readChannelSessions(target, options = {}) {
+  const platform = options.platform || process.platform;
+  const wantedCwd = target.worktreePath ? normalizeComparePath(target.worktreePath, platform) : null;
+  const explicitSessions = Array.isArray(target.sessions) ? target.sessions : [];
+  if (!wantedCwd && !explicitSessions.length) {
+    return { session: null, warnings: ['当前频道尚未识别，等待会话记录。'] };
+  }
+
+  const warnings = new Set();
+  const bySessionId = new Map();
+
+  for (const entry of explicitSessions) {
+    const res = await readSingleTargetSession(entry, {
+      ...options,
+      skipProxyMerge: true,
+      suppressNotFoundWarning: true
+    });
+    for (const w of res.warnings) warnings.add(w);
+    if (res.session) preferBetterSession(bySessionId, res.session);
+  }
+
+  if (wantedCwd) {
+    const roots = await configuredRoots(options.roots, options.includeDefaults !== false);
+    const budget = { remaining: MAX_SCAN_BYTES };
+    const maxAgeMs = options.fresh ? 0 : 4_000;
+
+    for (const provider of ['codex', 'claude', 'pi']) {
+      const seenPaths = new Set(), candidates = [];
+      for (const root of (roots[provider] ?? []).slice(0, 100)) {
+        for (const file of await discover(provider, root, warnings, { maxAgeMs })) {
+          const candidate = await candidateFor(provider, file);
+          if (!candidate || seenPaths.has(candidate.path)) continue;
+          seenPaths.add(candidate.path);
+          candidates.push(candidate);
+        }
+      }
+      candidates.sort((a, b) => b.info.mtimeMs - a.info.mtimeMs);
+      for (const candidate of candidates) {
+        try {
+          const meta = await headerMeta(candidate, budget);
+          if (!meta?.cwd || normalizeComparePath(meta.cwd, platform) !== wantedCwd) continue;
+          let session = await readJsonl(candidate, budget, warnings);
+          if (session && provider === 'claude') {
+            const rawId = session.id.slice('claude:'.length);
+            session = await attachClaudeSubagents(session, rawId, budget, warnings);
+          }
+          if (session) preferBetterSession(bySessionId, session);
+        } catch (error) {
+          warnings.add(`${provider}：会话读取失败（${shortError(error)}），未生成估算数据。`);
+        }
+      }
+    }
+
+    const seenDbPaths = new Set();
+    for (const root of (roots.opencode ?? []).slice(0, 10)) {
+      for (const file of await discover('opencode', root, warnings, { maxAgeMs })) {
+        const candidate = await candidateFor('opencode', file);
+        if (!candidate || seenDbPaths.has(candidate.path)) continue;
+        seenDbPaths.add(candidate.path);
+        try {
+          const dbSessions = await readDatabase(candidate, 100, warnings, { cwdFilter: wantedCwd, platform });
+          for (const session of dbSessions) preferBetterSession(bySessionId, session);
+        } catch (error) {
+          warnings.add(`opencode：会话读取失败（${shortError(error)}），未生成估算数据。`);
+        }
+      }
+    }
+  }
+
+  const ccSwitchDb = options.ccSwitchDb !== undefined
+    ? options.ccSwitchDb
+    : (options.includeDefaults !== false ? defaultRoots().ccSwitchDb : null);
+
+  const combined = new Map();
+  let maxUpdatedAt = 0;
+  for (const session of bySessionId.values()) {
+    if (session.updatedAt > maxUpdatedAt) maxUpdatedAt = session.updatedAt;
+    const rawSessionId = session.id.slice(session.provider.length + 1);
+    let records = session.records;
+    if (ccSwitchDb && rawSessionId) {
+      const proxyRows = await readCcSwitchProxyRows(ccSwitchDb, session.provider, rawSessionId, records);
+      if (proxyRows.length) records = mergeProxyRecords(records, proxyRows, session.provider, rawSessionId);
+    }
+    for (const rec of records) {
+      if (!rec) continue;
+      const mergeKey = rec.dataSource === 'proxy' ? rec.id : `${session.id}:${rec.id}`;
+      if (!combined.has(mergeKey)) combined.set(mergeKey, { ...rec, provider: session.provider });
+    }
+  }
+
+  const mergedRecords = [...combined.values()]
+    .sort((a, b) => b.completedAt - a.completedAt)
+    .slice(0, 100);
+
+  return {
+    session: {
+      id: `channel:${target.worktreeId || target.key || 'active'}`,
+      title: safeTitle(target.title) || '当前频道',
+      provider: 'channel',
+      updatedAt: maxUpdatedAt || Date.now(),
+      records: mergedRecords
+    },
+    warnings: [...warnings]
+  };
+}
+
+/** Read either a channel target (worktree aggregation) or a single explicitly selected conversation. */
+export async function readTargetSession(target, options = {}) {
+  if (target && (target.worktreePath !== undefined || Array.isArray(target.sessions))) {
+    return readChannelSessions(target, options);
+  }
+  return readSingleTargetSession(target, options);
 }
 
 // ---- Usage totals: every session written in the last 30 days, read whole, once per change. ----
@@ -575,7 +752,7 @@ function parsedRow(line) {
 async function codexSessionId(file) {
   const handle = await open(file, 'r');
   try {
-    const size = Math.min(65_536, (await handle.stat()).size);
+    const size = Math.min(MAX_HEADER_BYTES, (await handle.stat()).size);
     const buffer = Buffer.alloc(size), { bytesRead } = await handle.read(buffer, 0, size, 0);
     for (const line of buffer.subarray(0, bytesRead).toString('utf8').split('\n').slice(0, 30)) {
       const row = parsedRow(line);
