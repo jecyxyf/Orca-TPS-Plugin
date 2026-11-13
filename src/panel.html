@@ -90,7 +90,7 @@
     .loading { margin: 12px 2px 0; color: var(--muted); font-size: 12px; }
     .records { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
     .record-card { min-width: 0; padding: 10px 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
-    .card-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(88px, min(40%, 144px)); align-items: center; gap: 12px; }
+    .card-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
     .identity { min-width: 0; }
     .agent { margin: 0 0 1px 25px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .02em; line-height: 1.4; }
     .model-line { display: flex; align-items: center; gap: 5px; min-width: 0; }
@@ -101,11 +101,10 @@
     .meta-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 5px; margin-top: 2px; color: var(--muted); font-size: 11px; }
     .timestamp { overflow-wrap: anywhere; }
     .ttft { font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .speed { min-width: 0; padding: 5px 8px; border-radius: 15px; background: var(--speed-bg); color: var(--speed); text-align: center; }
-    .speed-top { display: flex; align-items: baseline; justify-content: center; gap: 4px; min-width: 0; }
+    .speed { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-width: 0; padding: 6px 10px; border-radius: 15px; background: var(--speed-bg); color: var(--speed); white-space: nowrap; }
     .rocket { width: 16px; height: 16px; flex-shrink: 0; align-self: center; }
-    .speed-value { min-width: 0; font-size: 20px; font-weight: 750; line-height: 1.15; letter-spacing: -.6px; overflow-wrap: anywhere; }
-    .speed-unit { display: block; margin-top: 1px; font-size: 10px; font-weight: 550; }
+    .speed-value { min-width: 0; font-size: 20px; font-weight: 750; line-height: 1.15; letter-spacing: -.6px; }
+    .speed-unit { font-size: 11px; font-weight: 550; line-height: 1; }
     .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid var(--line); }
     .metric { min-width: 0; }
     .metric-label { margin: 0 0 3px; color: var(--muted); font-size: 11px; white-space: nowrap; }
@@ -151,12 +150,11 @@
     .war-empty { margin: 10px 2px 2px; color: var(--muted); font-size: 12px; text-align: center; }
     .war-empty[hidden] { display: none; }
     .usage-tabs { margin-top: 10px; }
-    .speed { margin-top: 8px; }
-    .speed-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-    .speed-title { font-size: 12px; font-weight: 700; }
-    .speed-sub { color: var(--muted); font-size: 11px; white-space: nowrap; }
-    .speed-rank { flex-shrink: 0; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .speed-value { flex-shrink: 0; color: var(--green); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rank-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .rank-title { font-size: 12px; font-weight: 700; }
+    .rank-sub { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .rank-index { flex-shrink: 0; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rank-tps { flex-shrink: 0; color: var(--green); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .heat { position: relative; margin: 8px 0 0; padding: 10px 14px 8px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
     .heat-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .usage { margin-top: 12px; }
@@ -198,6 +196,8 @@
       .card-top { gap: 8px; }
       .model { font-size: 12px; }
       .agent { font-size: 10px; }
+      .speed { padding: 5px 8px; gap: 3px; }
+      .speed-value { font-size: 17px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .refresh.is-busy svg { animation: none; }
@@ -243,10 +243,10 @@
       <ol class="war-rows" id="war-rows" data-testid="war-rows" aria-label="按 agent 与模型的消耗"></ol>
       <p class="war-empty" id="war-empty" data-testid="war-empty" hidden>这段时间还没有用量记录</p>
     </section>
-    <section class="war speed" id="speed" aria-label="模型均速排名" data-testid="speed">
-      <div class="speed-head">
-        <span class="speed-title">模型均速</span>
-        <span class="speed-sub">单次请求输出速度的平均 · 基于会话日志</span>
+    <section class="war" id="speed" aria-label="模型均速排名" data-testid="speed">
+      <div class="rank-head">
+        <span class="rank-title">模型均速</span>
+        <span class="rank-sub">单次请求输出速度的平均 · 基于会话日志</span>
       </div>
       <ol class="war-rows" id="speed-rows" data-testid="speed-rows" aria-label="按模型的平均输出速度，从高到低"></ol>
       <p class="war-empty" id="speed-empty" data-testid="speed-empty" hidden>这段时间还没有样本充足的模型</p>
@@ -300,7 +300,8 @@
           </div>
         </div>
         <div class="speed">
-          <div class="speed-top"><svg class="rocket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15l-3-3c1.3-5 5.2-9 12-9 0 6.8-4 10.7-9 12Z"/><circle cx="16" cy="8" r="1.5"/><path d="m9 12-5-1 4-4 4 1m0 7 1 5 4-4-1-4M8 16c-3-1-5 1-5 5 4 0 6-2 5-5Z"/></svg><span class="speed-value" data-testid="speed-value"></span></div>
+          <svg class="rocket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15l-3-3c1.3-5 5.2-9 12-9 0 6.8-4 10.7-9 12Z"/><circle cx="16" cy="8" r="1.5"/><path d="m9 12-5-1 4-4 4 1m0 7 1 5 4-4-1-4M8 16c-3-1-5 1-5 5 4 0 6-2 5-5Z"/></svg>
+          <span class="speed-value" data-testid="speed-value"></span>
           <span class="speed-unit">tokens/s</span>
         </div>
       </div>
@@ -520,14 +521,14 @@
         const head = document.createElement('div');
         head.className = 'war-row-head';
         const rank = document.createElement('span');
-        rank.className = 'speed-rank';
+        rank.className = 'rank-index';
         rank.textContent = String(index + 1);
         const model = document.createElement('span');
         model.className = 'war-model';
         model.textContent = entry.model;
         model.title = entry.model;
         const value = document.createElement('span');
-        value.className = 'speed-value';
+        value.className = 'rank-tps';
         value.textContent = `${entry.estimated ? '≈' : ''}${speedText(entry.tokensPerSecond)} tokens/s`;
         head.append(rank, model, value);
         const track = document.createElement('div');
