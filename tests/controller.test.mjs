@@ -372,12 +372,13 @@ test('channel target aggregates records, refreshes in-place when channel panes c
   });
 
   await controller.start();
-  assert.equal(controller.state().activeSession.id, 'channel:repo-1::/private/proj/1.5.0');
+  const channelId = controller.state().activeSession.id;
+  assert.ok(!channelId.includes('/private'));
   assert.equal(controller.state().activeSession.provider, 'channel');
   assert.equal(controller.state().activeSession.title, 'proj/1.5.0');
   assert.equal(controller.state().records[0].tokensPerSecond, 60);
   assert.equal(calls[0].fresh, true, 'manual/initial refresh passes fresh: true');
-  assert.ok(!JSON.stringify(controller.state().records).includes('/private'));
+  assert.ok(!JSON.stringify(controller.state()).includes('/private'));
 
   // Same channel gains a second registered pane within pollMs: refreshes in-place without wiping prior records or bumping generation.
   const genBefore = controller.state().generation;
@@ -390,6 +391,7 @@ test('channel target aggregates records, refreshes in-place when channel panes c
   };
   await controller.checkActive();
   assert.equal(controller.state().generation, genBefore, 'same channel keeps generation');
+  assert.equal(controller.state().activeSession.id, channelId, 'pane changes keep the public channel identity');
   assert.equal(controller.state().records[0].tokensPerSecond, 80, 'new pane triggers immediate channel re-read');
   assert.equal(host.statuses.at(-1).text, '🚀 ≈80 tokens/s · 🍪 命中 90.0%');
 
@@ -404,6 +406,54 @@ test('channel target aggregates records, refreshes in-place when channel panes c
   await controller.checkActive();
   assert.equal(controller.state().generation, genBefore + 1);
   assert.equal(controller.state().activeSession.title, 'proj/main');
+  controller.stop();
+});
+
+test('channel identities are stable and keep local paths out of state, responses and pushes', async () => {
+  const host = fakeHost();
+  const original = {
+    key: JSON.stringify(['/private/orca-profile', 'profile-a', 'repo::/private/project']),
+    worktreeId: 'repo::/private/project', worktreePath: '/private/project', title: 'project',
+    sessions: [{ provider: 'codex', sessionId: 'session-a', transcriptPath: '/private/session-a.jsonl' }]
+  };
+  let active = original;
+  const controller = createTpsController(host.orca, {
+    readActive: async () => ({ target: active }),
+    readSession: async value => ({
+      session: { id: `channel:${value.worktreeId}`, provider: 'channel', path: '/private/log.jsonl', records: [] },
+      warnings: []
+    }),
+    focusPollMs: 0
+  });
+  const publicId = () => controller.state().activeSession.id;
+  const assertPrivate = () => {
+    assert.ok(!JSON.stringify(controller.state()).includes('/private'));
+    assert.ok(!JSON.stringify(host.handlers.get('tps.state')()).includes('/private'));
+    assert.ok(!JSON.stringify(host.posts).includes('/private'));
+  };
+
+  await controller.start();
+  const initialId = publicId();
+  assertPrivate();
+
+  active = { ...original, sessions: [] };
+  await controller.refresh();
+  assert.equal(publicId(), initialId, 'adding or removing panes cannot change the channel identity');
+
+  active = { ...original, key: JSON.stringify(['/private/orca-profile', 'profile-b', 'repo::/private/project']) };
+  await controller.refresh();
+  const otherProfileId = publicId();
+  assert.notEqual(otherProfileId, initialId, 'the same worktree in a different profile has a distinct identity');
+
+  active = { ...original, worktreeId: 'repo::/private/other', worktreePath: '/private/other' };
+  await controller.refresh();
+  assert.notEqual(publicId(), initialId, 'different worktrees have distinct identities');
+  assert.notEqual(publicId(), otherProfileId);
+
+  active = original;
+  await controller.refresh();
+  assert.equal(publicId(), initialId, 'returning to the original channel restores its identity');
+  assertPrivate();
   controller.stop();
 });
 

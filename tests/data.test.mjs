@@ -5,6 +5,7 @@ import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import { scanSessions, readTargetSession } from '../src/data.mjs';
 import { defaultRoots } from '../src/data-paths.mjs';
+import { createTpsController } from '../src/controller.mjs';
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import('node:sqlite')); }
@@ -489,4 +490,107 @@ test('channel CWD lookup parses Codex session_meta headers larger than 16 KiB', 
   assert.equal(res.session.records.length, 1);
   assert.equal(res.session.records[0].provider, 'codex');
   assert.equal(res.session.records[0].tokensPerSecond, 150);
+});
+
+test('channel OpenCode lookup filters the directory before limiting recent sessions', sqliteTestOptions, async t => {
+  const root = await fixture(t), file = path.join(root, 'opencode.db');
+  const db = new DatabaseSync(file);
+  try {
+    db.exec(`CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, time_updated INTEGER);
+      CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, data TEXT, time_created INTEGER);`);
+    const insert = db.prepare('INSERT INTO session VALUES (?,?,?)');
+    insert.run('wanted', 'D:\\projects\\app\\', 1);
+    for (let i = 0; i < 501; i++) insert.run(`other-${i}`, 'D:\\projects\\other', i + 2);
+    db.prepare('INSERT INTO message VALUES (?,?,?,?)').run('wanted-request', 'wanted', JSON.stringify({
+      role: 'assistant', tokens: { input: 100, output: 300 }, time: { created: 1000, completed: 3000 }
+    }), 1000);
+  } finally { db.close(); }
+  const result = await readTargetSession({ worktreeId: 'app', worktreePath: 'd:/projects/app', sessions: [] }, {
+    roots: { opencode: [file] }, includeDefaults: false, platform: 'win32'
+  });
+  assert.equal(result.session.records.length, 1);
+  assert.equal(result.session.records[0].rawId, 'wanted-request');
+  assert.deepEqual(result.warnings, []);
+});
+
+test('channel header lookup retries an unchanged large header after its read budget was exhausted', async t => {
+  const root = await fixture(t), channel = '/test';
+  // Cold reads leave only 48 KiB for the next file: its 60 KiB header cannot finish this pass.
+  const sizes = [16 * 1024 * 1024, 16 * 1024 * 1024, 16 * 1024 * 1024,
+    16 * 1024 * 1024 - 4 * 32768 - 48 * 1024];
+  for (const [i, size] of sizes.entries()) {
+    const file = path.join(root, `filler-${i}.jsonl`), content = Buffer.alloc(size, 32);
+    content.write(jsonl([{ type: 'session_meta', payload: { id: `filler-${i}`, cwd: channel } }]));
+    content[size - 1] = 10;
+    await writeFile(file, content);
+    await utimes(file, 100 + i, 100 + i);
+  }
+  const file = path.join(root, 'large-header.jsonl'), rows = codexRows('deferred-header');
+  rows[0].payload.base_instructions = 'x'.repeat(60_000);
+  await writeFile(file, jsonl(rows));
+  await utimes(file, 1, 1);
+  const target = { worktreeId: 'app', worktreePath: channel, sessions: [] };
+  const options = { roots: { codex: [root] }, includeDefaults: false, platform: 'linux', fresh: true };
+  assert.equal((await readTargetSession(target, options)).session.records.length, 0);
+  const retried = await readTargetSession(target, options);
+  assert.equal(retried.session.records.length, 1, 'a deferred header must be retried without changing the file');
+  assert.match(retried.session.records[0].id, /deferred-header/);
+});
+
+test('unavailable registered channel files retain the last statistics and recover on the next refresh', async t => {
+  const root = await fixture(t), file = path.join(root, 'recover.jsonl'), emptyFile = path.join(root, 'empty.jsonl');
+  await writeFile(file, jsonl(codexRows('recover')));
+  await writeFile(emptyFile, jsonl([{ type: 'session_meta', payload: { id: 'empty', cwd: '/test' } }]));
+  let target = { worktreeId: 'app', sessions: [
+    { provider: 'codex', sessionId: 'recover', transcriptPath: file },
+    { provider: 'codex', sessionId: 'empty', transcriptPath: emptyFile }
+  ] };
+  const register = () => ({ dispose() {} });
+  const controller = createTpsController({
+    storage: { get: async () => null }, panels: { handle: register, post() {} },
+    commands: { register }, host: { call: async () => {} }, log() {}
+  }, {
+    readActive: async () => ({ target }),
+    readSession: active => readTargetSession(active, { includeDefaults: false }), focusPollMs: 0
+  });
+  t.after(() => controller.stop());
+  await controller.start();
+  assert.equal(controller.state().records.length, 1);
+  await rm(file);
+  await controller.refresh();
+  assert.equal(controller.state().records.length, 1, 'an unavailable channel is not a successfully empty channel');
+  assert.ok(controller.state().warnings.length > 0);
+  await writeFile(file, jsonl(codexRows('recover')));
+  await controller.refresh();
+  assert.equal(controller.state().records.length, 1);
+  assert.deepEqual(controller.state().warnings, []);
+  target = { worktreeId: 'other', worktreePath: '/empty', sessions: [] };
+  await controller.refresh();
+  assert.deepEqual(controller.state().records, [], 'a genuinely empty new channel must clear old records');
+  assert.deepEqual(controller.state().warnings, []);
+});
+
+test('channel proxy matching keeps different sessions with identical usage as distinct requests', sqliteTestOptions, async t => {
+  const root = await fixture(t), sessions = [];
+  for (const [i, sessionId] of ['first', 'second'].entries()) {
+    const file = path.join(root, `${sessionId}.jsonl`), rows = codexRows(sessionId);
+    rows[1].timestamp = new Date(Date.parse(rows[1].timestamp) + i * 10000).toISOString();
+    rows[2].timestamp = new Date(Date.parse(rows[2].timestamp) + i * 10000).toISOString();
+    rows[2].payload.info.model = 'gpt-test';
+    await writeFile(file, jsonl(rows));
+    sessions.push({ provider: 'codex', sessionId, transcriptPath: file });
+  }
+  const dbPath = path.join(root, 'proxy.db'), db = new DatabaseSync(dbPath);
+  try {
+    db.exec(`CREATE TABLE proxy_request_logs (request_id TEXT, app_type TEXT, model TEXT,
+      input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER,
+      latency_ms INTEGER, first_token_ms INTEGER, status_code INTEGER, created_at INTEGER);`);
+    const insert = db.prepare('INSERT INTO proxy_request_logs VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+    const start = Date.parse('2026-01-01T00:00:02Z') / 1000;
+    insert.run('proxy-first', 'codex', 'gpt-test', 50, 200, 50, 0, 2000, 500, 200, start);
+    insert.run('proxy-second', 'codex', 'gpt-test', 50, 200, 50, 0, 4000, 1000, 200, start + 10);
+  } finally { db.close(); }
+  const result = await readTargetSession({ worktreeId: 'app', sessions }, { includeDefaults: false, ccSwitchDb: dbPath });
+  assert.deepEqual(result.session.records.map(record => record.id), ['proxy:proxy-second', 'proxy:proxy-first']);
+  assert.ok(result.session.records.every(record => record.provider === 'codex' && !record.isEstimatedSpeed));
 });
