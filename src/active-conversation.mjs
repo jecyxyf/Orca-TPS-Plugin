@@ -36,7 +36,22 @@ function leafIds(root, found = [], depth = 0) {
   return found;
 }
 
-/** Pure selection, exported for platform-independent fixtures. No recent-session fallback. */
+function channelShortTitle(worktreePath) {
+  if (!worktreePath) return null;
+  const withoutDrive = worktreePath.replace(/^[A-Za-z]:/, '');
+  const parts = withoutDrive.split(/[\\/]+/).filter(Boolean);
+  if (!parts.length) return null;
+  if (parts.length === 1) return parts[0].slice(0, 200);
+  if (parts.length === 2 && ['users', 'home', 'workspace'].includes(parts[0].toLowerCase())) {
+    return parts[1].slice(0, 200);
+  }
+  return parts.slice(-2).join('/').slice(0, 200);
+}
+
+/**
+ * Pure channel selection: resolves the active project channel (worktree) and collects
+ * all validated local terminal pane sessions in that channel plus its worktree path.
+ */
 export function selectActiveConversation(state, options = {}) {
   const w = text(state?.activeWorktreeId);
   if (!w) return empty('当前没有打开对话。');
@@ -45,70 +60,92 @@ export function selectActiveConversation(state, options = {}) {
   const workspaceKey = text(state.activeWorkspaceKey);
   if (workspaceKey && workspaceKey !== `worktree:${w}`) return empty('当前工作区状态尚未同步。');
 
-  const groups = list(own(state.tabGroups, w));
-  const unified = list(own(state.unifiedTabs, w));
-  const selectedGroupId = text(own(state.activeGroupIdByWorktree, w));
-  let selected;
-  if (groups.length || unified.length) {
-    const group = selectedGroupId ? groups.find(value => value?.id === selectedGroupId) : groups.length === 1 ? groups[0] : null;
-    if (!group || !text(group.activeTabId)) return empty('当前页签尚未识别。');
-    selected = unified.find(value => value?.id === group.activeTabId && value?.groupId === group.id);
-    if (!selected) return empty('当前页签状态尚未同步。');
-    if (selected.contentType !== 'terminal') return empty('当前页签不是可统计的终端对话。');
-    if (selected.executionHostId != null && selected.executionHostId !== 'local') return empty('当前是远程对话，暂不读取远程统计。');
-  } else if (own(state.activeTabTypeByWorktree, w) !== 'terminal') {
-    return empty('当前页签不是可统计的终端对话。');
-  }
-  // A group's selection is authoritative: activeTabId may remember another group.
-  const tabId = selected ? text(selected.entityId) : text(own(state.activeTabIdByWorktree, w)) || text(state.activeTabId);
-  const tab = list(own(state.tabsByWorktree, w)).find(value => value?.id === tabId);
-  if (!tab || tab.worktreeId !== w) return empty('当前终端尚未识别。');
-  if (tab.executionHostId != null && tab.executionHostId !== 'local') return empty('当前是远程对话，暂不读取远程统计。');
-  const layout = own(state.terminalLayoutsByTabId, tabId);
-  const leafId = text(layout?.activeLeafId), leaves = leafIds(layout?.root);
-  if (!leafId || !leaves.includes(leafId)) return empty('当前终端分屏尚未识别。');
-  const paneKey = `${tabId}:${leafId}`;
-  const record = own(state.sleepingAgentSessionsByPaneKey, paneKey);
-  if (!object(record) || record.paneKey !== paneKey || record.worktreeId !== w || (record.tabId != null && record.tabId !== tabId)) {
-    return empty('等待 Orca 记录当前对话。');
-  }
-  if (record.connectionId != null) return empty('当前是远程对话，暂不读取远程统计。');
-  const provider = providerName(record.agent), sessionId = text(record.providerSession?.id);
-  if (!provider || !sessionId || sessionId.length > 512) return empty('当前对话类型暂不支持统计。');
-  const titleMetadata = [tab.aiVaultTitle, selected?.aiVaultTitle].filter(object);
-  // A tab title cannot identify a split pane. Only use it as corroboration on a single-pane tab.
-  if (leaves.length === 1 && titleMetadata.some(meta => (text(meta.sessionId) && meta.sessionId !== sessionId)
-    || (text(meta.agent) && family(meta.agent) !== family(provider)))) {
-    return empty('当前对话标识正在更新，稍后重试。');
-  }
-  const capturedAt = Number.isFinite(record.capturedAt) ? record.capturedAt : 0;
-  if (Number.isFinite(tab.createdAt) && capturedAt && tab.createdAt > capturedAt) return empty('等待新终端的对话记录。');
-  const stampKey = JSON.stringify([options.userDataPath || '', options.profileId || '', w, tabId, leafId]);
-  const incarnation = text(own(state.terminalPtyIncarnationsByPaneKey, paneKey)) || text(own(layout.ptyIdsByLeafId, leafId)) || null;
-  const history = options.observations || observations, prior = history.get(stampKey);
-  const signature = `${provider}:${sessionId}`;
-  const priorCapture = Number.isFinite(prior?.capturedAt) ? prior.capturedAt : 0;
-  let pendingCaptureBaseline = prior?.pendingCaptureBaseline ?? null;
-  if (prior && prior.incarnation !== incarnation && signature === prior.signature) pendingCaptureBaseline = priorCapture;
-  if (prior && signature !== prior.signature) pendingCaptureBaseline = null;
-  // Both changes can arrive in one saved snapshot. Compare capture versions, not
-  // the reader's clock: an already refreshed capture necessarily predates this poll.
-  if (pendingCaptureBaseline !== null && capturedAt > pendingCaptureBaseline) pendingCaptureBaseline = null;
-  const highestCapture = prior && signature === prior.signature ? Math.max(capturedAt, priorCapture) : capturedAt;
-  history.set(stampKey, { incarnation, signature, capturedAt: highestCapture, pendingCaptureBaseline });
-  while (history.size > 128) history.delete(history.keys().next().value);
-  if (pendingCaptureBaseline !== null) return empty('终端已重开，等待当前对话标识更新。');
-
   const pathApi = (options.platform || process.platform) === 'win32' ? path.win32 : path.posix;
-  const transcriptPath = text(record.providerSession?.transcriptPath);
-  if (transcriptPath && !pathApi.isAbsolute(transcriptPath)) return empty('当前对话记录路径无效。');
-  const target = { key: JSON.stringify([options.userDataPath || '', options.profileId || '', w, tabId, leafId, incarnation, provider, sessionId]), provider, sessionId };
-  if (transcriptPath) {
-    if (family(provider) === 'opencode' && /\.(?:db|sqlite|sqlite3)$/i.test(transcriptPath)) target.dbPath = transcriptPath;
-    else if (/\.jsonl$/i.test(transcriptPath)) target.transcriptPath = transcriptPath;
-    else return empty('当前对话记录格式暂不支持。');
+  const sepIdx = w.indexOf('::');
+  const rawWorktreePath = sepIdx >= 0 ? text(w.slice(sepIdx + 2)) : null;
+  let worktreePath = rawWorktreePath && pathApi.isAbsolute(rawWorktreePath) ? rawWorktreePath : null;
+
+  const unified = list(own(state.unifiedTabs, w));
+  const tabs = list(own(state.tabsByWorktree, w));
+  const history = options.observations || observations;
+  const sessions = [], seenSessions = new Set(), paneCwds = new Set();
+  let fallbackTitle = null;
+
+  for (const tab of tabs) {
+    if (!object(tab) || !text(tab.id) || tab.worktreeId !== w) continue;
+    if (tab.executionHostId != null && tab.executionHostId !== 'local') continue;
+    const tabId = tab.id;
+    const layout = own(state.terminalLayoutsByTabId, tabId);
+    const leaves = leafIds(layout?.root);
+    if (!leaves.length) continue;
+    const unifiedTab = unified.find(value => value?.entityId === tabId && value?.contentType === 'terminal');
+
+    for (const leafId of leaves) {
+      const paneKey = `${tabId}:${leafId}`;
+      const record = own(state.sleepingAgentSessionsByPaneKey, paneKey);
+      if (!object(record) || record.paneKey !== paneKey || record.worktreeId !== w || (record.tabId != null && record.tabId !== tabId)) {
+        continue;
+      }
+      if (record.connectionId != null) continue;
+      const provider = providerName(record.agent), sessionId = text(record.providerSession?.id);
+      if (!provider || !sessionId || sessionId.length > 512) continue;
+
+      const titleMetadata = [tab.aiVaultTitle, unifiedTab?.aiVaultTitle].filter(object);
+      if (leaves.length === 1 && titleMetadata.some(meta =>
+        (text(meta.sessionId) && meta.sessionId !== sessionId) ||
+        (text(meta.agent) && family(meta.agent) !== family(provider))
+      )) {
+        continue;
+      }
+
+      const capturedAt = Number.isFinite(record.capturedAt) ? record.capturedAt : 0;
+      if (Number.isFinite(tab.createdAt) && capturedAt && tab.createdAt > capturedAt) continue;
+
+      const stampKey = JSON.stringify([options.userDataPath || '', options.profileId || '', w, tabId, leafId]);
+      const incarnation = text(own(state.terminalPtyIncarnationsByPaneKey, paneKey)) || text(own(layout?.ptyIdsByLeafId, leafId)) || null;
+      const prior = history.get(stampKey);
+      const signature = `${provider}:${sessionId}`;
+      const priorCapture = Number.isFinite(prior?.capturedAt) ? prior.capturedAt : 0;
+      let pendingCaptureBaseline = prior?.pendingCaptureBaseline ?? null;
+      if (prior && prior.incarnation !== incarnation && signature === prior.signature) pendingCaptureBaseline = priorCapture;
+      if (prior && signature !== prior.signature) pendingCaptureBaseline = null;
+      if (pendingCaptureBaseline !== null && capturedAt > pendingCaptureBaseline) pendingCaptureBaseline = null;
+      const highestCapture = prior && signature === prior.signature ? Math.max(capturedAt, priorCapture) : capturedAt;
+      history.set(stampKey, { incarnation, signature, capturedAt: highestCapture, pendingCaptureBaseline });
+      while (history.size > 128) history.delete(history.keys().next().value);
+      if (pendingCaptureBaseline !== null) continue;
+
+      const transcriptPath = text(record.providerSession?.transcriptPath);
+      if (transcriptPath && !pathApi.isAbsolute(transcriptPath)) continue;
+      const entry = { provider, sessionId };
+      if (transcriptPath) {
+        if (family(provider) === 'opencode' && /\.(?:db|sqlite|sqlite3)$/i.test(transcriptPath)) entry.dbPath = transcriptPath;
+        else if (/\.jsonl$/i.test(transcriptPath)) entry.transcriptPath = transcriptPath;
+        else continue;
+      }
+
+      const dedupKey = `${provider}:${sessionId}`;
+      if (!seenSessions.has(dedupKey)) {
+        seenSessions.add(dedupKey);
+        sessions.push(entry);
+      }
+
+      const paneCwd = text(record.providerSession?.cwd);
+      if (paneCwd && pathApi.isAbsolute(paneCwd)) paneCwds.add(paneCwd);
+      fallbackTitle ??= text(tab.customTitle) || (leaves.length === 1 ? text(tab.aiVaultTitle?.title) : null) || text(record.terminalTitle);
+    }
   }
-  const title = text(tab.customTitle) || (leaves.length === 1 ? text(tab.aiVaultTitle?.title) : null) || text(record.terminalTitle);
+
+  if (!worktreePath && paneCwds.size === 1) worktreePath = [...paneCwds][0];
+  if (!worktreePath && !sessions.length) return empty('当前频道暂无可统计的对话。');
+
+  const target = {
+    key: JSON.stringify([options.userDataPath || '', options.profileId || '', w, worktreePath || '']),
+    worktreeId: w,
+    ...(worktreePath ? { worktreePath } : {}),
+    sessions
+  };
+  const title = channelShortTitle(worktreePath) || fallbackTitle;
   if (title) target.title = title.slice(0, 200);
   return { target };
 }
@@ -161,7 +198,9 @@ function workspaceStamp(db) {
 }
 
 let lastSelection = null;
-const copySelection = result => result.target ? { ...result, target: { ...result.target } } : { ...result };
+const copySelection = result => result.target
+  ? { ...result, target: { ...result.target, sessions: (result.target.sessions ?? []).map(item => ({ ...item })) } }
+  : { ...result };
 
 /** Reads one committed SQLite snapshot per poll, including live WAL; never writes Orca state. */
 export async function readActiveConversation(options = {}) {

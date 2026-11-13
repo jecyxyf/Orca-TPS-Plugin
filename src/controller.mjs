@@ -27,13 +27,22 @@ export function validateRoots(value) {
   return roots;
 }
 
-const targetKey = target => target ? JSON.stringify([
-  target.key, target.provider, target.sessionId, target.transcriptPath, target.dbPath
-]) : null;
-const matchesTarget = (session, target) => session && target &&
-  session.id === `${session.provider}:${target.sessionId}` &&
-  (session.provider === target.provider ||
-    (['opencode', 'opencode2'].includes(session.provider) && ['opencode', 'opencode2'].includes(target.provider)));
+const isChannelTarget = target => Boolean(target && (target.worktreePath !== undefined || Array.isArray(target.sessions)));
+const targetKey = target => {
+  if (!target) return null;
+  if (isChannelTarget(target)) return JSON.stringify(['channel', target.key ?? null, target.worktreeId ?? null, target.worktreePath ?? null]);
+  return JSON.stringify([target.key, target.provider, target.sessionId, target.transcriptPath, target.dbPath]);
+};
+const sessionsSignature = target => isChannelTarget(target) ? JSON.stringify(target.sessions ?? []) : '';
+const matchesTarget = (session, target) => {
+  if (!session || !target) return false;
+  if (isChannelTarget(target)) {
+    return session.provider === 'channel' && session.id === `channel:${target.worktreeId || target.key || 'active'}`;
+  }
+  return session.id === `${session.provider}:${target.sessionId}` &&
+    (session.provider === target.provider ||
+      (['opencode', 'opencode2'].includes(session.provider) && ['opencode', 'opencode2'].includes(target.provider)));
+};
 // Transient unidentified-page reports while an agent runs (tab busy-state, capture lag).
 const TRANSIENT_PAGE_PATTERNS = [
   '不是可统计的终端对话', '页签尚未识别', '状态尚未同步', '尚未识别',
@@ -45,10 +54,10 @@ export function createTpsController(orca, {
   holdActivityMs = 120_000
 } = {}) {
   const instanceId = randomUUID();
-  let target = null, key = null, session = null;
+  let target = null, key = null, sessionsSig = '', session = null;
   let roots = EMPTY_ROOTS(), warnings = [];
   let updatedAt = null, loading = true, generation = 0;
-  let emptyMessage = '正在识别当前对话…';
+  let emptyMessage = '正在识别当前频道…';
   let stopped = false, started = false;
   let contextPending = null, loadTask = null, timer = null;
   let lastReadAt = -Infinity, lastStatus = '', publishSequence = 0;
@@ -59,11 +68,15 @@ export function createTpsController(orca, {
   function state() {
     return {
       instanceId, generation,
-      activeSession: target ? {
+      activeSession: target ? (isChannelTarget(target) ? {
+        id: `channel:${target.worktreeId || target.key || 'active'}`,
+        title: cleanText(target.title || session?.title || '当前频道'),
+        provider: 'channel'
+      } : {
         id: `${target.provider}:${target.sessionId}`,
         title: cleanText(target.title || session?.title || '当前对话'),
         provider: target.provider
-      } : null,
+      }) : null,
       records: session?.records?.slice(0, 100) ?? [],
       loading, updatedAt, warnings: [...warnings], emptyMessage
     };
@@ -95,7 +108,9 @@ export function createTpsController(orca, {
     const cacheText = formatHitRatePercent(latest?.cacheHitRate);
     const text = `🚀 ${speedText} tokens/s · 🍪 命中 ${cacheText}`;
     const tooltip = cleanText([
-      snapshot.activeSession ? `当前对话：${snapshot.activeSession.title}` : snapshot.emptyMessage,
+      snapshot.activeSession
+        ? `${snapshot.activeSession.provider === 'channel' ? '当前频道' : '当前对话'}：${snapshot.activeSession.title}`
+        : snapshot.emptyMessage,
       '最新请求速度（剔除工具耗时；代理扣首字 ≥100 tok，日志估算 ≥200 tok 且 ≥1s）。',
       snapshot.loading ? '正在刷新' : snapshot.warnings.length ? '部分数据不可用，详见面板' : '点击刷新'
     ].join('\n'), 256);
@@ -118,8 +133,10 @@ export function createTpsController(orca, {
       try { context = await readActive(); }
       catch { context = { target: null, message: '暂时无法读取当前对话，请稍后刷新。' }; }
       if (stopped) return;
-      const next = context?.target ?? null, nextKey = targetKey(next);
-      const rawMessage = context?.message || (next ? '当前对话还没有可统计的请求记录。' : '当前页面暂无可统计的对话。');
+      const next = context?.target ?? null, nextKey = targetKey(next), nextSessionsSig = sessionsSignature(next);
+      const rawMessage = context?.message || (next
+        ? (isChannelTarget(next) ? '当前频道还没有可统计的请求记录。' : '当前对话还没有可统计的请求记录。')
+        : '当前页面暂无可统计的对话。');
       const withinHold = Boolean(session?.records?.length) && now() < holdUntil;
       // While retention holds, an unidentified-page report during an agent run is
       // transient: change nothing (target/key/session stay on the last conversation,
@@ -135,9 +152,11 @@ export function createTpsController(orca, {
       const message = cleanText(rawMessage, 300);
       const changed = nextKey !== key;
       const messageChanged = message !== emptyMessage;
+      let loadingCleared = false;
       if (changed) {
         generation += 1;
         key = nextKey;
+        sessionsSig = nextSessionsSig;
         session = null;
         warnings = [];
         updatedAt = null;
@@ -145,10 +164,19 @@ export function createTpsController(orca, {
         holdUntil = -Infinity;
         dataStamp = '';
         loading = Boolean(next);
+      } else {
+        if (!next && loading) {
+          loading = false;
+          loadingCleared = true;
+        }
+        if (next && nextSessionsSig !== sessionsSig) {
+          sessionsSig = nextSessionsSig;
+          lastReadAt = -Infinity;
+        }
       }
       target = next;
       emptyMessage = message;
-      if (changed || messageChanged) void publish();
+      if (changed || messageChanged || loadingCleared) void publish();
     })();
     contextPending = task;
     try { await task; }
@@ -159,7 +187,7 @@ export function createTpsController(orca, {
     if (stopped || !target) return state();
     if (loadTask?.generation === generation) return loadTask.promise;
     if (!force && now() - lastReadAt < pollMs) return state();
-    const requestedGeneration = generation, requestedTarget = { ...target };
+    const requestedGeneration = generation, requestedTarget = structuredClone(target);
     lastReadAt = now();
     loading = force || !session;
     const task = { generation: requestedGeneration, promise: null };
@@ -167,7 +195,7 @@ export function createTpsController(orca, {
       void publish();
       if (stopped || requestedGeneration !== generation) return state();
       try {
-        const result = await readSession(requestedTarget, { roots: structuredClone(roots) });
+        const result = await readSession(requestedTarget, { roots: structuredClone(roots), ...(force ? { fresh: true } : {}) });
         if (stopped || requestedGeneration !== generation) return state();
         const loaded = matchesTarget(result.session, requestedTarget) ? result.session : null;
         if (loaded) {

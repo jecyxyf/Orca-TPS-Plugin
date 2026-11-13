@@ -320,3 +320,173 @@ test('SQLite cache retains row truncation without copying warnings from another 
   assert.ok(cachedOther.warnings.some(value => value.includes('受支持')));
   assert.ok(!cachedOther.warnings.some(value => value.includes('10000')));
 });
+
+test('channel target merges registered panes and unregistered CWD sessions across providers while isolating parent worktree', sqliteTestOptions, async t => {
+  const root = await fixture(t);
+  const claudeRoot = path.join(root, 'claude');
+  const codexPrimary = path.join(root, 'codex-home');
+  const codexMirror = path.join(root, 'codex-runtime');
+  const agyBrain = path.join(root, 'agy', 'brain', 'agy-conv-1', '.system_generated', 'logs');
+  await mkdir(claudeRoot, { recursive: true });
+  await mkdir(codexPrimary, { recursive: true });
+  await mkdir(codexMirror, { recursive: true });
+  await mkdir(agyBrain, { recursive: true });
+
+  const channelWinSlash = 'D:/orca/workspace/Orca-TPS-Plugin/1.5.0';
+  const channelWinBackslash = 'D:\\orca\\workspace\\Orca-TPS-Plugin\\1.5.0';
+
+  // 1. Registered Terminal 1: Claude session at t=2000ms
+  const claudeMain = path.join(claudeRoot, 'claude-t1.jsonl');
+  await writeFile(claudeMain, jsonl([
+    { type: 'user', uuid: 'u1', sessionId: 'claude-t1', cwd: channelWinBackslash, timestamp: '2026-11-13T01:00:00Z', message: { content: 'SECRET_T1' } },
+    { type: 'assistant', uuid: 'a1', parentUuid: 'u1', timestamp: '2026-11-13T01:00:02Z',
+      message: { id: 'msg-t1', model: 'claude-opus-5-5', stop_reason: 'end_turn',
+        usage: { input_tokens: 100, output_tokens: 240, cache_read_input_tokens: 400, cache_creation_input_tokens: 0 } } }
+  ]));
+
+  // 2. Unregistered Terminal 2 (started manually in cmd.exe): Codex session at t=5000ms, mirrored in two roots
+  const codexT2Rows = [
+    { type: 'session_meta', payload: { id: 'codex-t2', cwd: 'd:\\orca\\workspace\\orca-tps-plugin\\1.5.0\\', prompt: 'SECRET_T2' } },
+    { timestamp: '2026-11-13T01:00:03Z', type: 'event_msg', payload: { type: 'task_started', turn_id: 't2' } },
+    { timestamp: '2026-11-13T01:00:05Z', type: 'event_msg', payload: {
+      type: 'token_count',
+      info: { model: 'gpt-6.1-sol', total_token_usage: { output_tokens: 300, input_tokens: 200, cached_input_tokens: 100 }, last_token_usage: { output_tokens: 300, input_tokens: 200, cached_input_tokens: 100 } }
+    } }
+  ];
+  await writeFile(path.join(codexPrimary, 'rollout-codex-t2.jsonl'), jsonl(codexT2Rows));
+  await writeFile(path.join(codexMirror, 'rollout-codex-t2.jsonl'), jsonl(codexT2Rows));
+
+  // 3. Historical session in same channel directory: Claude session at t=1000ms
+  await writeFile(path.join(claudeRoot, 'claude-old.jsonl'), jsonl([
+    { type: 'user', uuid: 'u0', sessionId: 'claude-old', cwd: channelWinSlash, timestamp: '2026-11-13T00:59:58Z' },
+    { type: 'assistant', uuid: 'a0', parentUuid: 'u0', timestamp: '2026-11-13T01:00:01Z',
+      message: { id: 'msg-old', model: 'claude-haiku-5-5', stop_reason: 'end_turn',
+        usage: { input_tokens: 50, output_tokens: 200, cache_read_input_tokens: 50, cache_creation_input_tokens: 0 } } }
+  ]));
+
+  // 4. OpenCode v2 session matching channel CWD at t=6000ms + parent repo session that must be excluded
+  const ocDb = path.join(root, 'opencode.db');
+  const db = new DatabaseSync(ocDb);
+  try {
+    db.exec(`CREATE TABLE session_v2 (id TEXT PRIMARY KEY, title TEXT, directory TEXT, time_updated INTEGER);
+      CREATE TABLE session_message (id TEXT PRIMARY KEY, session_id TEXT, type TEXT, seq INTEGER, data TEXT, time_created INTEGER);`);
+    db.prepare('INSERT INTO session_v2 VALUES (?,?,?,?)').run('oc-in-channel', 'OC', channelWinBackslash, Date.parse('2026-11-13T01:00:06Z'));
+    db.prepare('INSERT INTO session_v2 VALUES (?,?,?,?)').run('oc-parent', 'Parent', 'D:\\orca\\workspace\\Orca-TPS-Plugin', Date.parse('2026-11-13T01:00:09Z'));
+    const ins = db.prepare('INSERT INTO session_message VALUES (?,?,?,?,?,?)');
+    ins.run('m1', 'oc-in-channel', 'assistant', 1, JSON.stringify({
+      modelID: 'glm-5.3', tokens: { input: 100, output: 250, reasoning: 0, cache: { read: 100, write: 0 } },
+      time: { created: Date.parse('2026-11-13T01:00:04Z'), streamed: Date.parse('2026-11-13T01:00:06Z'), completed: Date.parse('2026-11-13T01:00:06Z') }
+    }), Date.parse('2026-11-13T01:00:04Z'));
+    ins.run('m2', 'oc-parent', 'assistant', 1, JSON.stringify({
+      modelID: 'leaked-parent-model', tokens: { input: 100, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: Date.parse('2026-11-13T01:00:07Z'), completed: Date.parse('2026-11-13T01:00:09Z') }
+    }), Date.parse('2026-11-13T01:00:07Z'));
+  } finally { db.close(); }
+
+  // 5. Parent repo Codex session (must NOT leak into 1.5.0 worktree)
+  await writeFile(path.join(codexPrimary, 'rollout-parent.jsonl'), jsonl([
+    { type: 'session_meta', payload: { id: 'codex-parent', cwd: 'D:\\orca\\workspace\\Orca-TPS-Plugin' } },
+    { timestamp: '2026-11-13T01:00:08Z', type: 'event_msg', payload: { type: 'task_started', turn_id: 'p1' } },
+    { timestamp: '2026-11-13T01:00:10Z', type: 'event_msg', payload: {
+      type: 'token_count',
+      info: { model: 'leaked-codex', total_token_usage: { output_tokens: 400, input_tokens: 100, cached_input_tokens: 0 }, last_token_usage: { output_tokens: 400, input_tokens: 100, cached_input_tokens: 0 } }
+    } }
+  ]));
+
+  // 6. Registered Antigravity session in the same channel (no cwd in transcript, resolved via target.sessions)
+  const agyTranscript = path.join(agyBrain, 'transcript.jsonl');
+  await writeFile(agyTranscript, jsonl([
+    { step_index: 1, created_at: '2026-11-13T01:00:07Z', input_tokens: 80, output_tokens: 220, cache_read_tokens: 20 }
+  ]));
+
+  const channelTarget = {
+    key: 'ch-key',
+    worktreeId: `repo-1::${channelWinSlash}`,
+    worktreePath: channelWinSlash,
+    title: 'Orca-TPS-Plugin/1.5.0',
+    sessions: [
+      { provider: 'claude', sessionId: 'claude-t1', transcriptPath: claudeMain },
+      { provider: 'antigravity', sessionId: 'agy-conv-1', transcriptPath: agyTranscript }
+    ]
+  };
+  const res = await readTargetSession(channelTarget, {
+    roots: {
+      claude: [claudeRoot],
+      codex: [codexPrimary, codexMirror],
+      opencode: [ocDb],
+      antigravity: [path.join(root, 'agy', 'brain')]
+    },
+    includeDefaults: false,
+    platform: 'win32'
+  });
+
+  assert.equal(res.session.id, `channel:repo-1::${channelWinSlash}`);
+  assert.equal(res.session.provider, 'channel');
+  assert.equal(res.session.title, 'Orca-TPS-Plugin/1.5.0');
+  assert.deepEqual(
+    res.session.records.map(r => `${r.provider}:${r.model ?? 'agy'}`),
+    [
+      'antigravity:agy',
+      'opencode2:glm-5.3',
+      'codex:gpt-6.1-sol',
+      'claude:claude-opus-5-5',
+      'claude:claude-haiku-5-5'
+    ],
+    'all 5 channel requests appear newest-first with no mirror duplicates and no parent-repo leaks'
+  );
+  assert.ok(!JSON.stringify(res).includes('SECRET_'));
+});
+
+test('empty channel returns empty records without error warnings and fresh refresh immediately sees a newly spawned terminal', async t => {
+  const root = await fixture(t), codexRoot = path.join(root, 'codex');
+  await mkdir(codexRoot, { recursive: true });
+  const channelTarget = {
+    key: 'new-ch',
+    worktreeId: 'repo-1::/workspace/app/feat-x',
+    worktreePath: '/workspace/app/feat-x',
+    title: 'app/feat-x',
+    sessions: []
+  };
+  const opts = { roots: { codex: [codexRoot] }, includeDefaults: false, platform: 'linux' };
+  const emptyRes = await readTargetSession(channelTarget, opts);
+  assert.equal(emptyRes.session.id, 'channel:repo-1::/workspace/app/feat-x');
+  assert.deepEqual(emptyRes.session.records, []);
+  assert.deepEqual(emptyRes.warnings, []);
+
+  // Spawn a brand-new session in Terminal 2 immediately afterwards and force a fresh read:
+  await writeFile(path.join(codexRoot, 'rollout-new.jsonl'), jsonl([
+    { type: 'session_meta', payload: { id: 'new-t2', cwd: '/workspace/app/feat-x/' } },
+    { timestamp: '2026-11-13T02:00:00Z', type: 'event_msg', payload: { type: 'task_started', turn_id: '1' } },
+    { timestamp: '2026-11-13T02:00:02Z', type: 'event_msg', payload: {
+      type: 'token_count',
+      info: { model: 'gpt-6.1-sol', total_token_usage: { output_tokens: 260, input_tokens: 100, cached_input_tokens: 0 }, last_token_usage: { output_tokens: 260, input_tokens: 100, cached_input_tokens: 0 } }
+    } }
+  ]));
+  const refreshed = await readTargetSession(channelTarget, { ...opts, fresh: true });
+  assert.equal(refreshed.session.records.length, 1);
+  assert.equal(refreshed.session.records[0].provider, 'codex');
+  assert.equal(refreshed.session.records[0].tokensPerSecond, 130);
+});
+
+test('channel CWD lookup parses Codex session_meta headers larger than 16 KiB', async t => {
+  const root = await fixture(t), codexRoot = path.join(root, 'codex');
+  await mkdir(codexRoot, { recursive: true });
+  const bigInstructions = 'x'.repeat(30_000);
+  await writeFile(path.join(codexRoot, 'rollout-big-header.jsonl'), jsonl([
+    { type: 'session_meta', payload: { id: 'codex-big-meta', cwd: 'D:\\orca\\workspace\\Orca-TPS-Plugin\\1.5.0', base_instructions: bigInstructions } },
+    { timestamp: '2026-11-13T03:00:00Z', type: 'event_msg', payload: { type: 'task_started', turn_id: '1' } },
+    { timestamp: '2026-11-13T03:00:02Z', type: 'event_msg', payload: {
+      type: 'token_count',
+      info: { model: 'gpt-6.1-sol', total_token_usage: { output_tokens: 300, input_tokens: 100, cached_input_tokens: 50 }, last_token_usage: { output_tokens: 300, input_tokens: 100, cached_input_tokens: 50 } }
+    } }
+  ]));
+  const res = await readTargetSession({
+    key: 'ch-big',
+    worktreeId: 'repo-1::D:/orca/workspace/Orca-TPS-Plugin/1.5.0',
+    worktreePath: 'D:/orca/workspace/Orca-TPS-Plugin/1.5.0',
+    sessions: []
+  }, { roots: { codex: [codexRoot] }, includeDefaults: false, platform: 'win32' });
+  assert.equal(res.session.records.length, 1);
+  assert.equal(res.session.records[0].provider, 'codex');
+  assert.equal(res.session.records[0].tokensPerSecond, 150);
+});

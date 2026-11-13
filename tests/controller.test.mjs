@@ -338,3 +338,84 @@ test('legacy custom roots remain bounded and validated without exposing a settin
   assert.throws(() => validateRoots({ credentials: [] }), /未知/);
   assert.throws(() => validateRoots({ codex: Array.from({ length: 8 }, (_, i) => `${i}${'a'.repeat(3000)}`) }), /过长/);
 });
+
+test('channel target aggregates records, refreshes in-place when channel panes change, and clears on channel switch', async () => {
+  const host = fakeHost();
+  let currentTarget = {
+    key: 'ch-1',
+    worktreeId: 'repo-1::/private/proj/1.5.0',
+    worktreePath: '/private/proj/1.5.0',
+    title: 'proj/1.5.0',
+    sessions: [{ provider: 'claude', sessionId: 's1', transcriptPath: '/private/s1.jsonl' }]
+  };
+  const calls = [];
+  const controller = createTpsController(host.orca, {
+    readActive: async () => ({ target: currentTarget }),
+    readSession: async (active, opts) => {
+      calls.push({ count: active.sessions?.length ?? 0, fresh: Boolean(opts.fresh) });
+      const id = `channel:${active.worktreeId}`;
+      return {
+        session: {
+          id, title: active.title, provider: 'channel', updatedAt: 500,
+          records: [{
+            id: `req-${calls.length}`, provider: active.sessions.length > 1 ? 'codex' : 'claude',
+            completedAt: 500 + calls.length, outputTokens: 240, durationMs: 3000,
+            tokensPerSecond: active.sessions.length > 1 ? 80 : 60, isEstimatedSpeed: true, cacheHitRate: 0.9
+          }]
+        },
+        warnings: []
+      };
+    },
+    now: () => 1000,
+    pollMs: 5000,
+    focusPollMs: 0
+  });
+
+  await controller.start();
+  assert.equal(controller.state().activeSession.id, 'channel:repo-1::/private/proj/1.5.0');
+  assert.equal(controller.state().activeSession.provider, 'channel');
+  assert.equal(controller.state().activeSession.title, 'proj/1.5.0');
+  assert.equal(controller.state().records[0].tokensPerSecond, 60);
+  assert.equal(calls[0].fresh, true, 'manual/initial refresh passes fresh: true');
+  assert.ok(!JSON.stringify(controller.state().records).includes('/private'));
+
+  // Same channel gains a second registered pane within pollMs: refreshes in-place without wiping prior records or bumping generation.
+  const genBefore = controller.state().generation;
+  currentTarget = {
+    ...currentTarget,
+    sessions: [
+      ...currentTarget.sessions,
+      { provider: 'codex', sessionId: 's2', transcriptPath: '/private/s2.jsonl' }
+    ]
+  };
+  await controller.checkActive();
+  assert.equal(controller.state().generation, genBefore, 'same channel keeps generation');
+  assert.equal(controller.state().records[0].tokensPerSecond, 80, 'new pane triggers immediate channel re-read');
+  assert.equal(host.statuses.at(-1).text, '🚀 ≈80 tokens/s · 🍪 命中 90.0%');
+
+  // Switching to another channel increments generation and switches cleanly.
+  currentTarget = {
+    key: 'ch-2',
+    worktreeId: 'repo-1::/private/proj/main',
+    worktreePath: '/private/proj/main',
+    title: 'proj/main',
+    sessions: []
+  };
+  await controller.checkActive();
+  assert.equal(controller.state().generation, genBefore + 1);
+  assert.equal(controller.state().activeSession.title, 'proj/main');
+  controller.stop();
+});
+
+test('initial startup with no active target clears loading state immediately', async () => {
+  const host = fakeHost();
+  const controller = createTpsController(host.orca, {
+    readActive: async () => ({ target: null, message: '当前没有打开对话。' }),
+    readSession: async () => { throw new Error('must not be called'); },
+    focusPollMs: 0
+  });
+  await controller.start();
+  assert.equal(controller.state().loading, false);
+  assert.equal(controller.state().emptyMessage, '当前没有打开对话。');
+  controller.stop();
+});

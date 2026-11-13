@@ -210,7 +210,7 @@
     <header class="panel-header">
       <div class="heading">
         <h1>对话速度</h1>
-        <p class="summary" id="summary">当前对话 · 最近 0 次请求</p>
+        <p class="summary" id="summary">当前频道 · 最近 0 次请求</p>
       </div>
       <button class="refresh" id="refresh" data-testid="refresh" type="button" aria-label="刷新统计">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>
@@ -397,7 +397,7 @@
         const card = ui['record-template'].content.firstElementChild.cloneNode(true);
         const find = name => card.querySelector(`[data-testid="${name}"]`);
         // Model stays the headline; the agent sits above it. Agents without a model (Antigravity) headline the agent instead.
-        const agent = agentLabel();
+        const agent = agentLabel(record.provider);
         const model = typeof record.model === 'string' && record.model ? record.model : '';
         const headline = model || agent || '模型 —';
         find('model').textContent = headline;
@@ -443,8 +443,8 @@
       // 用量战况: totals per window from the background index (tps.summary); counts only, never message text.
       const USAGE_REFRESH_MS = 30_000;
       const AGENT_LABELS = { codex: 'Codex CLI', claude: 'Claude Code', opencode: 'OpenCode', opencode2: 'OpenCode', pi: 'Pi Agent', antigravity: 'Antigravity CLI' };
-      function agentLabel() {
-        return AGENT_LABELS[current?.activeSession?.provider] ?? '';
+      function agentLabel(provider) {
+        return AGENT_LABELS[provider || current?.activeSession?.provider] ?? '';
       }
       let usageSummary = null, usageRange = 'today', usageProblem = '', usageTimer = null;
       function formatCount(value) {
@@ -651,7 +651,10 @@
           .slice().sort((a, b) => (numeric(b.completedAt) ? b.completedAt : 0) - (numeric(a.completedAt) ? a.completedAt : 0)).slice(0, 100);
         const working = busy || Boolean(current?.loading);
         ui.panel.setAttribute('aria-busy', String(working));
-        ui.summary.textContent = `当前对话 · 最近 ${records.length} 次请求`;
+        const scopeLabel = current?.activeSession?.provider === 'channel'
+          ? (current.activeSession.title || '当前频道')
+          : '当前对话';
+        ui.summary.textContent = `${scopeLabel} · 最近 ${records.length} 次请求`;
         ui.refresh.disabled = working || !bridge;
         ui.refresh.classList.toggle('is-busy', working);
         ui.error.hidden = !problem;
@@ -675,7 +678,7 @@
         }
         ui.records.hidden = records.length === 0;
         ui.empty.hidden = records.length > 0 || working || Boolean(problem);
-        ui['empty-text'].textContent = String(current?.emptyMessage || '当前对话还没有可统计的请求记录').slice(0, 1000);
+        ui['empty-text'].textContent = String(current?.emptyMessage || '当前频道还没有可统计的请求记录').slice(0, 1000);
         ui.updated.hidden = !date(current?.updatedAt);
         ui.updated.textContent = `更新于 ${timeLabel(current?.updatedAt)}`;
         if (resetScroll) { resetScroll = false; window.scrollTo(0, 0); }

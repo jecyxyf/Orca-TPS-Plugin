@@ -95,3 +95,10 @@ test('per-request card renders rocket icon, TPS value, and tokens/s unit on a si
   assert.notEqual(speedUnit?.display, 'block', '.speed-unit must stay inline on the same row');
   assert.match(cardTop?.['grid-template-columns'] ?? '', /\bauto\s*$/, '.card-top right column must size to single-line pill');
 });
+
+test('panel resolves per-record agent label from record.provider and shows channel title in summary', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  assert.match(html, /agentLabel\(\s*record\.provider\s*\)/, 'recordCard must pass record.provider to agentLabel');
+  assert.match(html, /function\s+agentLabel\(\s*provider\s*\)/, 'agentLabel must accept per-record provider override');
+  assert.match(html, /activeSession\?\.provider\s*===\s*['"]channel['"]/, 'summary must display channel title when in channel mode');
+});
