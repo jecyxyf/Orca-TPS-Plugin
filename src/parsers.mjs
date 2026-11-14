@@ -8,6 +8,10 @@ export const SPEED_MIN_OUTPUT_TOKENS = 100;
 export const SPEED_MIN_GENERATION_MS = 100;
 export const SPEED_ESTIMATE_MIN_OUTPUT_TOKENS = 200;
 export const SPEED_ESTIMATE_MIN_DURATION_MS = 1000;
+// Hermes logs the whole call's latency (first token included), so a short answer still carries a usable
+// lower bound for its speed; the 200-token estimate floor would hide almost every agent turn.
+export const HERMES_SPEED_MIN_OUTPUT_TOKENS = 20;
+export const HERMES_SPEED_MIN_DURATION_MS = 300;
 export const MIN_PLAUSIBLE_LATENCY_MS = 100;
 export const MAX_PLAUSIBLE_LATENCY_MS = 60 * 60 * 1000;
 export const SESSION_PROXY_DEDUP_WINDOW_SECONDS = 600;
@@ -48,6 +52,15 @@ export function computeSpeedMetrics({ outputTokens, durationMs, firstTokenMs = n
       }
     }
     return { tokensPerSecond: null, isEstimatedSpeed: false, generationMs };
+  }
+  if (dataSource === 'hermes_log') {
+    if (output !== null && output >= HERMES_SPEED_MIN_OUTPUT_TOKENS && latency !== null && latency >= HERMES_SPEED_MIN_DURATION_MS) {
+      const tps = output / (latency / 1000);
+      if (Number.isFinite(tps) && tps > 0) {
+        return { tokensPerSecond: tps, isEstimatedSpeed: true, generationMs: null };
+      }
+    }
+    return { tokensPerSecond: null, isEstimatedSpeed: false, generationMs: null };
   }
   if (output !== null && output >= SPEED_ESTIMATE_MIN_OUTPUT_TOKENS && latency !== null && latency >= SPEED_ESTIMATE_MIN_DURATION_MS) {
     const tps = output / (latency / 1000);
@@ -129,6 +142,21 @@ function buildRecord({
     ...(cleanModel && cleanModel !== 'unknown' ? { model: cleanModel } : {}),
     ...(isSubagent ? { isSubagent: true } : {})
   };
+}
+
+/**
+ * Hermes call line -> record. `in` already counts the cached prompt (cache hit rate is read/in) and
+ * `latency` covers the whole call, so the speed is a lower bound flagged as estimated.
+ */
+export function buildHermesRecord({
+  id, rawId = null, completedAt, inputTokens = 0, cacheReadTokens = 0, cacheCreationTokens = 0,
+  outputTokens, durationMs, model = null, isSubagent = false
+}) {
+  return buildRecord({
+    id, rawId, completedAt, dataSource: 'hermes_log',
+    inputTokens, cacheReadTokens, cacheCreationTokens, cacheInclusive: true,
+    outputTokens, durationMs, model, isSubagent
+  });
 }
 
 /** Newest first, de-duplicated by id. Session views keep 100; usage totals pass Infinity. */

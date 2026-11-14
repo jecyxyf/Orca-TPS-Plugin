@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { formatHitRatePercent, formatSpeedDisplay } from './parsers.mjs';
 
-const PROVIDERS = ['codex', 'claude', 'opencode', 'pi', 'antigravity'];
+const PROVIDERS = ['codex', 'claude', 'opencode', 'pi', 'antigravity', 'hermes'];
 const STORE_KEY = 'preferences-v1';
 const EMPTY_ROOTS = () => Object.fromEntries(PROVIDERS.map(key => [key, []]));
 const cleanText = (value, limit = 160) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, limit);

@@ -18,6 +18,7 @@ import {
   recentRecords
 } from './parsers.mjs';
 import { HISTORY_DAYS, accumulateRecords, dayKeyAgo } from './usage-summary.mjs';
+import { readHermesSessions, hermesUsageUnits } from './hermes.mjs';
 
 const MAX_FILES = 1500, MAX_DIRECTORIES = 500, MAX_DEPTH = 8, MAX_SUBAGENT_FILES = 200;
 const MAX_FILE_BYTES = 16 * 1024 * 1024, MAX_SCAN_BYTES = 64 * 1024 * 1024, MAX_HEADER_BYTES = 262_144;
@@ -487,7 +488,7 @@ function preferBetterSession(map, session) {
 
 async function readSingleTargetSession(target, options = {}) {
   const warnings = new Set(), budget = { remaining: MAX_SCAN_BYTES };
-  if (!target || !['codex', 'claude', 'opencode', 'opencode2', 'pi', 'antigravity'].includes(target.provider)
+  if (!target || !['codex', 'claude', 'opencode', 'opencode2', 'pi', 'antigravity', 'hermes'].includes(target.provider)
       || typeof target.sessionId !== 'string' || !target.sessionId || target.sessionId.length > 256) {
     return { session: null, warnings: ['当前会话尚未识别，等待会话记录。'] };
   }
@@ -530,6 +531,22 @@ async function readSingleTargetSession(target, options = {}) {
     };
     return { session: enriched, warnings: [...warnings] };
   };
+  if (target.provider === 'hermes') {
+    try {
+      const sessions = await readHermesSessions({
+        sessionIds: [target.sessionId],
+        platform: options.platform || process.platform,
+        comparePath: normalizeComparePath,
+        includeDefaults: options.includeDefaults,
+        customRoots: options.roots?.hermes ?? [],
+        ...(options.fresh ? { maxAgeMs: 0 } : {})
+      });
+      return finish(bestSession(sessions));
+    } catch (error) {
+      warnings.add(`hermes: could not read the request log (${shortError(error)}).`);
+      return finish(null);
+    }
+  }
   if (explicitPath !== undefined && explicitPath !== null) {
     const candidate = await candidateFor(target.provider, explicitPath);
     return finish(candidate ? await read(candidate) : null);
@@ -597,13 +614,38 @@ async function readChannelSessions(target, options = {}) {
   const warnings = new Set();
   const bySessionId = new Map();
 
+  // Hermes panes live in one place (its home), so they are read per channel instead of per pane.
+  const hermesIds = [];
+  const fileSessions = [];
   for (const entry of explicitSessions) {
+    if (entry?.provider === 'hermes') { if (typeof entry.sessionId === 'string' && entry.sessionId) hermesIds.push(entry.sessionId); }
+    else fileSessions.push(entry);
+  }
+
+  for (const entry of fileSessions) {
     const res = await readSingleTargetSession(entry, {
       ...options,
       skipProxyMerge: true
     });
     for (const w of res.warnings) warnings.add(w);
     if (res.session) preferBetterSession(bySessionId, res.session);
+  }
+
+  if (hermesIds.length || wantedCwd) {
+    try {
+      const hermesSessions = await readHermesSessions({
+        sessionIds: [...new Set(hermesIds)],
+        cwd: wantedCwd ? target.worktreePath : null,
+        platform,
+        comparePath: normalizeComparePath,
+        includeDefaults: options.includeDefaults,
+        customRoots: options.roots?.hermes ?? [],
+        ...(options.fresh ? { maxAgeMs: 0 } : {})
+      });
+      for (const session of hermesSessions) preferBetterSession(bySessionId, session);
+    } catch (error) {
+      warnings.add(`hermes: could not read the request log (${shortError(error)}).`);
+    }
   }
 
   if (wantedCwd) {
@@ -916,6 +958,7 @@ export async function discoverUsageUnits(cutoffMs, options = {}) {
   for (const root of (roots.antigravity ?? []).slice(0, 10)) {
     units.push(...await antigravityUsageUnits(root, cutoffMs));
   }
+  units.push(...await hermesUsageUnits(cutoffMs, options));
   return units;
 }
 
