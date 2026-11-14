@@ -9,7 +9,7 @@ const object = value => value && typeof value === 'object' && !Array.isArray(val
 const own = (value, key) => object(value) && Object.hasOwn(value, key) ? value[key] : undefined;
 const list = value => Array.isArray(value) ? value : [];
 const empty = message => ({ target: null, message });
-const providerName = value => ['codex', 'claude', 'opencode', 'opencode2', 'pi', 'antigravity'].includes(value) ? value : null;
+const providerName = value => ['codex', 'claude', 'opencode', 'opencode2', 'pi', 'antigravity', 'hermes'].includes(value) ? value : null;
 const family = value => value === 'opencode2' ? 'opencode' : value;
 
 /** The packaged Orca default, also usable without APPDATA in a plugin worker. */
