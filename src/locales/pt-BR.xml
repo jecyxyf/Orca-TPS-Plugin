@@ -135,7 +135,9 @@
   <message id="logout-storage-failed">Não foi possível salvar o pedido de saída. Mantenha o Orca aberto e conclua a saída quando estiver on-line.</message>
   <message id="logout-pending">A saída aguarda o servidor. Uma nova tentativa será feita quando você estiver on-line.</message>
   <message id="checking-login">Verificando a sessão…</message>
-  <message id="period-rankings">Classificação do período</message>
+  <message id="period-rankings">Classificação</message>
+  <message id="ranking-toggle">Dados da classificação</message>
+  <message id="ranking-preference-failed">Não foi possível salvar a configuração da classificação.</message>
   <message id="empty-rankings">Não há pontuações neste período.</message>
   <message id="notice.no-conversation">Nenhuma conversa está aberta.</message>
   <message id="notice.remote-conversation">As estatísticas de conversas remotas não estão disponíveis aqui.</message>
@@ -234,16 +236,21 @@
   <message id="leaderboard-five-minute-usage">Uso nos últimos 5 minutos</message>
   <message id="leaderboard-daily-usage">Uso diário</message>
   <message id="leaderboard-average-speed">Velocidade média de geração</message>
-  <message id="leaderboard-refreshed-at">Atualizado às {0}</message>
   <message id="notice.remote-read-failed">Não foi possível ler as estatísticas remotas ({0}: {1}).</message>
   <message id="current-read-failed">Não foi possível ler os dados atuais. Tente mais tarde.</message>
   <message id="language-name">Português (Brasil)</message>
-  <message id="last-sync-time">Última sincronização {0}</message>
-  <message id="last-sync-failed">Falha na sincronização às {0} · {1}</message>
+  <message id="last-sync-time">Última sincronização</message>
+  <message id="last-sync-failed">Falha no envio às {0} · {1}</message>
   <message id="sync-failure-unknown">Causa indisponível</message>
-  <message id="next-sync-countdown">Próxima sincronização {0}</message>
+  <message id="data-upload">Envio de dados</message>
+  <message id="upload-now">Enviar agora</message>
+  <message id="next-upload-countdown">Próximo envio</message>
+  <message id="last-upload-time">Último envio</message>
+  <message id="uploading-countdown">Enviando…</message>
+  <message id="upload-waiting">Aguardando envio…</message>
+  <message id="next-sync-countdown">Próxima sincronização</message>
   <message id="sync-in-progress">Sincronizando…</message>
   <message id="sync-waiting">Aguardando sincronização…</message>
   <message id="sync-now">Sincronizar agora</message>
-  <message id="sync-queued">Na fila para a próxima sincronização</message>
+  <message id="sync-queued">Na fila para o próximo envio</message>
 </messages>

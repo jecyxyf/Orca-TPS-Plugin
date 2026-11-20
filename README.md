@@ -54,10 +54,11 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 ### 3.3 Leaderboard
 
 - Browse today’s, 7-day, and 30-day rankings. Entries show GitHub avatars, and the top three get gold, silver, and bronze medals.
-- The top 100 entries show a five-minute waveform with one peak per upload on Today. The 7-day and 30-day curves pass through every Beijing calendar day's usage, with zero on days without records. Entries also show the latest average generation speed, most-used model and CLI, and last upload time. The leaderboard refreshes every 10 seconds while open.
+- Use the switch next to Rankings to control leaderboard viewing. Turning it off hides the rankings and stops fetching them. The plugin remembers your choice. Guests can view rankings.
+- The top 100 entries show a five-minute waveform with one peak per upload on Today. The 7-day and 30-day curves pass through every Beijing calendar day's usage, with zero on days without records. Entries also show the latest average generation speed, most-used model and CLI, and last upload time. The leaderboard refreshes every 10 seconds while enabled and open.
 - Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
 - Sign in with GitHub to participate. The leaderboard combines usage across installations linked to the same account. The plugin fetches avatars directly from GitHub and shows a built-in black hat avatar until one loads. Missing avatars are retried after the next sync, and a loaded avatar is reused everywhere it appears.
-- While signed in, the plugin attempts to sync every 10 seconds. Manual sync shares the same interval. The account card shows the countdown, the last successful sync, and any recent error.
+- While signed in, the plugin attempts to upload every 10 seconds. Manual uploads use the same interval. Each toolbar has a manual button on the left, with an hourglass countdown and a clock for the last successful upload or sync on the right. Upload failures appear below the account toolbar.
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">

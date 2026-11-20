@@ -164,6 +164,36 @@ test('today usage connects pulses at real timestamps and animates new points onc
   assert.equal(frames.length, 0);
 });
 
+test('leaderboard countdown follows the selected period refresh and retry deadlines', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const countdown = /function countdownText\([\s\S]*?\n      \}/.exec(html)?.[0];
+  const render = /function renderRankCountdown\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(countdown && render);
+  const showCountdown = new Function('state', 'time', `
+    const { rankDays, renderedDay, rankRequests, rankingPending } = state;
+    const note = { textContent: '' };
+    const element = () => note;
+    const locale = { number: (value, options) => new Intl.NumberFormat('en', options).format(value) };
+    const t = key => key;
+    ${countdown}
+    ${render}
+    renderRankCountdown(time);
+    return note.textContent;
+  `);
+  const day = '2026-11-20';
+  const state = {
+    rankDays: 7,
+    renderedDay: day,
+    rankRequests: new Map([[1, { day, next: 5_000 }], [7, { day, next: 12_000 }]])
+  };
+  assert.equal(showCountdown(state, 2_100), '00:10');
+  assert.equal(showCountdown({ ...state, rankDays: 1 }, 2_100), '00:03');
+  assert.equal(showCountdown({ ...state, rankingPending: { days: 1 } }, 6_000), '00:06');
+  assert.equal(showCountdown({ ...state, rankingPending: { days: 7 } }, 6_000), 'sync-in-progress');
+  assert.equal(showCountdown(state, 12_000), 'sync-waiting');
+  assert.equal(showCountdown({ ...state, renderedDay: '2026-11-21' }, 2_100), '—');
+});
+
 test('daily usage fills missing dates with zero across the entire selected window', async () => {
   const html = await readFile(panelPath, 'utf8');
   const source = /function dailyUsagePoints\([\s\S]*?\n      \}/.exec(html)?.[0];
