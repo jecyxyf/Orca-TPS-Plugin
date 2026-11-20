@@ -1,6 +1,6 @@
 import { sourceMessage } from './locales.mjs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { leaderboardDay } from './usage-summary.mjs';
+import { leaderboardDay, leaderboardDayStart } from './usage-summary.mjs';
 import { validInstallationId } from './leaderboard-installation.mjs';
 import { createAvatarCache, githubLoginKey } from './leaderboard-avatars.mjs';
 import { validStatsLabel, validStatsPoint } from './leaderboard-stats.mjs';
@@ -22,19 +22,26 @@ const sessionKey = value => value ? createHash('sha256').update(value).digest('h
 const tokenPattern = /^[\w-]{43}$/;
 const validUsername = value => typeof value === 'string' && value.length > 0 && value.length <= 39;
 
-function publicRows(rows, days) {
+function publicRows(rows, days, day) {
   if (!Array.isArray(rows) || rows.length > 100 || !rows.every(row =>
     row && typeof row.username === 'string' && Number.isSafeInteger(row.rank) && row.rank > 0 &&
     Number.isInteger(row.tokens) && row.tokens > 0 && row.tokens <= days * Number.MAX_SAFE_INTEGER &&
     Number.isSafeInteger(row.submittedAt) && Number.isFinite(new Date(row.submittedAt).getTime())
   )) return null;
-  return rows.map(({ rank, username, tokens, submittedAt, recent }) => ({
+  const firstDay = day && leaderboardDay(leaderboardDayStart(day) - (days - 1) * 86_400_000);
+  return rows.map(({ rank, username, tokens, submittedAt, recent, daily }) => ({
     rank, username, tokens, submittedAt,
     ...(recent && Array.isArray(recent.points) && recent.points.length <= 30 && recent.points.every(point =>
       point && Number.isSafeInteger(point.submittedAt) && validStatsPoint(point)) &&
       validStatsLabel(recent.topModel) && validStatsLabel(recent.topCli) ? {
         recent: { points: recent.points.map(({ submittedAt, deltaTokens, avgTps }) => ({ submittedAt, deltaTokens, avgTps })),
           topModel: recent.topModel, topCli: recent.topCli }
+      } : {}),
+    ...(days > 1 && firstDay && Array.isArray(daily) && daily.length <= days && daily.every((point, index) =>
+      point && typeof point.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(point.day) &&
+      point.day >= firstDay && point.day <= day && (index === 0 || point.day > daily[index - 1].day) &&
+      Number.isSafeInteger(point.tokens) && point.tokens > 0) ? {
+        daily: daily.map(({ day, tokens }) => ({ day, tokens }))
       } : {})
   }));
 }
@@ -248,12 +255,13 @@ export function startLeaderboard(orca, {
   async function fetchState(days, force) {
     const cache = rankingCache(days);
     const requested = ++rankingRequest;
-    const path = stats ? `/api/today?days=${days}&stats=1` : days === 1 ? '/api/today' : '/api/today?days=' + days;
+    const path = stats ? `/api/today?days=${days}&stats=1${days > 1 ? '&daily=1' : ''}`
+      : days === 1 ? '/api/today' : '/api/today?days=' + days;
     const etag = !force && cache.snapshot?.day === today() ? cache.etag : undefined;
     const reply = await request(path, { auth: false, etag, acceptEtag: Boolean(stats) });
     const board = reply.notModified ? cache.snapshot : reply;
     const updatedAt = now().getTime();
-    const rows = (board?.days ?? 1) === days && board?.day === leaderboardDay(updatedAt) ? publicRows(board.rows, days) : null;
+    const rows = (board?.days ?? 1) === days && board?.day === leaderboardDay(updatedAt) ? publicRows(board.rows, days, board.day) : null;
     if (rows && requested > cache.latestRequest) {
       cache.latestRequest = requested;
       if (!reply.notModified) {

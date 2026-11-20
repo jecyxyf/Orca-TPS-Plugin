@@ -232,6 +232,7 @@
   <message id="rank-position">অবস্থান {0}</message>
   <message id="last-upload-at">শেষ আপলোড {0}</message>
   <message id="leaderboard-five-minute-usage">শেষ ৫ মিনিটের ব্যবহার</message>
+  <message id="leaderboard-daily-usage">দৈনিক ব্যবহার</message>
   <message id="leaderboard-average-speed">গড় তৈরির গতি</message>
   <message id="leaderboard-refreshed-at">{0}-এ রিফ্রেশ করা হয়েছে</message>
   <message id="notice.remote-read-failed">দূরবর্তী পরিসংখ্যান পড়া যায়নি ({0}: {1})।</message>

@@ -77,11 +77,12 @@ export function createLeaderboardServer({
   const publicRankings = new Map();
   let minute, prunedDay;
 
-  function sendPublicRanking(req, res, days, time, day) {
+  function sendPublicRanking(req, res, days, time, day, includeDaily) {
     const revision = store.rankingRevision();
-    let snapshot = publicRankings.get(days);
+    const key = includeDaily ? `${days}/daily` : days;
+    let snapshot = publicRankings.get(key);
     if (!snapshot || snapshot.revision !== revision || snapshot.day !== day || time >= snapshot.expiresAt) {
-      const ranking = store.ranking(null, time, days, true);
+      const ranking = store.ranking(null, time, days, true, includeDaily);
       let expiresAt = leaderboardDayStart(day) + 86_400_000;
       for (const row of ranking.rows) {
         if (row.recent.points.length) expiresAt = Math.min(expiresAt, row.recent.points[0].submittedAt + RECENT_STATS_MS);
@@ -89,7 +90,7 @@ export function createLeaderboardServer({
       const body = JSON.stringify({ authenticated: false, ...ranking });
       const etag = '"' + createHash('sha256').update(body).digest('base64url') + '"';
       snapshot = { body, etag, revision, day, expiresAt };
-      publicRankings.set(days, snapshot);
+      publicRankings.set(key, snapshot);
     }
     res.setHeader('ETag', snapshot.etag);
     if (req.headers['if-none-match'] === snapshot.etag) {
@@ -393,8 +394,9 @@ export function createLeaderboardServer({
       const days = url.searchParams.get('days') ?? '1';
       if (!['1', '7', '30'].includes(days)) return send(res, 400, { code: 'invalid' });
       const includeRecent = url.searchParams.get('stats') === '1';
-      if (!account && includeRecent) return sendPublicRanking(req, res, Number(days), time, day);
-      const ranking = store.ranking(account?.id ?? null, time, Number(days), includeRecent);
+      const includeDaily = includeRecent && days !== '1' && url.searchParams.get('daily') === '1';
+      if (!account && includeRecent) return sendPublicRanking(req, res, Number(days), time, day, includeDaily);
+      const ranking = store.ranking(account?.id ?? null, time, Number(days), includeRecent, includeDaily);
       const viewer = account ? { authenticated: true, banned: Boolean(account.banned), username: account.username } : { authenticated: false };
       return send(res, 200, { ...viewer, ...ranking });
     }

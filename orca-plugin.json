@@ -4,7 +4,7 @@
   "id": "tps-stats",
   "name": "TPS Plugin",
   "version": "1.6.4",
-  "description": "Track request speed and token usage in Orca, compare models, and see five-minute usage on a cross-device leaderboard with GitHub sign-in.",
+  "description": "Track request speed and token usage in Orca, compare models, and see five-minute and daily usage on a cross-device leaderboard.",
   "author": {
     "name": "jecyxyf",
     "url": "https://github.com/jecyxyf"
@@ -32,8 +32,8 @@
     },
     {
       "path": "assets/five-minute-stats/leaderboard.png",
-      "alt": "Leaderboard with five-minute usage curves, model and CLI names, and average generation speeds",
-      "caption": "Leaderboard · See your rank and the last five minutes of usage",
+      "alt": "Seven-day leaderboard with daily usage curves, model and CLI names, and average generation speeds",
+      "caption": "Leaderboard · See five-minute activity or daily usage trends",
       "theme": "dark"
     }
   ],

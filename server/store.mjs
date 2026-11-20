@@ -163,7 +163,7 @@ export function openLeaderboardStore(filename) {
     };
   }
 
-  function ranking(account, now, days = 1, includeRecent = false) {
+  function ranking(account, now, days = 1, includeRecent = false, includeDaily = false) {
     const day = leaderboardDay(now);
     const score = account === null ? null : readScore(account, day);
     const state = account === null ? { day } : status(account, now, score);
@@ -175,7 +175,7 @@ export function openLeaderboardStore(filename) {
         rank: Number(row.rank), account: Number(row.account), mine: Number(row.account) === account
       }));
       return { ...state, days, startDay, rank: rows.find(row => row.mine)?.rank ?? null,
-        rows: rankingRows(rows.slice(0, 100), now, includeRecent) };
+        rows: rankingRows(rows.slice(0, 100), now, includeRecent, includeDaily ? { startDay, day } : null) };
     }
     const rows = all(`
       SELECT accounts.username, scores.account, scores.tokens,
@@ -193,26 +193,40 @@ export function openLeaderboardStore(filename) {
     return { ...state, rank, rows: rankingRows(rows, now, includeRecent) };
   }
 
-  function rankingRows(rows, now, includeRecent) {
-    const recent = new Map();
+  function rankingRows(rows, now, includeRecent, dailyWindow = null) {
+    if (!includeRecent && !dailyWindow) return rows.map(({ account, ...row }) => row);
+    const recent = new Map(), daily = new Map();
+    const accounts = rows.map(row => row.account);
+    const placeholders = accounts.map(() => '?').join(',');
     if (includeRecent && rows.length) {
-      const accounts = rows.map(row => row.account);
       for (const { account, topModel, topCli, ...point } of all(`
         SELECT account, submitted_at AS submittedAt, delta_tokens AS deltaTokens, avg_tps AS avgTps,
           top_model AS topModel, top_cli AS topCli
-        FROM submission_stats WHERE account IN (${accounts.map(() => '?').join(',')})
+        FROM submission_stats WHERE account IN (${placeholders})
           AND submitted_at>? AND submitted_at<=?
         ORDER BY submitted_at`, ...accounts, now - RECENT_STATS_MS, now)) {
         const entry = recent.get(account) ?? { points: [] };
-        entry.points.push(point);
+        if (dailyWindow) entry.points[0] = point;
+        else entry.points.push(point);
         entry.topModel = topModel;
         entry.topCli = topCli;
         recent.set(account, entry);
       }
     }
-    return rows.map(({ account, ...row }) => includeRecent
-      ? { ...row, recent: recent.get(account) ?? { points: [], topModel: null, topCli: null } }
-      : row);
+    if (dailyWindow && rows.length) {
+      for (const { account, ...point } of all(`
+        SELECT account, day, tokens FROM scores WHERE account IN (${placeholders})
+          AND day BETWEEN ? AND ? AND tokens IS NOT NULL ORDER BY day`, ...accounts, dailyWindow.startDay, dailyWindow.day)) {
+        const points = daily.get(account) ?? [];
+        points.push(point);
+        daily.set(account, points);
+      }
+    }
+    return rows.map(({ account, ...row }) => ({
+      ...row,
+      ...(includeRecent ? { recent: recent.get(account) ?? { points: [], topModel: null, topCli: null } } : {}),
+      ...(dailyWindow ? { daily: daily.get(account) ?? [] } : {})
+    }));
   }
 
   function uploadGate(account, day, { requestId, fingerprint, installationId }, now) {

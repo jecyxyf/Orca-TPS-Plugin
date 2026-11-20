@@ -232,6 +232,7 @@
   <message id="rank-position">Puesto {0}</message>
   <message id="last-upload-at">Última subida {0}</message>
   <message id="leaderboard-five-minute-usage">Uso de los últimos 5 minutos</message>
+  <message id="leaderboard-daily-usage">Uso diario</message>
   <message id="leaderboard-average-speed">Velocidad media de generación</message>
   <message id="leaderboard-refreshed-at">Actualizado a las {0}</message>
   <message id="notice.remote-read-failed">No se pudieron leer las estadísticas remotas ({0}: {1}).</message>

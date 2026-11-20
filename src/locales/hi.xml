@@ -232,6 +232,7 @@
   <message id="rank-position">रैंक {0}</message>
   <message id="last-upload-at">पिछला अपलोड {0}</message>
   <message id="leaderboard-five-minute-usage">पिछले 5 मिनट का उपयोग</message>
+  <message id="leaderboard-daily-usage">दैनिक उपयोग</message>
   <message id="leaderboard-average-speed">औसत जनरेशन गति</message>
   <message id="leaderboard-refreshed-at">{0} पर रीफ़्रेश किया</message>
   <message id="notice.remote-read-failed">दूरस्थ आँकड़े नहीं पढ़ सके ({0}: {1})।</message>

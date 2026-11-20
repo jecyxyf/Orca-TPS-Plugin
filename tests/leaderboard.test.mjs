@@ -173,6 +173,52 @@ test('all ranking periods return current five-minute statistics for exactly thei
   assert.ok(!updated.some(row => row.username === 'sample-100'));
 });
 
+test('daily ranking charts cover the selected Beijing dates and use the saved account total for each date', async t => {
+  const api = await fixture(t);
+  api.store.upsertAccount({ id: 1, login: 'alice' });
+  api.store.upsertAccount({ id: 99, login: 'admin' });
+  const stats = { deltaTokens: 1, avgTps: 9.5, topModel: 'sample', topCli: 'pi' };
+  const dayAgo = days => leaderboardDay(api.clock() - days * 86_400_000);
+  const submit = (offset, tokens, installationId) => {
+    const requestId = randomUUID();
+    const time = api.clock() - offset * 86_400_000;
+    return api.store.submit(1, { day: leaderboardDay(time), tokens, installationId, stats, requestId, fingerprint: requestId }, time, 1000);
+  };
+  for (const [ago, tokens] of [[30, 2], [29, 3], [7, 4], [6, 5], [2, 7]]) assert.equal(submit(ago, tokens), 'accepted');
+  assert.equal(submit(0, 11, randomUUID()), 'accepted');
+  api.advance(10_000);
+  assert.equal(submit(0, 13, randomUUID()), 'accepted');
+
+  const legacy = (await (await api.call('/api/today?days=7&stats=1')).json()).rows[0];
+  assert.equal(legacy.daily, undefined);
+  assert.equal(legacy.recent.points.length, 2);
+  const today = (await (await api.call('/api/today?stats=1&daily=1')).json()).rows[0];
+  assert.equal(today.daily, undefined);
+  assert.equal(today.recent.points.length, 2);
+
+  const weekRoute = '/api/today?days=7&stats=1&daily=1';
+  const week = await api.call(weekRoute);
+  const weekTag = week.headers.get('etag');
+  const [weekly] = (await week.json()).rows;
+  assert.deepEqual(weekly.daily, [{ day: dayAgo(6), tokens: 5 }, { day: dayAgo(2), tokens: 7 }, { day: TODAY, tokens: 24 }]);
+  assert.equal(weekly.daily.reduce((total, point) => total + point.tokens, 0), weekly.tokens);
+  assert.equal(weekly.recent.points.length, 1);
+  assert.equal(weekly.recent.topModel, 'sample');
+  assert.equal((await api.call(weekRoute, { headers: { 'If-None-Match': weekTag } })).status, 304);
+
+  const month = (await (await api.call('/api/today?days=30&stats=1&daily=1')).json()).rows[0];
+  assert.deepEqual(month.daily.slice(0, 2), [{ day: dayAgo(29), tokens: 3 }, { day: dayAgo(7), tokens: 4 }]);
+  assert.equal(month.daily.reduce((total, point) => total + point.tokens, 0), month.tokens);
+  api.store.removeScores(99, { day: dayAgo(2), account: 1 }, api.clock());
+  const changed = await api.call(weekRoute, { headers: { 'If-None-Match': weekTag } });
+  assert.equal(changed.status, 200);
+  assert.deepEqual((await changed.json()).rows[0].daily.map(point => point.day), [dayAgo(6), TODAY]);
+
+  api.advance(START + 86_400_000 - api.clock());
+  const rolled = (await (await api.call(weekRoute)).json()).rows[0];
+  assert.deepEqual(rolled.daily, [{ day: TODAY, tokens: 24 }]);
+});
+
 test('the client freezes its four statistics across restarts and credits only the confirmed batch', async () => {
   const values = new Map(), storage = { get: key => values.get(key), set: (key, value) => values.set(key, structuredClone(value)) };
   let time = START + 60_000;
@@ -231,6 +277,7 @@ test('a submission packs only four statistics and two viewers read the same curr
   assert.deepEqual(JSON.parse(upload[0].body).stats, { deltaTokens: 150, avgTps: 30, topModel: 'model-A', topCli: 'pi' });
   const opening = await first.run('state', { days: 7, force: true });
   assert.equal(opening.board.rows[0].recent.points[0].deltaTokens, 150);
+  assert.deepEqual(opening.board.rows[0].daily, [{ day: TODAY, tokens: 2500 }]);
   assert.deepEqual((await second.run('state', { days: 7 })).board.rows, opening.board.rows);
   assert.deepEqual((await first.run('state', { days: 7 })).board.rows, opening.board.rows);
   assert.ok(first.traffic.at(-1).headers['If-None-Match']);

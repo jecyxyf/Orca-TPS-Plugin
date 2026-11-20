@@ -232,6 +232,7 @@
   <message id="rank-position">درجہ {0}</message>
   <message id="last-upload-at">آخری اپ لوڈ {0}</message>
   <message id="leaderboard-five-minute-usage">گزشتہ 5 منٹ کا استعمال</message>
+  <message id="leaderboard-daily-usage">روزانہ استعمال</message>
   <message id="leaderboard-average-speed">تخلیق کی اوسط رفتار</message>
   <message id="leaderboard-refreshed-at">{0} پر تازہ کیا گیا</message>
   <message id="notice.remote-read-failed">دور دراز اعداد و شمار نہیں پڑھے جا سکے ({0}: {1})۔</message>
