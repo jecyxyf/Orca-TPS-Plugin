@@ -231,6 +231,8 @@
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">Peringkat {0}</message>
   <message id="last-upload-at">Unggahan terakhir {0}</message>
+  <message id="leaderboard-five-minute-usage">Penggunaan dalam 5 menit terakhir</message>
+  <message id="leaderboard-average-speed">Kecepatan pembuatan rata-rata</message>
   <message id="leaderboard-refreshed-at">Dimuat ulang pada {0}</message>
   <message id="notice.remote-read-failed">Gagal membaca statistik jarak jauh ({0}: {1}).</message>
   <message id="current-read-failed">Gagal membaca data saat ini. Coba lagi nanti.</message>

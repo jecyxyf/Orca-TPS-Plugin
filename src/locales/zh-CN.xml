@@ -231,6 +231,8 @@
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">第 {0} 名</message>
   <message id="last-upload-at">最近上传 {0}</message>
+  <message id="leaderboard-five-minute-usage">最近 5 分钟用量</message>
+  <message id="leaderboard-average-speed">平均生成速度</message>
   <message id="leaderboard-refreshed-at">刷新于 {0}</message>
   <message id="notice.remote-read-failed">远程统计读取失败（{0}: {1}）。</message>
   <message id="current-read-failed">读取当前数据失败，请稍后重试。</message>

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
+import { RECENT_STATS_MS } from '../src/leaderboard-stats.mjs';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
 
 const GITHUB = 'https://github.com';
@@ -73,7 +74,31 @@ export function createLeaderboardServer({
   const deviceLogins = new Map();
   const browserLogins = new Map();
   const requests = new Map();
+  const publicRankings = new Map();
   let minute, prunedDay;
+
+  function sendPublicRanking(req, res, days, time, day) {
+    const revision = store.rankingRevision();
+    let snapshot = publicRankings.get(days);
+    if (!snapshot || snapshot.revision !== revision || snapshot.day !== day || time >= snapshot.expiresAt) {
+      const ranking = store.ranking(null, time, days, true);
+      let expiresAt = leaderboardDayStart(day) + 86_400_000;
+      for (const row of ranking.rows) {
+        if (row.recent.points.length) expiresAt = Math.min(expiresAt, row.recent.points[0].submittedAt + RECENT_STATS_MS);
+      }
+      const body = JSON.stringify({ authenticated: false, ...ranking });
+      const etag = '"' + createHash('sha256').update(body).digest('base64url') + '"';
+      snapshot = { body, etag, revision, day, expiresAt };
+      publicRankings.set(days, snapshot);
+    }
+    res.setHeader('ETag', snapshot.etag);
+    if (req.headers['if-none-match'] === snapshot.etag) {
+      res.writeHead(304);
+      return res.end();
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(snapshot.body);
+  }
   const adminCookie = secure ? '__Host-orca_admin' : 'orca_admin';
   const stateCookie = secure ? '__Host-orca_state' : 'orca_state';
   const pluginStateCookie = secure ? '__Host-orca_plugin_state' : 'orca_plugin_state';
@@ -325,6 +350,7 @@ export function createLeaderboardServer({
     }
     const currentMinute = Math.floor(time / 60000);
     if (currentMinute !== minute) {
+      store.pruneRecent(time);
       requests.clear();
       for (const [key, login] of deviceLogins) if (login.expiresAt <= time) deviceLogins.delete(key);
       for (const [key, login] of browserLogins) if (login.expiresAt <= time) browserLogins.delete(key);
@@ -366,7 +392,9 @@ export function createLeaderboardServer({
     if (method === 'GET' && route === '/api/today') {
       const days = url.searchParams.get('days') ?? '1';
       if (!['1', '7', '30'].includes(days)) return send(res, 400, { code: 'invalid' });
-      const ranking = store.ranking(account?.id ?? null, time, Number(days));
+      const includeRecent = url.searchParams.get('stats') === '1';
+      if (!account && includeRecent) return sendPublicRanking(req, res, Number(days), time, day);
+      const ranking = store.ranking(account?.id ?? null, time, Number(days), includeRecent);
       const viewer = account ? { authenticated: true, banned: Boolean(account.banned), username: account.username } : { authenticated: false };
       return send(res, 200, { ...viewer, ...ranking });
     }
@@ -388,6 +416,7 @@ export function createLeaderboardServer({
       const body = validRequestId && req.headers['content-type']?.split(';')[0] === 'application/json' ? parseJson(raw) : null;
       const input = {
         day: body?.day, installationId: body?.installationId, tokens: body?.tokens, scores: body?.scores,
+        stats: body?.stats,
         requestId: (history ? 'history:' : '') + (validRequestId ? requestId : randomUUID()),
         fingerprint: digest(raw ?? 'oversized request')
       };

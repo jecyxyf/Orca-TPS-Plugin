@@ -231,6 +231,8 @@
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">Posição {0}</message>
   <message id="last-upload-at">Último envio {0}</message>
+  <message id="leaderboard-five-minute-usage">Uso nos últimos 5 minutos</message>
+  <message id="leaderboard-average-speed">Velocidade média de geração</message>
   <message id="leaderboard-refreshed-at">Atualizado às {0}</message>
   <message id="notice.remote-read-failed">Não foi possível ler as estatísticas remotas ({0}: {1}).</message>
   <message id="current-read-failed">Não foi possível ler os dados atuais. Tente mais tarde.</message>

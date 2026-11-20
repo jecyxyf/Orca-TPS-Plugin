@@ -11,6 +11,7 @@ import { readOrcaProfile } from './active-conversation.mjs';
 import { normalizeComparePath } from './data.mjs';
 import { COLLECTOR_FILES, MAX_RESPONSE_BASE64, USAGE_PAGE_SIZE, collectorCommand, remoteRecord } from './remote-collector.mjs';
 import { REMOTE_USAGE_PREFIX } from './usage-summary.mjs';
+import { MAX_RECENT_REQUESTS, validRecentRequest } from './leaderboard-stats.mjs';
 
 const warnings = {
   api: sourceMessage('notice.remote-api-missing'),
@@ -450,7 +451,7 @@ function validUsageDays(days) {
 
 export function createRemoteUsageReader(orca, {
   lookupSsh = readSshTargets, decode = decodeCollectorReply,
-  resolveHosts = resolveUsageHosts(lookupSsh), launch = launchSsh, t = sourceMessage
+  resolveHosts = resolveUsageHosts(lookupSsh), launch = launchSsh, t = sourceMessage, includeRecent = false
 } = {}) {
   const lifetime = new AbortController();
   const connections = new Set();
@@ -471,7 +472,7 @@ export function createRemoteUsageReader(orca, {
       for (;;) {
         const page = await connection.exchange({
           ...(offset === 0 ? { files } : {}),
-          usage: { type: 'list', cutoffMs, offset, timeZone, rankDay, rankFrom }
+          usage: { type: 'list', cutoffMs, offset, timeZone, rankDay, rankFrom, ...(includeRecent ? { includeRecent } : {}) }
         }, signal(45_000));
         if (!Array.isArray(page.items) || page.items.length > USAGE_PAGE_SIZE || typeof page.more !== 'boolean' ||
           (page.more && page.items.length !== USAGE_PAGE_SIZE)) {
@@ -518,6 +519,8 @@ export function createRemoteUsageReader(orca, {
         const value = reply.results[key];
         if (!rankDay) return validUsageDays(value);
         if (value?.leaderboardFrom !== rankFrom || !validUsageDays(value.days) || !isObject(value.leaderboardDays)) return false;
+        if (value.recent !== undefined && (!Array.isArray(value.recent) || value.recent.length > MAX_RECENT_REQUESTS ||
+          !value.recent.every(validRecentRequest))) return false;
         return Object.entries(value.leaderboardDays).every(([day, total]) =>
           /^\d{4}-\d{2}-\d{2}$/.test(day) && day >= rankFrom && day <= rankDay && Number.isSafeInteger(total) && total >= 0);
       }).map(key => [scope + key, reply.results[key]]));
