@@ -1530,6 +1530,31 @@
         });
       }
 
+      function dailyUsagePath(points, x, y) {
+        const levels = points.map(y);
+        const changes = levels.slice(1).map((level, index) => level - levels[index]);
+        const tangents = levels.map((_, index) => {
+          const before = changes[index - 1] ?? changes[index];
+          const after = changes[index] ?? before;
+          // Keep peaks, valleys, and flat stretches within the recorded range.
+          return before * after > 0 ? 2 * before * after / (before + after) : 0;
+        });
+        const line = new Path2D();
+        let startX = x(points[0]);
+        line.moveTo(startX, levels[0]);
+        for (let index = 1; index < points.length; index++) {
+          const endX = x(points[index]);
+          const third = (endX - startX) / 3;
+          line.bezierCurveTo(
+            startX + third, levels[index - 1] + tangents[index - 1] / 3,
+            endX - third, levels[index] - tangents[index] / 3,
+            endX, levels[index]
+          );
+          startX = endX;
+        }
+        return line;
+      }
+
       function paintUsagePath(ctx, line, baseline, firstX, lastX) {
         const colors = window.getComputedStyle(document.documentElement);
         const low = colors.getPropertyValue('--usage-wave-low').trim();
@@ -1674,10 +1699,7 @@
             if (!ctx) return;
             ctx.clearRect(0, 0, chart.width, chart.height);
             ctx.lineWidth = 2;
-            const line = new Path2D();
-            line.moveTo(x(points[0]), y(points[0]));
-            for (const point of points.slice(1)) line.lineTo(x(point), y(point));
-            paintUsagePath(ctx, line, chart.height - chartPadding, x(points[0]), x(latestPoint));
+            paintUsagePath(ctx, dailyUsagePath(points, x, y), chart.height - chartPadding, x(points[0]), x(latestPoint));
             for (const point of points) {
               ctx.beginPath();
               ctx.arc(x(point), y(point), 3, 0, Math.PI * 2);

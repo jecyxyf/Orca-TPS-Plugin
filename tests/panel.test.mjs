@@ -175,6 +175,33 @@ test('daily usage fills missing dates with zero across the entire selected windo
   assert.deepEqual(dailyUsagePoints(undefined, Date.UTC(2026, 10, 14), 7), []);
 });
 
+test('daily usage curves pass through every point and stay within each pair of values', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function dailyUsagePath\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(source);
+  class TestPath {
+    segments = [];
+    moveTo(...point) { this.start = point; }
+    bezierCurveTo(...segment) { this.segments.push(segment); }
+  }
+  const dailyUsagePath = new Function('Path2D', `${source}; return dailyUsagePath;`)(TestPath);
+  const points = [56, 56, 40, 30, 4, 56, 56].map((y, index) => ({ x: 4 + 52 * index, y }));
+  const line = dailyUsagePath(points, point => point.x, point => point.y);
+  assert.deepEqual(line.start, [4, 56]);
+  assert.deepEqual(line.segments.map(segment => segment.slice(4)), points.slice(1).map(({ x, y }) => [x, y]));
+  for (const [index, segment] of line.segments.entries()) {
+    const [firstX, firstY, secondX, secondY, endX, endY] = segment;
+    const { x: startX, y: startY } = points[index];
+    assert.ok(startX < firstX && firstX < secondX && secondX < endX);
+    const low = Math.min(startY, endY), high = Math.max(startY, endY);
+    assert.ok([firstY, secondY].every(controlY => controlY >= low && controlY <= high));
+    const next = line.segments[index + 1];
+    if (next) assert.ok(Math.abs((endY - secondY) - (next[1] - endY)) < 1e-10);
+  }
+  assert.notEqual(line.segments[2][1], points[2].y);
+  assert.equal(line.segments[3][3], 4);
+});
+
 async function loadAvatarView() {
   const html = await readFile(panelPath, 'utf8');
   const source = /\/\/ avatar-view:start([\s\S]*?)\/\/ avatar-view:end/.exec(html)?.[1];

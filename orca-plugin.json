@@ -32,7 +32,7 @@
     },
     {
       "path": "assets/five-minute-stats/leaderboard.png",
-      "alt": "30-day leaderboard with shaded daily usage charts, model and CLI names, and average generation speeds",
+      "alt": "30-day leaderboard with shaded daily usage curves, model and CLI names, and average generation speeds",
       "caption": "Leaderboard · Follow five-minute activity and daily usage trends",
       "theme": "dark"
     }
