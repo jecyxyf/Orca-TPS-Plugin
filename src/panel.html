@@ -315,20 +315,26 @@
       --ladder-row-gap: 8px;
       display: grid; grid-template-columns: auto var(--ladder-row-gap) minmax(0, 1fr) auto;
       grid-template-rows: var(--ladder-row-size) auto auto;
-      grid-template-areas: "rank . name total" ". recent recent recent" ". time time time";
+      grid-template-areas:
+        "rank   .      name   total"
+        "recent recent recent recent"
+        "time   time   time   time";
       row-gap: 5px; align-items: center; padding: 9px 0;
       border-top: 1px solid var(--line); font-variant-numeric: tabular-nums;
     }
     .ladder-rank {
       grid-area: rank; display: grid; place-items: center; min-width: 3ch; height: 100%;
-      padding-inline: 2px; color: var(--muted); font-size: 16px; font-weight: 750;
+      padding-inline: 2px; color: var(--muted); font-size: 20px; font-weight: 750;
     }
     .ladder-self .ladder-rank { color: var(--ladder-own-rank); }
     .ladder-row-user { grid-area: name; display: flex; gap: 4px; align-items: center; min-width: 0; margin-inline-end: var(--ladder-row-gap); }
-    .ladder-row-user .ladder-avatar { width: var(--ladder-row-size); height: var(--ladder-row-size); }
+    .ladder-row-user .ladder-avatar {
+      --ladder-row-avatar-size: calc(var(--ladder-row-size) * .9);
+      width: var(--ladder-row-avatar-size); height: var(--ladder-row-avatar-size);
+    }
     .ladder-row-user .ladder-medal { zoom: var(--ladder-row-medal-scale); }
     .ladder-name {
-      min-width: 0; font-size: 16px; line-height: var(--ladder-row-size); color: var(--purple); font-weight: 750;
+      min-width: 0; font-size: 18px; line-height: var(--ladder-row-size); color: var(--purple); font-weight: 750;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .ladder-total {
@@ -1838,9 +1844,9 @@
           avatar.className = 'ladder-avatar';
           avatar.setAttribute('aria-hidden', 'true');
           setAvatar(avatar, row.username);
-          user.append(avatar, name);
           const badge = medal(row.rank, period);
           if (badge) user.append(badge);
+          user.append(avatar, name);
           total.textContent = formatTokenMB(row.tokens);
           const uploaded = clock(row.submittedAt);
           time.setAttribute('data-localized-text', '');
