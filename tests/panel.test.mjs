@@ -120,19 +120,19 @@ test('today usage connects pulses at real timestamps and animates new points onc
   let width = 308;
   const chart = { width: 320, height: 60, isConnected: true,
     getBoundingClientRect: () => ({ width, height: 30 }), getContext: () => ctx };
-  const draw = new Function('pulsePainters', 'requestAnimationFrame', 'lifetime', 'window', `
+  const draw = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', `
     const RECENT_STATS_MS = 300000;
     ${source.replace(/\n      function usageCard$/, '')}
     return drawSubmissionPulses;
   `)(painters, callback => frames.push(callback), { signal: { aborted: false } }, {
     devicePixelRatio: 2, matchMedia: () => ({ matches: false }),
-    getComputedStyle: () => ({ getPropertyValue: name => name === '--pulse-low' ? '#60a589' : '#d2b668' })
-  });
+    getComputedStyle: () => ({ getPropertyValue: name => name === '--usage-wave-low' ? '#60a589' : '#ff6b72' })
+  }, { documentElement: {} });
   draw(chart, [{ submittedAt: 20_000, deltaTokens: 100 }, { submittedAt: 40_000, deltaTokens: 0 },
     { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
   frames.shift()(1000);
   assert.deepEqual([chart.width, chart.height], [616, 60]);
-  assert.deepEqual(stops, [[0, '#60a589'], [0.58, '#60a589'], [1, '#d2b668']]);
+  assert.deepEqual(stops, [[0, '#60a589'], [0.58, '#60a589'], [1, '#ff6b72']]);
   assert.deepEqual(paths[0].slice(2, 7), [[24, 15], [27.25, 26], [44, 26], [93.75, 26], [97, 26]]);
   assert.deepEqual(paths[1][0], [44, 26, 1.4]);
   frames.shift()(1200);

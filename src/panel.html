@@ -16,6 +16,7 @@
       --blue: #0066e6;
       --orange: #b45300;
       --green: #007f48;
+      --usage-wave-low: #267456;
       --cache: #9c6500;
       --speed: #c72e3a;
       --speed-bg: #f0f0f3;
@@ -39,6 +40,7 @@
       --blue: #64b0ff;
       --orange: #ffb340;
       --green: #4ade80;
+      --usage-wave-low: #60a589;
       --cache: #e8b65b;
       --speed: #ff6b72;
       --speed-bg: #303034;
@@ -286,8 +288,7 @@
       display: block; width: 100%; height: 30px; border-radius: 6px;
       background: var(--button-bg); color: var(--blue);
     }
-    .ladder-chart-pulse { background: transparent; --pulse-low: #267456; --pulse-high: #826224; }
-    html.dark .ladder-chart-pulse { --pulse-low: #60a589; --pulse-high: #d2b668; }
+    .ladder-chart-pulse { background: transparent; }
     .ladder-chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin-top: 3px; }
     .ladder-recent-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 4px; font-size: 11px; }
     .ladder-recent-tools { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -1374,7 +1375,7 @@
       let summaryAccount = '', summaryUpload = null;
       let rankingNodes = new Map(), leaderboardFrame, nextRecentExpiry = Infinity;
       let animateToday = false, pulseDay = '', latestPulses = new Map();
-      const pulsePainters = new WeakMap();
+      const usagePainters = new WeakMap();
 
       async function request(action, payload = {}) {
         try {
@@ -1521,6 +1522,17 @@
       const usageChartLabel = () => t(rankDays === 1 ? 'leaderboard-five-minute-usage' : 'leaderboard-daily-usage');
       const chartPadding = 4;
 
+      function setUsageGradient(ctx, baseline) {
+        const colors = window.getComputedStyle(document.documentElement);
+        const low = colors.getPropertyValue('--usage-wave-low').trim();
+        const high = colors.getPropertyValue('--speed').trim();
+        const gradient = ctx.createLinearGradient(0, baseline, 0, chartPadding);
+        gradient.addColorStop(0, low);
+        gradient.addColorStop(0.58, low);
+        gradient.addColorStop(1, high);
+        ctx.strokeStyle = ctx.fillStyle = gradient;
+      }
+
       function pulseX(point, left, width) {
         const offset = Math.max(0, Math.min(1, (point.submittedAt - left) / RECENT_STATS_MS));
         return chartPadding + Math.max(0, width - 2 * chartPadding) * offset;
@@ -1548,16 +1560,8 @@
           if (!ctx) return;
           ctx.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
           ctx.clearRect(0, 0, width, height);
-          const colors = window.getComputedStyle(chart);
-          const lowColor = colors.getPropertyValue('--pulse-low').trim();
-          const highColor = colors.getPropertyValue('--pulse-high').trim();
           const baseline = height - chartPadding;
-          const gradient = ctx.createLinearGradient(0, baseline, 0, chartPadding);
-          gradient.addColorStop(0, lowColor);
-          gradient.addColorStop(0.58, lowColor);
-          gradient.addColorStop(1, highColor);
-          ctx.strokeStyle = gradient;
-          ctx.fillStyle = lowColor;
+          setUsageGradient(ctx, baseline);
           ctx.lineWidth = 1.4;
           ctx.lineCap = ctx.lineJoin = 'round';
           const halfWidth = Math.min(chartPadding - 0.75, (width - 2 * chartPadding) / 70);
@@ -1586,7 +1590,7 @@
           if (progress < 1) schedule();
         }
 
-        pulsePainters.set(chart, schedule);
+        usagePainters.set(chart, schedule);
         schedule();
       }
 
@@ -1641,9 +1645,11 @@
           const maximum = Math.max(1, ...points.map(tokensOf));
           const x = point => chartPadding + width * Math.min(1, (timeOf(point) - left) / span);
           const y = point => chartPadding + height * (1 - tokensOf(point) / maximum);
-          const ctx = chart.getContext('2d');
-          if (ctx) {
-            ctx.strokeStyle = ctx.fillStyle = '#678ef7';
+          const paint = () => {
+            const ctx = chart.getContext('2d');
+            if (!ctx) return;
+            ctx.clearRect(0, 0, chart.width, chart.height);
+            setUsageGradient(ctx, chart.height - chartPadding);
             ctx.lineWidth = 2;
             ctx.beginPath();
             let previous = null;
@@ -1658,7 +1664,9 @@
               ctx.arc(x(point), y(point), 3, 0, Math.PI * 2);
               ctx.fill();
             }
-          }
+          };
+          usagePainters.set(chart, paint);
+          paint();
           chart.addEventListener('pointermove', event => {
             const rect = chart.getBoundingClientRect();
             const position = (event.clientX - rect.left) * chart.width / rect.width;
@@ -2010,13 +2018,13 @@
         animateToday = false;
         void refresh(rankDays, true);
       }, { signal: lifetime.signal });
-      function redrawPulses() {
-        for (const chart of element('rows').querySelectorAll('.ladder-chart')) pulsePainters.get(chart)?.();
+      function redrawUsageCharts() {
+        for (const chart of element('rows').querySelectorAll('.ladder-chart')) usagePainters.get(chart)?.();
       }
-      const pulseResize = new ResizeObserver(redrawPulses);
-      const pulseTheme = new MutationObserver(redrawPulses);
-      pulseResize.observe(element('rows'));
-      pulseTheme.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      const usageResize = new ResizeObserver(redrawUsageCharts);
+      const usageTheme = new MutationObserver(redrawUsageCharts);
+      usageResize.observe(element('rows'));
+      usageTheme.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
       document.addEventListener('tps-language-changed', () => {
         drawnRows = '';
         rankingNodes.clear();
@@ -2113,8 +2121,8 @@
       window.addEventListener('pagehide', () => {
         lifetime.abort();
         avatarView.dispose();
-        pulseResize.disconnect();
-        pulseTheme.disconnect();
+        usageResize.disconnect();
+        usageTheme.disconnect();
         rankingSubscription?.dispose();
         cancelAnimationFrame(leaderboardFrame);
         clearTimeout(retryLogin);
