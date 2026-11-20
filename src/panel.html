@@ -1716,7 +1716,7 @@
             const { left: edge, width } = chart.getBoundingClientRect();
             const distance = point => Math.abs(pulseX(point, left, width) - (event.clientX - edge));
             const nearest = points.reduce((a, b) => distance(a) <= distance(b) ? a : b);
-            chart.title = distance(nearest) <= 6 ? pointTitle(nearest) : usageChartLabel();
+            chart.title = distance(nearest) <= 10 ? pointTitle(nearest) : usageChartLabel();
           });
         }
         return container;
