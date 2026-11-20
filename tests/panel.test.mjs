@@ -145,7 +145,7 @@ test('today usage connects pulses at real timestamps and animates new points onc
     { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
   frames.shift()(1000);
   assert.deepEqual([chart.width, chart.height], [616, 60]);
-  assert.deepEqual(stops, [[0, '#60a589'], [0.58, '#60a589'], [1, '#ff6b72']]);
+  assert.deepEqual(stops, [[0, '#60a589'], [1, '#ff6b72']]);
   assert.deepEqual(paths[0].slice(2, 7), [[24, 15], [27.25, 26], [44, 26], [93.75, 26], [97, 26]]);
   assert.deepEqual(paths[1][0], [44, 26, 1.4]);
   assert.deepEqual(areas[0].points, [...paths[0], [100.25, 26], [20.75, 26], 'closed']);
@@ -217,7 +217,10 @@ function fakeAvatar() {
   return {
     dataset: {}, isConnected: true, children: [],
     replaceChildren(...nodes) { this.children = nodes; },
-    get shown() { return this.children[0]?.kind === 'img' ? this.children[0].src : 'red-hat'; }
+    get shown() {
+      const [node] = this.children;
+      return node?.kind === 'img' ? node.src : node?.kind;
+    }
   };
 }
 
@@ -239,7 +242,7 @@ test('panel avatar view retries default avatars on new rows and reuses loaded av
   const loads = [];
   let reply = null;
   const view = createAvatarView({
-    fallback: () => ({ kind: 'red-hat' }),
+    fallback: () => ({ kind: 'black-hat' }),
     createImage: fakeImage,
     load: async username => { loads.push(username); return reply; },
     visible: () => true,
@@ -251,8 +254,8 @@ test('panel avatar view retries default avatars on new rows and reuses loaded av
   view.set(firstRow, 'jecyxyf');
   await settle();
   assert.deepEqual(loads, ['jecyxyf'], 'one request covers every avatar of the same user');
-  assert.equal(account.shown, 'red-hat');
-  assert.equal(firstRow.shown, 'red-hat');
+  assert.equal(account.shown, 'black-hat');
+  assert.equal(firstRow.shown, 'black-hat');
 
   view.set(account, 'jecyxyf');
   await settle();
@@ -276,13 +279,13 @@ test('panel avatar view retries default avatars on new rows and reuses loaded av
   assert.deepEqual(loads, ['jecyxyf', 'jecyxyf'], 'a loaded avatar is never requested again');
 
   view.set(account, '');
-  assert.equal(account.shown, 'red-hat', 'signing out shows the default avatar');
+  assert.equal(account.shown, 'black-hat', 'signing out shows the default avatar');
 });
 
-test('panel avatar view ignores invalid images and keeps the default red hat icon', async () => {
+test('panel avatar view ignores invalid images and keeps the default black hat icon', async () => {
   const createAvatarView = await loadAvatarView();
   const view = createAvatarView({
-    fallback: () => ({ kind: 'red-hat' }),
+    fallback: () => ({ kind: 'black-hat' }),
     createImage: fakeImage,
     load: async () => 'https://example.test/a.png',
     visible: () => true,
@@ -291,12 +294,13 @@ test('panel avatar view ignores invalid images and keeps the default red hat ico
   const avatar = fakeAvatar();
   view.set(avatar, 'alice');
   await settle();
-  assert.equal(avatar.shown, 'red-hat');
+  assert.equal(avatar.shown, 'black-hat');
 
   const html = await readFile(panelPath, 'utf8');
   const fallback = /<template id="ladder-avatar-fallback">([\s\S]*?)<\/template>/.exec(html)?.[1] ?? '';
-  assert.match(fallback, /data-icon="red-hat"/, 'the default avatar is the red hat icon');
-  assert.match(fallback, /#d62828|#c1121f|#e63946/i, 'the red hat icon is red');
+  assert.match(fallback, /data-icon="black-hat"/);
+  assert.match(fallback, /<ellipse[^>]*fill="#101114"/, 'the hat brim is black');
+  assert.match(fallback, /<path[^>]*fill="#17191c"/, 'the hat crown is black');
 });
 
 test('panel avatar view loads visible avatars through the observer and retries a still-default slot', async () => {
@@ -311,7 +315,7 @@ test('panel avatar view loads visible avatars through the observer and retries a
     disconnect() {}
   }
   const view = createAvatarView({
-    fallback: () => ({ kind: 'red-hat' }),
+    fallback: () => ({ kind: 'black-hat' }),
     createImage: fakeImage,
     load: async username => { loads.push(username); return reply; },
     visible: () => shown,
@@ -326,7 +330,7 @@ test('panel avatar view loads visible avatars through the observer and retries a
   view.set(account, 'alice', { retry: true });
   await settle();
   assert.deepEqual(loads, ['alice']);
-  assert.equal(account.shown, 'red-hat');
+  assert.equal(account.shown, 'black-hat');
   reply = image;
   view.set(account, 'alice', { retry: true });
   await settle();

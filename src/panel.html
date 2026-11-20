@@ -582,9 +582,9 @@
   </main>
 
   <template id="ladder-avatar-fallback">
-    <svg viewBox="0 0 24 24" data-icon="red-hat" aria-hidden="true" focusable="false">
-      <ellipse cx="12" cy="16.6" rx="10" ry="3.1" fill="#c1121f"/>
-      <path fill="#e63946" d="M6.6 15.8C6.3 11.2 7 6.9 9 5.7c1.2-.7 2 .2 3 .2s1.8-.9 3-.2c2 1.2 2.7 5.5 2.4 10.1Z"/>
+    <svg viewBox="0 0 24 24" data-icon="black-hat" aria-hidden="true" focusable="false">
+      <ellipse cx="12" cy="16.6" rx="10" ry="3.1" fill="#101114" stroke="#8c929d" stroke-width=".9"/>
+      <path fill="#17191c" stroke="#8c929d" stroke-width=".9" stroke-linejoin="round" d="M6.6 15.8C6.3 11.2 7 6.9 9 5.7c1.2-.7 2 .2 3 .2s1.8-.9 3-.2c2 1.2 2.7 5.5 2.4 10.1Z"/>
       <path fill="#f1faee" d="M6.7 13.3h10.6l-.1 2.1c-3.5 1-7 1-10.4 0Z"/>
     </svg>
   </template>
@@ -1385,7 +1385,7 @@
       }
 
       // avatar-view:start
-      // Shows the red hat icon until a GitHub avatar loads. A loaded avatar is reused for every
+      // Shows the black hat icon until a GitHub avatar loads. A loaded avatar is reused for every
       // slot of that user and never requested again; a default avatar is requested once per new
       // slot, or again when the caller asks for a retry after a sync.
       function createAvatarView({ fallback, createImage, load, visible, Observer }) {
@@ -1567,7 +1567,6 @@
 
         const gradient = ctx.createLinearGradient(0, baseline, 0, chartPadding);
         gradient.addColorStop(0, low);
-        gradient.addColorStop(0.58, low);
         gradient.addColorStop(1, high);
         ctx.strokeStyle = ctx.fillStyle = gradient;
         ctx.save();
