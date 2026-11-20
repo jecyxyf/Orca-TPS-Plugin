@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 - **Orca 1.4.255+ Active Conversation Tracking**: Adapted to Orca's split state storage (`profile_state_document_parts` and `profile_state_document_parts_meta`), resolving an issue where the sidebar and status bar stayed frozen on an older session after switching channels/tabs. Falls back seamlessly to monolithic `profile_state_documents` on earlier Orca versions.
 
 ### Changed
-- **Red hat default avatar**: The built-in leaderboard avatar is now an original red hat icon instead of the gray hood.
+- The default leaderboard avatar is a black hat with a white band and a thin gray outline.
 - **Sub-Second Active Tab Polling (250ms)**: Lowered focus poll interval from 1000ms to 250ms with a lightweight revision stamp check (`workspaceStamp`), avoiding full-tree re-parsing when the workspace state is unchanged, reducing channel switch latency to 0.7~1.5s.
 
 ### Added

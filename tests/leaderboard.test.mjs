@@ -290,6 +290,87 @@ test('a submission packs only four statistics and two viewers read the same curr
   assert.deepEqual(resumed.board.rows[0].recent.points, []);
 });
 
+test('the ranking switch blocks public reads while login and uploads stay available', async t => {
+  const api = await fixture(t);
+  const enabledKey = 'leaderboard:ranking-enabled';
+  const storage = new Map([[enabledKey, false]]), secrets = new Map(), handlers = new Map();
+  const rankingReads = [];
+  let nextRead;
+  const orca = {
+    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value) },
+    host: { has: () => true, call: async (method, { key, value }) => {
+      if (method === 'secrets.get') return { value: secrets.get(key) };
+      if (method === 'secrets.set') secrets.set(key, value);
+    } },
+    grantedCapabilities: ['secrets:own'],
+    panels: { handle(name, handler) { handlers.set(name, handler); return { dispose() { handlers.delete(name); } }; } }
+  };
+  const launch = () => startLeaderboard(orca, {
+    endpoint: api.endpoint, now: () => new Date(api.clock()),
+    readUsage: async () => ({ day: TODAY, tokens: 600, ready: true }),
+    fetcher(url, options) {
+      if (url.pathname === '/api/today') {
+        rankingReads.push(Number(url.searchParams.get('days') ?? 1));
+        if (nextRead) {
+          const { started, reply } = nextRead;
+          nextRead = undefined;
+          started.resolve(options.signal);
+          return reply.promise;
+        }
+      }
+      return fetch(url, options);
+    }
+  });
+  let stop = launch();
+  t.after(() => stop());
+  const run = (action, fields = {}) => handlers.get('tps.leaderboard')({ action, ...fields });
+  const setEnabled = enabled => run('ranking-preference', { enabled });
+
+  assert.deepEqual(await run('ranking-preference'), { enabled: false });
+  assert.equal((await run('state')).board.rows, undefined);
+  assert.deepEqual(await run('cache'), { ranking: null });
+  assert.deepEqual(rankingReads, []);
+  assert.deepEqual(await setEnabled(true), { enabled: true, saved: true });
+  const guest = await run('state');
+  assert.equal(guest.signedIn, false);
+  assert.deepEqual(guest.board.rows, []);
+
+  await setEnabled(false);
+  const login = await run('login');
+  await api.authorizePlugin(login.loginUrl, 'alice');
+  const signedIn = await run('poll');
+  assert.equal(signedIn.code, 'signed_in');
+  assert.equal(signedIn.nextAutomaticAt, api.clock() + 10_000);
+  assert.equal((await run('sync')).code, 'accepted');
+  assert.deepEqual(rankingReads, [1]);
+
+  await setEnabled(true);
+  const blocked = { started: Promise.withResolvers(), reply: Promise.withResolvers() };
+  nextRead = blocked;
+  const old = run('state', { days: 7 });
+  const signal = await blocked.started.promise;
+  const queued = run('state', { days: 30 });
+  assert.deepEqual(await setEnabled(false), { enabled: false, saved: true });
+  assert.equal(signal.aborted, true);
+  assert.deepEqual(await run('cache'), { ranking: null });
+  await setEnabled(true);
+  const fresh = run('state', { days: 7, force: true });
+  blocked.reply.resolve(Response.json({ days: 7, day: TODAY,
+    rows: [{ username: 'stale', rank: 1, tokens: 1, submittedAt: api.clock() }] }));
+  assert.equal((await old).board.rows, undefined);
+  assert.equal((await queued).board.rows, undefined);
+  assert.deepEqual((await fresh).board.rows.map(row => row.username), ['alice']);
+  assert.deepEqual(rankingReads, [1, 7, 7]);
+
+  await setEnabled(false);
+  stop();
+  stop = launch();
+  assert.deepEqual(await run('ranking-preference'), { enabled: false });
+  assert.equal((await run('session')).signedIn, true);
+  assert.equal((await run('state')).board.rows, undefined);
+  assert.deepEqual(rankingReads, [1, 7, 7]);
+});
+
 test('everyone can view today’s ranking, while submissions require login and exclude banned accounts', async t => {
   const api = await fixture(t, ['alice', 'alice', 'bob']);
   const guest = await api.call('/api/today');

@@ -11,6 +11,7 @@ const ACCOUNT_CACHE = 'leaderboard:account';
 const INSTALLATION = 'leaderboard:installation-id';
 const HISTORY = 'leaderboard:history';
 const RANKING_CACHE = 'leaderboard:ranking';
+const RANKING_ENABLED = 'leaderboard:ranking-enabled';
 const DEFAULT_ENDPOINT = 'https://43.157.2.14';
 const LOGIN_TIMEOUT = 10 * 60 * 1000;
 const LOGIN_POLL = 2000;
@@ -69,6 +70,11 @@ export function startLeaderboard(orca, {
   const rankingRequests = new Map();
   let rankingQueue = Promise.resolve();
   let rankingRequest = 0;
+  let rankingAccess, rankingPreferenceWrite = Promise.resolve();
+  const rankingPreferenceReady = Promise.resolve().then(() => orca.storage.get(RANKING_ENABLED))
+    .catch(() => undefined).then(enabled => {
+      if (enabled !== false && !lifetime.signal.aborted) rankingAccess = new AbortController();
+    });
   let lastUpload = null, lastSyncAt = null, manualQueued = false, localUploadAt = 0;
   let installationReady;
   const secretAvailable = method => orca.grantedCapabilities?.includes('secrets:own') && host?.has(method);
@@ -220,7 +226,7 @@ export function startLeaderboard(orca, {
     await persistCredentials();
   }
 
-  async function request(path, { body, auth = true, credential = auth ? token : '', requestId, etag, acceptEtag = false } = {}) {
+  async function request(path, { body, auth = true, credential = auth ? token : '', requestId, etag, acceptEtag = false, signal } = {}) {
     try {
       const headers = { Accept: 'application/json' };
       if (credential) headers.Authorization = 'Bearer ' + credential;
@@ -230,7 +236,7 @@ export function startLeaderboard(orca, {
       const response = await fetcher(new URL(path, base), {
         method: body === undefined ? 'GET' : 'POST', headers, redirect: 'error',
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(10_000)])
+        signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(10_000), ...(signal ? [signal] : [])])
       });
       if (response.status === 304 && etag) return { notModified: true };
       const result = await response.json();
@@ -244,21 +250,47 @@ export function startLeaderboard(orca, {
     }
   }
 
-  function state(days, force = false) {
-    if (rankingRequests.has(days)) return rankingRequests.get(days);
-    const pending = rankingQueue.then(() => fetchState(days, force)).finally(() => rankingRequests.delete(days));
-    rankingRequests.set(days, pending);
-    rankingQueue = pending.catch(() => {});
-    return pending;
+  async function rankingPreference(enabled) {
+    await rankingPreferenceReady;
+    if (typeof enabled !== 'boolean' || lifetime.signal.aborted) return { enabled: Boolean(rankingAccess) };
+    if (enabled !== Boolean(rankingAccess)) {
+      if (enabled) rankingAccess = new AbortController();
+      else {
+        rankingAccess.abort();
+        rankingAccess = undefined;
+      }
+      try { orca.panels.post?.(METHOD + '.ranking-preference', { enabled }); } catch {}
+    }
+    const writing = rankingPreferenceWrite.then(() => orca.storage.set(RANKING_ENABLED, enabled));
+    rankingPreferenceWrite = writing.catch(() => {});
+    const saved = await writing.then(() => true, () => false);
+    return { enabled: Boolean(rankingAccess), saved };
   }
 
-  async function fetchState(days, force) {
+  async function state(days, force = false) {
+    await rankingPreferenceReady;
+    const signal = rankingAccess?.signal;
+    if (!signal) return panelState(days);
+    const running = rankingRequests.get(days);
+    if (running?.signal === signal) return running.promise;
+    const pending = { signal, promise: undefined };
+    pending.promise = rankingQueue.then(() => fetchState(days, force, signal)).finally(() => {
+      if (rankingRequests.get(days) === pending) rankingRequests.delete(days);
+    });
+    rankingRequests.set(days, pending);
+    rankingQueue = pending.promise.catch(() => {});
+    return pending.promise;
+  }
+
+  async function fetchState(days, force, signal) {
+    if (signal.aborted) return panelState(days);
     const cache = rankingCache(days);
     const requested = ++rankingRequest;
     const path = stats ? `/api/today?days=${days}&stats=1${days > 1 ? '&daily=1' : ''}`
       : days === 1 ? '/api/today' : '/api/today?days=' + days;
     const etag = !force && cache.snapshot?.day === today() ? cache.etag : undefined;
-    const reply = await request(path, { auth: false, etag, acceptEtag: Boolean(stats) });
+    const reply = await request(path, { auth: false, etag, acceptEtag: Boolean(stats), signal });
+    if (signal.aborted) return panelState(days);
     const board = reply.notModified ? cache.snapshot : reply;
     const updatedAt = now().getTime();
     const rows = (board?.days ?? 1) === days && board?.day === leaderboardDay(updatedAt) ? publicRows(board.rows, days, board.day) : null;
@@ -556,10 +588,14 @@ export function startLeaderboard(orca, {
 
   const registration = orca.panels.handle(METHOD, async payload => {
     const days = payload?.days === 7 || payload?.days === 30 ? payload.days : 1;
+    if (payload?.action === 'ranking-preference') return rankingPreference(payload.enabled);
     if (payload?.action === 'cache') {
+      await rankingPreferenceReady;
+      const signal = rankingAccess?.signal;
+      if (!signal) return { ranking: null };
       const cache = rankingCache(days);
       if (!cache.value) await cache.ready;
-      return { ranking: cache.value?.day === today() ? cache.value : null };
+      return { ranking: !signal.aborted && cache.value?.day === today() ? cache.value : null };
     }
     if (payload?.action === 'usage') return { local: await readUsage() };
     await ready;
@@ -605,6 +641,7 @@ export function startLeaderboard(orca, {
   tick();
   return () => {
     lifetime.abort();
+    rankingAccess?.abort();
     clearInterval(timer);
     registration.dispose?.();
   };
