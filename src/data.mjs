@@ -22,7 +22,7 @@ import {
   readJsonlMetadata,
   recentRecords
 } from './parsers.mjs';
-import { BACKFILL_BYTES, HISTORY_DAYS, accumulateRecords, dayKeyAgo, leaderboardDayStart, trimRecentRequests } from './usage-summary.mjs';
+import { BACKFILL_BYTES, HISTORY_DAYS, accumulateRecords, dayKeyAgo, leaderboardDayStart, leaderboardHoursFrom, trimRecentRequests } from './usage-summary.mjs';
 import { RECENT_STATS_MS } from './leaderboard-stats.mjs';
 import { hermesSources, readHermesRecords, readHermesSessions } from './hermes.mjs';
 
@@ -1090,6 +1090,7 @@ function rankedUsage(window) {
   if (!window) return undefined;
   const result = { ...window, totals: {} };
   if (window.includeRecent) Object.assign(result, { recent: [], recentFrom: Date.now() - RECENT_STATS_MS });
+  if (window.includeHours) Object.assign(result, { hours: {}, hoursFrom: leaderboardHoursFrom(window.from) });
   return result;
 }
 
@@ -1097,6 +1098,7 @@ function usageResult(days, rank) {
   if (!rank) return days;
   const result = { days, leaderboardDays: rank.totals, leaderboardFrom: rank.from };
   if (rank.recent) result.recent = trimRecentRequests(rank.recent);
+  if (rank.hours) Object.assign(result, { leaderboardHours: rank.hours, hoursFrom: rank.hoursFrom });
   return result;
 }
 
@@ -1238,9 +1240,9 @@ async function readAntigravityUsage(transcript, conversationId, rankWindow) {
 /** Descriptors for the usage index: Codex, Claude and Pi session files, OpenCode sessions, and Antigravity conversations. */
 export async function discoverUsageUnits(cutoffMs, options = {}) {
   const roots = await configuredRoots(options.roots, options.includeDefaults !== false);
-  const { rankDay, rankFrom = rankDay, includeRecent = false } = options;
+  const { rankDay, rankFrom = rankDay, includeRecent = false, includeHours = false } = options;
   const rankWindow = rankDay ? { from: rankFrom, start: leaderboardDayStart(rankFrom),
-    end: leaderboardDayStart(rankDay) + 86_400_000, includeRecent } : undefined;
+    end: leaderboardDayStart(rankDay) + 86_400_000, includeRecent, includeHours } : undefined;
   // Mirrors are append-only transcripts. Keep the largest copy; use its modification time to break ties.
   // A sync can give a stale copy a newer mtime, so root order and mtime alone cannot identify the fullest log.
   const units = [];

@@ -10,6 +10,9 @@ import { createLeaderboardServer } from '../server/app.mjs';
 import { openLeaderboardStore } from '../server/store.mjs';
 import { startLeaderboard } from '../src/leaderboard.mjs';
 import { createSubmissionStats } from '../src/submission-stats.mjs';
+import { uploadHourChanges } from '../src/hourly-upload.mjs';
+import { createWindowViews } from '../src/leaderboard-windows.mjs';
+import { HOUR_MS, SPEED_WINDOW_MS, hourStart } from '../src/leaderboard-stats.mjs';
 import { createAvatarCache } from '../src/leaderboard-avatars.mjs';
 import { discoverUsageUnits } from '../src/data.mjs';
 import { createUsageIndex, leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
@@ -112,6 +115,124 @@ async function fixture(t, names = ['alice', 'bob']) {
   });
   return { call, advance, login, get, submit, websiteLogin, authorizePlugin, form, endpoint, store, clock: () => clock };
 }
+
+test('speed ranks use accepted uploads over 500 tokens, cap at 100, and refresh at expiry', async t => {
+  const { call, advance, clock, store } = await fixture(t);
+  const first = clock();
+  for (let i = 1; i <= 108; i++) {
+    store.upsertAccount({ id: i, login: `user${i}` });
+    const upload = { day: TODAY, tokens: 1000, requestId: randomUUID(), fingerprint: `body-${i}`,
+      stats: { deltaTokens: i === 104 ? 500 : i === 106 ? 499 : 501,
+        avgTps: i === 107 ? null : i === 108 ? 0 : i, topModel: 'gpt-test', topCli: 'codex' } };
+    assert.equal(store.submit(i, upload, first, 1_000_000), 'accepted');
+    if (i === 103) assert.equal(store.submit(i, upload, first, 1_000_000), 'accepted');
+  }
+  const path = '/api/leaderboard/speeds';
+  const result = await call(path);
+  const { rows } = await result.json();
+  assert.equal(rows.length, 100);
+  assert.deepEqual(rows.slice(0, 2).map(row => [row.username, row.avgTps, row.topCli]),
+    [['user105', 105, 'codex'], ['user103', 103, 'codex']]);
+  assert.equal(rows.filter(row => row.username === 'user103').length, 1);
+  assert.equal((await call(path, { headers: { 'If-None-Match': result.headers.get('etag') } })).status, 304);
+  advance(5 * 60_000);
+  assert.equal((await (await call(path)).json()).rows.length, 100);
+  assert.equal((await (await call('/api/today?stats=1')).json()).rows.every(row => row.recent.points.length === 0), true);
+  assert.equal(store.setBan(1, 105, true, clock(), 'test'), true);
+  assert.equal((await (await call(path)).json()).rows[0].username, 'user103');
+  advance(SPEED_WINDOW_MS - 5 * 60_000);
+  assert.deepEqual((await (await call(path)).json()).rows, []);
+});
+
+test('hourly windows freeze all periods at the same cutoff and merge device updates at the next cutoff', async t => {
+  const { call, advance, clock, login, store } = await fixture(t);
+  const firstToken = await login(), secondToken = await login();
+  const cutoff = hourStart(clock());
+  const firstDevice = randomUUID(), secondDevice = randomUUID(), otherDevice = randomUUID();
+  const patch = (token, body, requestId = randomUUID()) => call('/api/leaderboard/window-data', {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': requestId, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const getBoard = async hours => (await call(`/api/leaderboard/usage?hours=${hours}`)).json();
+  const olderHour = cutoff - 719 * HOUR_MS;
+  assert.deepEqual((await getBoard(24)).rows, []);
+  const first = { installationId: firstDevice, version: 1, buckets: [[cutoff - HOUR_MS, 10], [cutoff, 20], [olderHour, 70]],
+    coverage: [cutoff - 720 * HOUR_MS, cutoff] };
+  const requestId = randomUUID();
+  assert.equal((await patch('anonymous', first)).status, 401);
+  assert.equal((await patch(firstToken, first, requestId)).status, 201);
+  assert.equal((await patch(firstToken, first, requestId)).status, 201);
+  assert.equal((await patch(firstToken, { ...first, buckets: [[cutoff, 200]] })).status, 409);
+  assert.equal((await patch(firstToken, { installationId: secondDevice, version: 1, buckets: [[cutoff, 30]] })).status, 201);
+  assert.equal((await patch(secondToken, { installationId: otherDevice, version: 1, buckets: [[cutoff - HOUR_MS, 30]] })).status, 201);
+  const old = await getBoard(24);
+  assert.deepEqual(old.rows, []);
+  assert.deepEqual((await getBoard(720)).rows, []);
+  advance(HOUR_MS);
+  const board = await getBoard(24);
+  assert.equal(board.cutoffAt, cutoff + HOUR_MS);
+  assert.equal(board.windowStart, cutoff - 23 * HOUR_MS);
+  assert.deepEqual(board.rows.map(row => [row.username, row.tokens]), [['alice', 60], ['bob', 30]]);
+  assert.equal((await getBoard(168)).rows[0].daily.length, 7);
+  const month = await getBoard(720);
+  assert.equal(month.snapshotId, board.snapshotId);
+  assert.equal(month.rows[0].tokens, 130);
+  assert.equal(month.rows[0].daily[0].tokens, 70);
+  const recent = snapshotId => call(`/api/leaderboard/recent?hours=24&snapshotId=${snapshotId}`);
+  assert.equal((await recent(old.snapshotId)).status, 409);
+  assert.equal((await (await recent(board.snapshotId)).json()).rows.length, 2);
+  assert.equal((await patch(firstToken, { installationId: firstDevice, version: 2, buckets: [[cutoff, 25]] })).status, 201);
+  assert.equal((await getBoard(24)).rows[0].tokens, 60);
+  store.removeScores(2, { day: TODAY, account: 2 }, clock());
+  assert.equal((await recent(board.snapshotId)).status, 409);
+  assert.deepEqual((await getBoard(24)).rows.map(row => row.tokens), [60]);
+  advance(HOUR_MS);
+  assert.equal((await getBoard(24)).rows[0].tokens, 65);
+  assert.equal((await getBoard(720)).rows[0].tokens, 65);
+});
+
+test('hour uploader retries the same bounded payload and marks coverage after the last batch', async () => {
+  const saved = new Map(), sent = [];
+  const now = START + 12 * HOUR_MS;
+  const coverage = [now - 720 * HOUR_MS, now];
+  const buckets = Array.from({ length: 330 }, (_, i) => [now - i * HOUR_MS, 999_000]);
+  const opts = { storage: { get: async key => saved.get(key), set: async (key, value) => saved.set(key, value) },
+    identity: 'test-account', installationId: randomUUID(), now, readHours: async () => ({ buckets, coverage }),
+    send: async packet => {
+      sent.push(JSON.parse(JSON.stringify(packet)));
+      return sent.length === 1 ? { code: 'unavailable' } : { code: 'accepted', version: packet.body.version };
+    }, active: () => true };
+  assert.equal(await uploadHourChanges(opts), 'unavailable');
+  assert.equal(await uploadHourChanges(opts), 'accepted');
+  assert.deepEqual(sent[0], sent[1]);
+  for (let i = 0; i < 5; i++) await uploadHourChanges(opts);
+  assert.equal(sent.slice(1).flatMap(packet => packet.body.buckets).length, buckets.length);
+  assert.ok(sent.every(packet => Buffer.byteLength(JSON.stringify(packet.body)) <= 4096));
+  assert.ok(sent.slice(0, -1).every(packet => packet.body.coverage === undefined));
+  assert.deepEqual(sent.at(-1).body.coverage, coverage);
+});
+
+test('viewer refreshes live stats between hourly snapshots and requests the next snapshot when required', async t => {
+  const { call, advance, clock } = await fixture(t);
+  const requests = [];
+  const storage = { get: async () => null, set: async () => {} };
+  const viewer = createWindowViews({ storage, origin: ORIGIN, now: clock, request: async (route, opts) => {
+    requests.push(route);
+    const response = await call(route, { headers: opts.etag ? { 'If-None-Match': opts.etag } : {} });
+    const serverTime = Date.parse(response.headers.get('date'));
+    return response.status === 304 ? { notModified: true, serverTime } :
+      { ...await response.json(), serverTime, etag: response.headers.get('etag') };
+  } });
+  const signal = new AbortController().signal;
+  const first = await viewer.fetch(24, false, signal);
+  advance(10_000);
+  assert.equal((await viewer.fetch(24, false, signal)).snapshotId, first.snapshotId);
+  assert.equal(requests.filter(route => route.includes('/usage?')).length, 1);
+  advance(HOUR_MS);
+  const second = await viewer.fetch(24, false, signal);
+  assert.notEqual(second.snapshotId, first.snapshotId);
+  assert.equal(requests.filter(route => route.includes('/usage?')).length, 2);
+});
 
 test('five-minute points are recorded once per accepted score and expire from cached rankings', async t => {
   const api = await fixture(t);
@@ -1236,6 +1357,7 @@ test('usage discovery separates requests on either side of Beijing midnight from
   const dir = await mkdtemp(path.join(tmpdir(), 'tps-rank-usage-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const day = leaderboardDay(Date.now()), start = leaderboardDayStart(day);
+  const cutoff = start + 13 * HOUR_MS, oldest = cutoff - 720 * HOUR_MS;
   const message = (at, output) => ({
     type: 'message', timestamp: new Date(at).toISOString(),
     message: { role: 'assistant', provider: 'test', model: 'test', timestamp: at - 1000,
@@ -1243,14 +1365,16 @@ test('usage discovery separates requests on either side of Beijing midnight from
   });
   await writeFile(path.join(dir, 'current.jsonl'), [
     { type: 'session', id: 'current', cwd: dir },
-    message(start - 1, 5), message(start, 40)
+    message(oldest - 1, 16), message(oldest, 23), message(start - 1, 5), message(start, 40)
   ].map(row => JSON.stringify(row)).join('\n') + '\n');
   const values = new Map();
   const index = createUsageIndex({
-    leaderboard: true, now: () => Date.now(), rankDays: 30,
+    leaderboard: true, now: () => cutoff, rankDays: 30, includeHours: true,
     storage: { keys: async () => [...values.keys()], get: async key => values.get(key),
       set: async (key, value) => values.set(key, value), delete: async key => values.delete(key) },
-    discover: (cutoff, rankDay, rankFrom) => discoverUsageUnits(cutoff, { roots: { pi: [dir] }, includeDefaults: false, rankDay, rankFrom })
+    discover: (scanCutoff, rankDay, rankFrom) => discoverUsageUnits(scanCutoff, {
+      roots: { pi: [dir] }, includeDefaults: false, rankDay, rankFrom, includeHours: true
+    })
   });
   assert.equal(index.leaderboardUsage().ready, false);
   await index.refresh();
@@ -1260,6 +1384,9 @@ test('usage discovery separates requests on either side of Beijing midnight from
   const history = index.leaderboardHistory();
   assert.equal(history.ready, true);
   assert.deepEqual(history.scores, [{ day: leaderboardDay(start - 1), tokens: 15 }, { day, tokens: 50 }]);
+  assert.deepEqual(index.leaderboardHourly(), {
+    buckets: [[oldest, 33], [start - HOUR_MS, 15], [start, 50]], coverage: [oldest, cutoff]
+  });
 });
 
 test('usage discovery passes only completed recent requests from the same local and remote parser path', async t => {

@@ -253,4 +253,9 @@
   <message id="sync-waiting">सिंक का इंतज़ार…</message>
   <message id="sync-now">अभी सिंक करें</message>
   <message id="sync-queued">अगले अपलोड की कतार में</message>
+  <message id="last-twenty-four-hours">पिछले 24 घंटे</message>
+  <message id="leaderboard-speed-tab">गति</message>
+  <message id="leaderboard-cutoff">{0} तक (बीजिंग समय)</message>
+  <message id="leaderboard-usage-incomplete">उपयोग का डेटा अधूरा है</message>
+  <message id="leaderboard-server-update-required">ये रैंकिंग देखने के लिए लीडरबोर्ड सर्वर अपडेट करें।</message>
 </messages>

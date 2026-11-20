@@ -105,7 +105,7 @@ test('panel resolves per-record agent label from record.provider and shows chann
 
 test('today usage connects pulses at real timestamps and animates new points once', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const source = /const chartPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];
+  const source = /const chartVerticalPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];
   assert.ok(source);
   assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart').background, 'transparent');
   const frames = [], painters = new WeakMap(), paths = [], areas = [], stops = [];
@@ -130,37 +130,39 @@ test('today usage connects pulses at real timestamps and animates new points onc
       else paths.push(path);
     }
   };
-  let width = 308;
+  let width = 300;
   const chart = { width: 320, height: 60, isConnected: true,
     getBoundingClientRect: () => ({ width, height: 30 }), getContext: () => ctx };
-  const draw = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
+  const { draw, pulseX } = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
     const RECENT_STATS_MS = 300000;
     ${source.replace(/\n      function usageCard$/, '')}
-    return drawSubmissionPulses;
+    return { draw: drawSubmissionPulses, pulseX };
   `)(painters, callback => frames.push(callback), { signal: { aborted: false } }, {
     devicePixelRatio: 2, matchMedia: () => ({ matches: false }),
     getComputedStyle: () => ({ getPropertyValue: name => name === '--usage-wave-low' ? '#60a589' : '#ff6b72' })
   }, { documentElement: {} }, TestPath);
+  assert.equal(pulseX({ submittedAt: 1_000 }, 1_000, width), 0);
+  assert.equal(pulseX({ submittedAt: 301_000 }, 1_000, width), width);
   draw(chart, [{ submittedAt: 20_000, deltaTokens: 100 }, { submittedAt: 40_000, deltaTokens: 0 },
     { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
   frames.shift()(1000);
-  assert.deepEqual([chart.width, chart.height], [616, 60]);
+  assert.deepEqual([chart.width, chart.height], [600, 60]);
   assert.deepEqual(stops, [[0, '#60a589'], [1, '#ff6b72']]);
-  assert.deepEqual(paths[0].slice(2, 7), [[24, 15], [27.25, 26], [44, 26], [93.75, 26], [97, 26]]);
-  assert.deepEqual(paths[1][0], [44, 26, 1.4]);
-  assert.deepEqual(areas[0].points, [...paths[0], [100.25, 26], [20.75, 26], 'closed']);
+  assert.deepEqual(paths[0].slice(2, 7), [[20, 15], [23.25, 26], [40, 26], [89.75, 26], [93, 26]]);
+  assert.deepEqual(paths[1][0], [40, 26, 1.4]);
+  assert.deepEqual(areas[0].points, [...paths[0], [96.25, 26], [16.75, 26], 'closed']);
   assert.equal(areas[0].opacity, 0.5);
   assert.equal(areas[0].style, ctx.strokeStyle);
   assert.equal(ctx.globalAlpha, 1);
   frames.shift()(1200);
-  assert.deepEqual(paths[0][6], [97, 4]);
-  assert.deepEqual(areas[0].points[6], [97, 4]);
+  assert.deepEqual(paths[0][6], [93, 4]);
+  assert.deepEqual(areas[0].points[6], [93, 4]);
   assert.equal(frames.length, 0);
-  width = 158;
+  width = 150;
   painters.get(chart)();
   frames.shift()(1400);
-  assert.deepEqual([chart.width, chart.height], [316, 60]);
-  assert.deepEqual(paths[0][6], [50.5, 4]);
+  assert.deepEqual([chart.width, chart.height], [300, 60]);
+  assert.deepEqual(paths[0][6], [46.5, 4]);
   assert.equal(frames.length, 0);
 });
 

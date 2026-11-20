@@ -253,4 +253,9 @@
   <message id="sync-waiting">等待同步…</message>
   <message id="sync-now">手动同步</message>
   <message id="sync-queued">已加入下次上传</message>
+  <message id="last-twenty-four-hours">近 24 小时</message>
+  <message id="leaderboard-speed-tab">速度榜</message>
+  <message id="leaderboard-cutoff">截至北京时间 {0}</message>
+  <message id="leaderboard-usage-incomplete">用量数据不完整</message>
+  <message id="leaderboard-server-update-required">更新榜单服务端后即可查看。</message>
 </messages>

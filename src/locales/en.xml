@@ -253,4 +253,9 @@
   <message id="sync-waiting">Waiting to sync…</message>
   <message id="sync-now">Sync now</message>
   <message id="sync-queued">Queued for the next upload</message>
+  <message id="last-twenty-four-hours">Last 24 h</message>
+  <message id="leaderboard-speed-tab">Speed</message>
+  <message id="leaderboard-cutoff">Through {0} (Beijing time)</message>
+  <message id="leaderboard-usage-incomplete">Usage incomplete</message>
+  <message id="leaderboard-server-update-required">Update the leaderboard server to view these rankings.</message>
 </messages>
