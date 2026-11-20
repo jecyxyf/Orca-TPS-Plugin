@@ -55,14 +55,14 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 - Browse today’s, 7-day, and 30-day rankings. Entries show GitHub avatars, and the top three get gold, silver, and bronze medals.
 - Use the switch next to Rankings to control leaderboard viewing. Turning it off hides the rankings and stops fetching them. The plugin remembers your choice. Guests can view rankings.
-- The top 100 entries show a five-minute waveform with one peak per upload on Today. The 7-day and 30-day curves pass through every Beijing calendar day's usage, with zero on days without records. Entries also show the latest average generation speed, most-used model and CLI, and last upload time. The leaderboard refreshes every 10 seconds while enabled and open.
+- The top 100 entries show a five-minute waveform with one peak per upload on Today. The 7-day and 30-day curves pass through every Beijing calendar day's usage, with zero on days without records. All three periods show the most-used model and CLI and the last upload time. Today also shows the latest average generation speed. The leaderboard refreshes every 10 seconds while enabled and open.
 - Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
 - Sign in with GitHub to participate. The leaderboard combines usage across installations linked to the same account. The plugin fetches avatars directly from GitHub and shows a built-in black hat avatar until one loads. Missing avatars are retried after the next sync, and a loaded avatar is reused everywhere it appears.
 - While signed in, the plugin attempts to upload every 10 seconds. Manual uploads use the same interval. Each toolbar has a manual button on the left, with an hourglass countdown and a clock for the last successful upload or sync on the right. Upload failures appear below the account toolbar.
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English 30-day leaderboard with continuous daily usage lines, models, CLIs, and average speeds">
+    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English 30-day leaderboard with daily usage curves, model names, and CLI names">
   </a>
 </p>
 
