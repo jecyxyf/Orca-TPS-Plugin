@@ -286,6 +286,8 @@
       display: block; width: 100%; height: 30px; border-radius: 6px;
       background: var(--button-bg); color: var(--blue);
     }
+    .ladder-chart-pulse { background: transparent; --pulse-low: #267456; --pulse-high: #826224; }
+    html.dark .ladder-chart-pulse { --pulse-low: #60a589; --pulse-high: #d2b668; }
     .ladder-chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin-top: 3px; }
     .ladder-recent-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 4px; font-size: 11px; }
     .ladder-recent-tools { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -1371,6 +1373,8 @@
       let revision = 0, drawnRows = '', renderedDay = '', loginProblem = '', messageCode = '';
       let summaryAccount = '', summaryUpload = null;
       let rankingNodes = new Map(), leaderboardFrame, nextRecentExpiry = Infinity;
+      let animateToday = false, pulseDay = '', latestPulses = new Map();
+      const pulsePainters = new WeakMap();
 
       async function request(action, payload = {}) {
         try {
@@ -1515,8 +1519,78 @@
       }
 
       const usageChartLabel = () => t(rankDays === 1 ? 'leaderboard-five-minute-usage' : 'leaderboard-daily-usage');
+      const chartPadding = 4;
 
-      function usageCard({ recent, daily }, now) {
+      function pulseX(point, left, width) {
+        const offset = Math.max(0, Math.min(1, (point.submittedAt - left) / RECENT_STATS_MS));
+        return chartPadding + Math.max(0, width - 2 * chartPadding) * offset;
+      }
+
+      function drawSubmissionPulses(chart, points, left, animateAfter) {
+        const maximum = Math.max(1, ...points.map(point => point.deltaTokens));
+        const animate = points.some(point => point.submittedAt > animateAfter) &&
+          !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        let frame, startedAt;
+
+        function schedule() {
+          if (frame === undefined) frame = requestAnimationFrame(draw);
+        }
+
+        function draw(time) {
+          frame = undefined;
+          if (!chart.isConnected || lifetime.signal.aborted) return;
+          const { width, height } = chart.getBoundingClientRect(), density = window.devicePixelRatio || 1;
+          if (width <= 2 * chartPadding || height <= 2 * chartPadding) return;
+          const pixelWidth = Math.round(width * density), pixelHeight = Math.round(height * density);
+          if (chart.width !== pixelWidth) chart.width = pixelWidth;
+          if (chart.height !== pixelHeight) chart.height = pixelHeight;
+          const ctx = chart.getContext('2d');
+          if (!ctx) return;
+          ctx.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
+          ctx.clearRect(0, 0, width, height);
+          const colors = window.getComputedStyle(chart);
+          const lowColor = colors.getPropertyValue('--pulse-low').trim();
+          const highColor = colors.getPropertyValue('--pulse-high').trim();
+          const baseline = height - chartPadding;
+          const gradient = ctx.createLinearGradient(0, baseline, 0, chartPadding);
+          gradient.addColorStop(0, lowColor);
+          gradient.addColorStop(0.58, lowColor);
+          gradient.addColorStop(1, highColor);
+          ctx.strokeStyle = gradient;
+          ctx.fillStyle = lowColor;
+          ctx.lineWidth = 1.4;
+          ctx.lineCap = ctx.lineJoin = 'round';
+          const halfWidth = Math.min(chartPadding - 0.75, (width - 2 * chartPadding) / 70);
+          startedAt ??= time;
+          const progress = animate ? Math.min(1, (time - startedAt) / 200) : 1;
+          const riseAt = point => point.submittedAt > animateAfter ? 1 - (1 - progress) ** 2 : 1;
+          const [first] = points;
+          ctx.beginPath();
+          ctx.moveTo(pulseX(first, left, width) - (first.deltaTokens > 0 ? halfWidth : 0), baseline);
+          for (const point of points) {
+            const x = pulseX(point, left, width);
+            if (point.deltaTokens > 0) {
+              const peak = baseline - Math.max(1.5, (baseline - chartPadding) * point.deltaTokens / maximum) * riseAt(point);
+              ctx.lineTo(x - halfWidth, baseline);
+              ctx.bezierCurveTo(x - halfWidth * 0.54, baseline, x - halfWidth * 0.38, peak, x, peak);
+              ctx.bezierCurveTo(x + halfWidth * 0.38, peak, x + halfWidth * 0.54, baseline, x + halfWidth, baseline);
+            } else ctx.lineTo(x, baseline);
+          }
+          ctx.stroke();
+          for (const point of points) {
+            if (point.deltaTokens > 0) continue;
+            ctx.beginPath();
+            ctx.arc(pulseX(point, left, width), baseline, 1.4 * riseAt(point), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          if (progress < 1) schedule();
+        }
+
+        pulsePainters.set(chart, schedule);
+        schedule();
+      }
+
+      function usageCard({ recent, daily }, now, animateAfter) {
         const container = document.createElement('div'), chart = document.createElement('canvas');
         const meta = document.createElement('div'), tools = document.createElement('span'), speed = document.createElement('strong');
         container.className = 'ladder-recent';
@@ -1529,6 +1603,7 @@
         tools.className = 'ladder-recent-tools';
         speed.className = 'ladder-recent-speed';
         const byDay = rankDays > 1, latest = recent?.points.at(-1);
+        if (!byDay) chart.classList.add('ladder-chart-pulse');
         const points = byDay ? daily ?? [] : recent?.points ?? [];
         const dayStart = day => Date.parse(day + 'T00:00:00Z');
         const dateLabel = time => locale.date(time, { timeZone: 'UTC', month: 'numeric', day: 'numeric' });
@@ -1561,36 +1636,44 @@
         }
         container.append(meta);
         if (!latestPoint) return container;
-        const size = 4, width = chart.width - size * 2, height = chart.height - size * 2;
-        const maximum = Math.max(1, ...points.map(tokensOf));
-        const x = point => size + width * Math.min(1, (timeOf(point) - left) / span);
-        const y = point => size + height * (1 - tokensOf(point) / maximum);
-        const maxGap = byDay ? DAY_MS : RANK_REFRESH_MS * 1.5;
-        const ctx = chart.getContext('2d');
-        if (ctx) {
-          ctx.strokeStyle = ctx.fillStyle = '#678ef7';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          let previous = null;
-          for (const point of points) {
-            if (previous && timeOf(point) - timeOf(previous) <= maxGap) ctx.lineTo(x(point), y(point));
-            else ctx.moveTo(x(point), y(point));
-            previous = point;
-          }
-          ctx.stroke();
-          for (const point of points) {
+        if (byDay) {
+          const width = chart.width - chartPadding * 2, height = chart.height - chartPadding * 2;
+          const maximum = Math.max(1, ...points.map(tokensOf));
+          const x = point => chartPadding + width * Math.min(1, (timeOf(point) - left) / span);
+          const y = point => chartPadding + height * (1 - tokensOf(point) / maximum);
+          const ctx = chart.getContext('2d');
+          if (ctx) {
+            ctx.strokeStyle = ctx.fillStyle = '#678ef7';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(x(point), y(point), 3, 0, Math.PI * 2);
-            ctx.fill();
+            let previous = null;
+            for (const point of points) {
+              if (previous && timeOf(point) - timeOf(previous) <= DAY_MS) ctx.lineTo(x(point), y(point));
+              else ctx.moveTo(x(point), y(point));
+              previous = point;
+            }
+            ctx.stroke();
+            for (const point of points) {
+              ctx.beginPath();
+              ctx.arc(x(point), y(point), 3, 0, Math.PI * 2);
+              ctx.fill();
+            }
           }
+          chart.addEventListener('pointermove', event => {
+            const rect = chart.getBoundingClientRect();
+            const position = (event.clientX - rect.left) * chart.width / rect.width;
+            const nearest = points.reduce((a, b) => Math.abs(x(a) - position) <= Math.abs(x(b) - position) ? a : b);
+            chart.title = Math.abs(x(nearest) - position) > width * DAY_MS / span / 2 ? usageChartLabel() : pointTitle(nearest);
+          });
+        } else {
+          drawSubmissionPulses(chart, points, left, animateAfter);
+          chart.addEventListener('pointermove', event => {
+            const { left: edge, width } = chart.getBoundingClientRect();
+            const distance = point => Math.abs(pulseX(point, left, width) - (event.clientX - edge));
+            const nearest = points.reduce((a, b) => distance(a) <= distance(b) ? a : b);
+            chart.title = distance(nearest) <= 6 ? pointTitle(nearest) : usageChartLabel();
+          });
         }
-        chart.addEventListener('pointermove', event => {
-          const rect = chart.getBoundingClientRect();
-          const position = (event.clientX - rect.left) * chart.width / rect.width;
-          const nearest = points.reduce((a, b) => Math.abs(x(a) - position) <= Math.abs(x(b) - position) ? a : b);
-          chart.title = byDay && Math.abs(x(nearest) - position) > width * DAY_MS / span / 2
-            ? usageChartLabel() : pointTitle(nearest);
-        });
         return container;
       }
 
@@ -1603,6 +1686,9 @@
           if (points.length) nextRecentExpiry = Math.min(nextRecentExpiry, points[0].submittedAt + RECENT_STATS_MS);
           return { ...row, recent: { ...row.recent, points } };
         });
+        const previousPulses = animateToday && pulseDay === renderedDay ? latestPulses : null;
+        pulseDay = rankDays === 1 ? renderedDay : '';
+        latestPulses = new Map(rankDays === 1 ? rows.map(row => [row.username, row.recent?.points.at(-1)?.submittedAt ?? -Infinity]) : []);
         const signature = JSON.stringify([rankDays, renderedDay, username, rows]);
         if (signature === drawnRows) return;
         const period = periods.find(entry => entry.days === rankDays);
@@ -1634,7 +1720,7 @@
           time.setAttribute('data-localized-text', '');
           time.textContent = t('last-upload-at', uploaded);
           time.dateTime = new Date(row.submittedAt).toISOString();
-          item.append(rank, user, total, usageCard(row, now), time);
+          item.append(rank, user, total, usageCard(row, now, previousPulses?.get(row.username) ?? Infinity), time);
           return item;
         });
         // Rows changed after a sync: give a still-default account avatar another chance too.
@@ -1809,6 +1895,7 @@
         if (typeof result.signedIn === 'boolean' && (updateSession || !session)) session = result;
         cacheRanking(result, days);
         render(result.code ?? '');
+        if (days === 1 && Array.isArray(result.board?.rows)) animateToday = true;
         showSummaries();
       }
 
@@ -1863,6 +1950,7 @@
       }
 
       function showCachedRanking() {
+        animateToday = false;
         render('');
         void showCache().then(() => refresh(rankDays, true));
         if (!session) void refreshSession();
@@ -1918,7 +2006,17 @@
         showCachedRanking();
       });
       group.addEventListener('tps-view-opened', showCachedRanking);
-      window.addEventListener('online', () => void refresh(rankDays, true), { signal: lifetime.signal });
+      window.addEventListener('online', () => {
+        animateToday = false;
+        void refresh(rankDays, true);
+      }, { signal: lifetime.signal });
+      function redrawPulses() {
+        for (const chart of element('rows').querySelectorAll('.ladder-chart')) pulsePainters.get(chart)?.();
+      }
+      const pulseResize = new ResizeObserver(redrawPulses);
+      const pulseTheme = new MutationObserver(redrawPulses);
+      pulseResize.observe(element('rows'));
+      pulseTheme.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
       document.addEventListener('tps-language-changed', () => {
         drawnRows = '';
         rankingNodes.clear();
@@ -2015,6 +2113,8 @@
       window.addEventListener('pagehide', () => {
         lifetime.abort();
         avatarView.dispose();
+        pulseResize.disconnect();
+        pulseTheme.disconnect();
         rankingSubscription?.dispose();
         cancelAnimationFrame(leaderboardFrame);
         clearTimeout(retryLogin);

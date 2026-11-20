@@ -103,6 +103,49 @@ test('panel resolves per-record agent label from record.provider and shows chann
   assert.match(html, /activeSession\?\.provider\s*===\s*['"]channel['"]/, 'summary must display channel title when in channel mode');
 });
 
+test('today usage connects pulses at real timestamps and animates new points once', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /const chartPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];
+  assert.ok(source);
+  assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart-pulse').background, 'transparent');
+  const frames = [], painters = new WeakMap(), paths = [], stops = [];
+  let path;
+  const ctx = {
+    setTransform() {}, clearRect() { paths.length = 0; }, beginPath() { path = []; },
+    createLinearGradient() { return { addColorStop(...stop) { stops.push(stop); } }; },
+    moveTo(...point) { path.push(point); }, lineTo(...point) { path.push(point); },
+    bezierCurveTo(...points) { path.push(points.slice(-2)); },
+    stroke() { paths.push(path); }, arc(...point) { path.push(point.slice(0, 3)); }, fill() { paths.push(path); }
+  };
+  let width = 308;
+  const chart = { width: 320, height: 60, isConnected: true,
+    getBoundingClientRect: () => ({ width, height: 30 }), getContext: () => ctx };
+  const draw = new Function('pulsePainters', 'requestAnimationFrame', 'lifetime', 'window', `
+    const RECENT_STATS_MS = 300000;
+    ${source.replace(/\n      function usageCard$/, '')}
+    return drawSubmissionPulses;
+  `)(painters, callback => frames.push(callback), { signal: { aborted: false } }, {
+    devicePixelRatio: 2, matchMedia: () => ({ matches: false }),
+    getComputedStyle: () => ({ getPropertyValue: name => name === '--pulse-low' ? '#60a589' : '#d2b668' })
+  });
+  draw(chart, [{ submittedAt: 20_000, deltaTokens: 100 }, { submittedAt: 40_000, deltaTokens: 0 },
+    { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
+  frames.shift()(1000);
+  assert.deepEqual([chart.width, chart.height], [616, 60]);
+  assert.deepEqual(stops, [[0, '#60a589'], [0.58, '#60a589'], [1, '#d2b668']]);
+  assert.deepEqual(paths[0].slice(2, 7), [[24, 15], [27.25, 26], [44, 26], [93.75, 26], [97, 26]]);
+  assert.deepEqual(paths[1][0], [44, 26, 1.4]);
+  frames.shift()(1200);
+  assert.deepEqual(paths[0][6], [97, 4]);
+  assert.equal(frames.length, 0);
+  width = 158;
+  painters.get(chart)();
+  frames.shift()(1400);
+  assert.deepEqual([chart.width, chart.height], [316, 60]);
+  assert.deepEqual(paths[0][6], [50.5, 4]);
+  assert.equal(frames.length, 0);
+});
+
 async function loadAvatarView() {
   const html = await readFile(panelPath, 'utf8');
   const source = /\/\/ avatar-view:start([\s\S]*?)\/\/ avatar-view:end/.exec(html)?.[1];
