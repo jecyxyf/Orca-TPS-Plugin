@@ -606,7 +606,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>
           </button>
           <button class="ladder-rank-toggle" id="ladder-rank-toggle" type="button" role="switch" aria-checked="false"
-            aria-controls="ladder-ranking-content ladder-personal-ranks" aria-describedby="ladder-ranking-notice" data-i18n-aria-label="ranking-toggle"
+            aria-controls="ladder-ranking-content ladder-personal-ranks" data-i18n-aria-label="ranking-toggle"
             data-i18n-title="ranking-toggle" disabled><span aria-hidden="true"></span></button>
           <div class="ladder-toolbar-field ladder-toolbar-next" data-i18n-title="next-sync-countdown">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="next-sync-countdown"><path d="M6 3h12M6 21h12M7 3v3c0 2.2 2.1 4.2 5 6-2.9 1.8-5 3.8-5 6v3M17 3v3c0 2.2-2.1 4.2-5 6 2.9 1.8 5 3.8 5 6v3"/></svg>
@@ -617,7 +617,7 @@
             <time class="ladder-toolbar-value" id="ladder-refresh-time" data-localized-text>—</time>
           </div>
         </div>
-        <div class="ladder-note ladder-notice" id="ladder-ranking-notice" dir="auto">
+        <div class="ladder-note ladder-notice" id="ladder-ranking-notice" dir="auto" hidden>
           <p class="ladder-notice-title"><span aria-hidden="true">ℹ️</span> <strong data-i18n="leaderboard-notice-title"></strong></p>
           <p data-i18n="ranking-notice-consent"></p>
           <p data-i18n="ranking-notice-disable"></p>
@@ -2179,8 +2179,13 @@
       }
 
       function setRankingEnabled(enabled) {
+        const toggle = element('rank-toggle');
+        const notice = element('ranking-notice');
+        notice.hidden = enabled;
+        if (enabled) toggle.removeAttribute('aria-describedby');
+        else toggle.setAttribute('aria-describedby', notice.id);
         if (enabled === Boolean(rankingAccess)) return;
-        element('rank-toggle').setAttribute('aria-checked', String(enabled));
+        toggle.setAttribute('aria-checked', String(enabled));
         element('rank-toolbar').classList.toggle('is-off', !enabled);
         element('ranking-content').hidden = !enabled;
         element('personal-ranks').hidden = !enabled;
