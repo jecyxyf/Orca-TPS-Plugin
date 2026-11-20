@@ -29,6 +29,11 @@
 
 用户可见的功能改动完成并验证后，使用 `$plugin-publish` 检查中英文 README 和 Orca 官方插件介绍，按需同步更新。
 
+## 开发与测试环境
+
+- 1.6.5 起，硅谷正式服 `itps8.com` 用 Docker，测试服 `test.itps8.com` 用 Node.js 和 systemd。发布版默认连正式服。[部署说明](server/README.md)
+- 测试开发时设置 `ORCA_TPS_LEADERBOARD_URL=https://test.itps8.com`，在测试服验证登录、同步和榜单。支持本机配置时，可写入 `.env.leaderboard.local` 后重载插件。
+
 ## 默认偏好
 
 ### 全局回复格式

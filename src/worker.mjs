@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { parseEnv } from 'node:util';
 import { createLocalePreferences } from './locales.mjs';
 import { createComputation } from './computation.mjs';
 import { createTpsController } from './controller.mjs';
@@ -78,7 +80,12 @@ export default async function activate(orca) {
     if (usage === index) publishUsage(orca, index);
   });
   try {
+    const localEnv = await readFile(new URL('../.env.leaderboard.local', import.meta.url), 'utf8').catch(error => {
+      if (error.code !== 'ENOENT') throw error;
+      return '';
+    });
     stopLeaderboard = startLeaderboard(orca, {
+      endpoint: process.env.ORCA_TPS_LEADERBOARD_URL || parseEnv(localEnv).ORCA_TPS_LEADERBOARD_URL || undefined,
       stats: {
         prepare(session, score) {
           const time = Date.now();
