@@ -6,7 +6,15 @@
   <message id="leaderboard">Clasificación</message>
   <message id="signed-out-label">Sesión cerrada</message>
   <message id="github-login">Iniciar sesión con GitHub</message>
-  <message id="github-login-notice">El uso de hoy se sincroniza cada 10 segundos mientras tienes la sesión iniciada. Al iniciar sesión se intentará subir el uso diario de hasta 30 días. La clasificación muestra tu nombre de GitHub, tu uso y la última subida.</message>
+  <message id="leaderboard-notice-title">Aviso</message>
+  <message id="github-login-notice-consent">Si aceptas sincronizar estadísticas y participar en la clasificación, inicia sesión con GitHub.</message>
+  <message id="github-login-notice-sync">Durante la sesión, el plugin intenta sincronizar los siguientes datos con el servidor</message>
+  <message id="github-login-notice-username">Nombre de usuario de GitHub</message>
+  <message id="github-login-notice-tokens">Uso de tokens</message>
+  <message id="github-login-notice-speed">Velocidad de generación (TPS)</message>
+  <message id="github-login-notice-model">Modelo más usado</message>
+  <message id="github-login-notice-harness">Harness más usado</message>
+  <message id="github-login-notice-logout">Puedes cerrar sesión en cualquier momento. Al hacerlo, el plugin dejará de sincronizar estos datos con el servidor.</message>
   <message id="github-authorize">Completa la autorización de GitHub en el navegador. La clasificación se actualizará al iniciar sesión.</message>
   <message id="cancel">Cancelar</message>
   <message id="sign-out">Cerrar sesión</message>
@@ -137,6 +145,8 @@
   <message id="checking-login">Comprobando la sesión…</message>
   <message id="period-rankings">Clasificación</message>
   <message id="ranking-toggle">Datos de clasificación</message>
+  <message id="ranking-notice-consent">Si aceptas que el plugin intente obtener del servidor la clasificación mundial de TPS cada 10 segundos, activa la clasificación.</message>
+  <message id="ranking-notice-disable">Puedes desactivarla en cualquier momento. El plugin dejará de solicitar los datos de la clasificación.</message>
   <message id="ranking-preference-failed">No se pudo guardar el ajuste de clasificación.</message>
   <message id="empty-rankings">No hay puntuaciones en este período.</message>
   <message id="notice.no-conversation">No hay ninguna conversación abierta.</message>

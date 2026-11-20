@@ -139,6 +139,10 @@
     .ladder-control { min-height: 36px; padding-inline: 12px; font-size: 13px; font-weight: 700; }
     .ladder-secondary { color: var(--muted); background: var(--tag-bg); }
     .ladder-note { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
+    .ladder-notice p { margin: 0; }
+    .ladder-notice p + p, .ladder-notice ul + p { margin-top: .6em; }
+    .ladder-notice-title { color: var(--ink); }
+    .ladder-login-notice-list { margin: .35em 0 0; padding-inline-start: 1.5em; }
     .ladder-toolbar {
       --ladder-toolbar-title-width: clamp(52px, 18vw, 78px);
       --ladder-toolbar-action-width: 28px;
@@ -522,7 +526,19 @@
             <p class="ladder-mine"><span data-i18n="signed-out-label"></span></p>
             <button class="refresh ladder-control" id="ladder-login" type="button" aria-describedby="ladder-login-notice" disabled><span data-i18n="github-login"></span></button>
           </div>
-          <p class="ladder-note" id="ladder-login-notice"><span data-i18n="github-login-notice"></span></p>
+          <div class="ladder-note ladder-notice" id="ladder-login-notice" dir="auto">
+            <p class="ladder-notice-title"><span aria-hidden="true">ℹ️</span> <strong data-i18n="leaderboard-notice-title"></strong></p>
+            <p data-i18n="github-login-notice-consent"></p>
+            <p data-i18n="github-login-notice-sync"></p>
+            <ul class="ladder-login-notice-list">
+              <li data-i18n="github-login-notice-username"></li>
+              <li data-i18n="github-login-notice-tokens"></li>
+              <li data-i18n="github-login-notice-speed"></li>
+              <li data-i18n="github-login-notice-model"></li>
+              <li data-i18n="github-login-notice-harness"></li>
+            </ul>
+            <p data-i18n="github-login-notice-logout"></p>
+          </div>
         </div>
         <div class="ladder-preview" id="ladder-login-wait" hidden>
           <p><span data-i18n="github-authorize"></span></p>
@@ -590,7 +606,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>
           </button>
           <button class="ladder-rank-toggle" id="ladder-rank-toggle" type="button" role="switch" aria-checked="false"
-            aria-controls="ladder-ranking-content ladder-personal-ranks" data-i18n-aria-label="ranking-toggle"
+            aria-controls="ladder-ranking-content ladder-personal-ranks" aria-describedby="ladder-ranking-notice" data-i18n-aria-label="ranking-toggle"
             data-i18n-title="ranking-toggle" disabled><span aria-hidden="true"></span></button>
           <div class="ladder-toolbar-field ladder-toolbar-next" data-i18n-title="next-sync-countdown">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="next-sync-countdown"><path d="M6 3h12M6 21h12M7 3v3c0 2.2 2.1 4.2 5 6-2.9 1.8-5 3.8-5 6v3M17 3v3c0 2.2-2.1 4.2-5 6 2.9 1.8 5 3.8 5 6v3"/></svg>
@@ -600,6 +616,11 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="last-sync-time"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
             <time class="ladder-toolbar-value" id="ladder-refresh-time" data-localized-text>—</time>
           </div>
+        </div>
+        <div class="ladder-note ladder-notice" id="ladder-ranking-notice" dir="auto">
+          <p class="ladder-notice-title"><span aria-hidden="true">ℹ️</span> <strong data-i18n="leaderboard-notice-title"></strong></p>
+          <p data-i18n="ranking-notice-consent"></p>
+          <p data-i18n="ranking-notice-disable"></p>
         </div>
         <div id="ladder-ranking-content" hidden>
           <div class="war-tabs ladder-tabs" role="group" data-i18n-aria-label="ranking-period">

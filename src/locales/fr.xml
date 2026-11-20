@@ -6,7 +6,15 @@
   <message id="leaderboard">Classement</message>
   <message id="signed-out-label">Déconnecté</message>
   <message id="github-login">Se connecter avec GitHub</message>
-  <message id="github-login-notice">L’utilisation du jour est synchronisée toutes les 10 secondes pendant la connexion. La connexion lance une tentative d’envoi des 30 derniers jours d’utilisation. Le classement affiche votre nom GitHub, votre utilisation et l’heure du dernier envoi.</message>
+  <message id="leaderboard-notice-title">Info</message>
+  <message id="github-login-notice-consent">Si vous acceptez de synchroniser les statistiques et de participer au classement, connectez-vous avec GitHub.</message>
+  <message id="github-login-notice-sync">Lorsque vous êtes connecté, le plugin tente de synchroniser les données suivantes avec le serveur</message>
+  <message id="github-login-notice-username">Nom d’utilisateur GitHub</message>
+  <message id="github-login-notice-tokens">Utilisation des tokens</message>
+  <message id="github-login-notice-speed">Vitesse de génération (TPS)</message>
+  <message id="github-login-notice-model">Modèle le plus utilisé</message>
+  <message id="github-login-notice-harness">Harness le plus utilisé</message>
+  <message id="github-login-notice-logout">Vous pouvez vous déconnecter à tout moment. Le plugin cesse alors de synchroniser ces données avec le serveur.</message>
   <message id="github-authorize">Autorisez GitHub dans votre navigateur. Le classement sera actualisé après la connexion.</message>
   <message id="cancel">Annuler</message>
   <message id="sign-out">Se déconnecter</message>
@@ -137,6 +145,8 @@
   <message id="checking-login">Vérification de la connexion…</message>
   <message id="period-rankings">Classement</message>
   <message id="ranking-toggle">Données du classement</message>
+  <message id="ranking-notice-consent">Si vous acceptez que le plugin tente de récupérer le classement TPS mondial auprès du serveur toutes les 10 secondes, activez le classement.</message>
+  <message id="ranking-notice-disable">Vous pouvez le désactiver à tout moment. Le plugin cessera alors de demander les données du classement.</message>
   <message id="ranking-preference-failed">Impossible d’enregistrer le réglage du classement.</message>
   <message id="empty-rankings">Aucun score sur cette période.</message>
   <message id="notice.no-conversation">Aucune conversation n’est ouverte.</message>

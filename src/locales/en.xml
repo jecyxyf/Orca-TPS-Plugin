@@ -6,7 +6,15 @@
   <message id="leaderboard">Leaderboard</message>
   <message id="signed-out-label">Signed out</message>
   <message id="github-login">Sign in with GitHub</message>
-  <message id="github-login-notice">Today's usage syncs every 10 seconds while you're signed in. Signing in attempts to upload up to 30 days of daily usage. Your GitHub username, usage, and latest upload time appear on the leaderboard.</message>
+  <message id="leaderboard-notice-title">Notice</message>
+  <message id="github-login-notice-consent">If you agree to sync statistics and participate in the leaderboard, sign in with GitHub.</message>
+  <message id="github-login-notice-sync">While you’re signed in, the plugin attempts to sync the following data to the server</message>
+  <message id="github-login-notice-username">GitHub username</message>
+  <message id="github-login-notice-tokens">Token usage</message>
+  <message id="github-login-notice-speed">Generation speed (TPS)</message>
+  <message id="github-login-notice-model">Most-used model</message>
+  <message id="github-login-notice-harness">Most-used Harness</message>
+  <message id="github-login-notice-logout">You can sign out at any time. Once you do, the plugin stops syncing this data to the server.</message>
   <message id="github-authorize">Complete GitHub authorization in your browser. The leaderboard will update after sign-in.</message>
   <message id="cancel">Cancel</message>
   <message id="sign-out">Sign out</message>
@@ -137,6 +145,8 @@
   <message id="checking-login">Checking sign-in…</message>
   <message id="period-rankings">Rankings</message>
   <message id="ranking-toggle">Leaderboard data</message>
+  <message id="ranking-notice-consent">If you agree to let the plugin try to fetch global TPS rankings from the server every 10 seconds, turn on Rankings.</message>
+  <message id="ranking-notice-disable">You can turn Rankings off at any time. The plugin will then stop requesting leaderboard data.</message>
   <message id="ranking-preference-failed">Could not save the leaderboard setting.</message>
   <message id="empty-rankings">No scores in this period.</message>
   <message id="notice.no-conversation">No conversation is open.</message>

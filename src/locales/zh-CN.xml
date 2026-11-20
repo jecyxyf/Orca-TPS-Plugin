@@ -6,7 +6,15 @@
   <message id="leaderboard">天梯榜</message>
   <message id="signed-out-label">未登录</message>
   <message id="github-login">用 GitHub 登录</message>
-  <message id="github-login-notice">登录期间每 10 秒同步今日用量。登录后会尝试补传近 30 天的每日用量。榜单会公开 GitHub 用户名、用量和最近上传时间。</message>
+  <message id="leaderboard-notice-title">提示</message>
+  <message id="github-login-notice-consent">若您同意同步统计数据并参与天梯榜排名，请使用 GitHub 登录。</message>
+  <message id="github-login-notice-sync">登录期间，插件会尝试将以下数据同步到服务器</message>
+  <message id="github-login-notice-username">GitHub 用户名</message>
+  <message id="github-login-notice-tokens">Token 用量</message>
+  <message id="github-login-notice-speed">生成速度（TPS）</message>
+  <message id="github-login-notice-model">常用模型</message>
+  <message id="github-login-notice-harness">常用 Harness</message>
+  <message id="github-login-notice-logout">您可以随时退出登录。退出后，插件会停止向服务器同步您的相关数据。</message>
   <message id="github-authorize">请在浏览器完成 GitHub 授权。授权成功后榜单会自动更新。</message>
   <message id="cancel">取消</message>
   <message id="sign-out">退出登录</message>
@@ -137,6 +145,8 @@
   <message id="checking-login">正在确认登录状态…</message>
   <message id="period-rankings">天梯排名</message>
   <message id="ranking-toggle">启用天梯排名</message>
+  <message id="ranking-notice-consent">若您同意插件每 10 秒尝试从服务器获取全球参与者的 TPS 排名数据，请开启天梯排名。</message>
+  <message id="ranking-notice-disable">您可随时关闭。关闭后，插件会停止请求榜单数据。</message>
   <message id="ranking-preference-failed">未能保存天梯排名开关设置。</message>
   <message id="empty-rankings">这段时间还没有成绩。</message>
   <message id="notice.no-conversation">当前没有打开对话。</message>

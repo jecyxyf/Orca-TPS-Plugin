@@ -6,7 +6,15 @@
   <message id="leaderboard">লিডারবোর্ড</message>
   <message id="signed-out-label">সাইন ইন করা নেই</message>
   <message id="github-login">GitHub দিয়ে সাইন ইন করুন</message>
-  <message id="github-login-notice">সাইন ইন থাকলে আজকের ব্যবহার প্রতি ১০ সেকেন্ডে সিঙ্ক হয়। সাইন ইন করলে গত ৩০ দিনের দৈনিক ব্যবহার আপলোড করার চেষ্টা করা হবে। লিডারবোর্ডে আপনার GitHub নাম, ব্যবহার ও শেষ আপলোডের সময় দেখা যাবে।</message>
+  <message id="leaderboard-notice-title">তথ্য</message>
+  <message id="github-login-notice-consent">পরিসংখ্যান সিঙ্ক করতে ও লিডারবোর্ডে অংশ নিতে সম্মত হলে GitHub দিয়ে সাইন ইন করুন।</message>
+  <message id="github-login-notice-sync">সাইন ইন থাকলে প্লাগইন নিচের তথ্য সার্ভারের সঙ্গে সিঙ্ক করার চেষ্টা করে</message>
+  <message id="github-login-notice-username">GitHub ব্যবহারকারীর নাম</message>
+  <message id="github-login-notice-tokens">টোকেন ব্যবহার</message>
+  <message id="github-login-notice-speed">জেনারেশনের গতি (TPS)</message>
+  <message id="github-login-notice-model">সবচেয়ে বেশি ব্যবহৃত মডেল</message>
+  <message id="github-login-notice-harness">সবচেয়ে বেশি ব্যবহৃত Harness</message>
+  <message id="github-login-notice-logout">আপনি যেকোনো সময় সাইন আউট করতে পারেন। সাইন আউট করার পর প্লাগইন আপনার এই তথ্য সার্ভারের সঙ্গে সিঙ্ক করা বন্ধ করবে।</message>
   <message id="github-authorize">ব্রাউজারে GitHub অনুমোদন সম্পন্ন করুন। সাইন ইন হলে লিডারবোর্ড আপডেট হবে।</message>
   <message id="cancel">বাতিল করুন</message>
   <message id="sign-out">সাইন আউট করুন</message>
@@ -137,6 +145,8 @@
   <message id="checking-login">সাইন ইন পরীক্ষা করা হচ্ছে…</message>
   <message id="period-rankings">লিডারবোর্ড</message>
   <message id="ranking-toggle">লিডারবোর্ডের ডেটা</message>
+  <message id="ranking-notice-consent">প্লাগইনকে প্রতি ১০ সেকেন্ডে সার্ভার থেকে সারা বিশ্বের অংশগ্রহণকারীদের TPS র‍্যাঙ্কিং আনার চেষ্টা করতে দিতে সম্মত হলে লিডারবোর্ড চালু করুন।</message>
+  <message id="ranking-notice-disable">আপনি যেকোনো সময় এটি বন্ধ করতে পারেন। বন্ধ করলে প্লাগইন লিডারবোর্ডের ডেটা চাওয়া বন্ধ করবে।</message>
   <message id="ranking-preference-failed">লিডারবোর্ডের সেটিং সেভ করা যায়নি।</message>
   <message id="empty-rankings">এই সময়ে কোনো স্কোর নেই।</message>
   <message id="notice.no-conversation">কোনো কথোপকথন খোলা নেই।</message>
