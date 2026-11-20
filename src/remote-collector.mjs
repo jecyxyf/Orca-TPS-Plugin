@@ -7,7 +7,7 @@ import { leaderboardDay, leaderboardDayStart, MAX_WINDOW_DAYS, USAGE_READ_BATCH 
 
 export const COLLECTOR_FILES = [
   'remote-collector.mjs', 'data.mjs', 'data-paths.mjs', 'parsers.mjs',
-  'usage-summary.mjs', 'leaderboard-stats.mjs', 'hermes.mjs', 'locales.mjs', 'locales/zh-CN.xml'
+  'usage-summary.mjs', 'hermes.mjs', 'locales.mjs', 'locales/zh-CN.xml'
 ];
 export const MAX_RESPONSE_BASE64 = 1024 * 1024;
 export const USAGE_PAGE_SIZE = 200;
@@ -85,9 +85,7 @@ export function createRemoteUsageScan(discover = discoverUsageUnits) {
         new Intl.DateTimeFormat('en', { timeZone });
         process.env.TZ = timeZone;
         let complete = true;
-        const discovered = await discover(cutoffMs, { rankDay, rankFrom, includeRecent: request.includeRecent === true,
-          ...(request.includeHours === true ? { includeHours: true } : {}),
-          onUnavailable: () => { complete = false; } });
+        const discovered = await discover(cutoffMs, { rankDay, rankFrom, onUnavailable: () => { complete = false; } });
         if (!complete) throw new Error('usage_source_unavailable');
         units = new Map(discovered.map(unit => [unit.key, unit]));
         descriptors = [...units.values()].map(({ key, stamp, bytes, mtimeMs }) => ({

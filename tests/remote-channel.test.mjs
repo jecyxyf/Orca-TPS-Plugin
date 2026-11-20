@@ -7,8 +7,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createRemoteChannelReader, createRemoteUsageReader } from '../src/remote-channel.mjs';
 import { collectRemoteChannel, collectorCommand, remoteRecord } from '../src/remote-collector.mjs';
-import { createUsageIndex, leaderboardHoursFrom, localDayKey } from '../src/usage-summary.mjs';
-import { hourStart } from '../src/leaderboard-stats.mjs';
+import { createUsageIndex, localDayKey } from '../src/usage-summary.mjs';
 
 test('one SSH stream merges project sessions and receives new records without sending another request', async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'tps-remote-test-'));
@@ -177,7 +176,6 @@ test('remote usage counts the full history once per host and keeps totals when i
   const host = { host: 'example.test', username: 'example', port: 22 };
   let online = true, launches = 0, writes = 0;
   const reader = createRemoteUsageReader({ grantedCapabilities: ['workspace:read'] }, {
-    includeRecent: true, includeHours: true,
     resolveHosts: async () => online ? [host, { ...host, alias: 'duplicate' }] : [],
     launch(_route, token) {
       launches++;
@@ -193,15 +191,13 @@ test('remote usage counts the full history once per host and keeps totals when i
       return child;
     }
   });
-  const stored = new Map(), reported = new Map(), day = localDayKey(completed.getTime()), hour = hourStart(completed.getTime());
+  const stored = new Map(), day = localDayKey(completed.getTime());
   const local = { key: 'local-unit', stamp: 'same', bytes: 5, mtimeMs: completed.getTime(),
     read: async (rankDay, rankFrom) => ({ days: { [day]: { claude: { 'local-model': [1, 2, 1, 0, 0, 0, 0, 0] } } },
-      leaderboardDays: { [rankDay]: 3 }, leaderboardFrom: rankFrom,
-      leaderboardHours: { [hour]: 3 }, hoursFrom: leaderboardHoursFrom(rankFrom) }) };
+      leaderboardDays: { [rankDay]: 3 }, leaderboardFrom: rankFrom }) };
   const index = createUsageIndex({
     now: () => completed.getTime(),
-    leaderboard: true, rankDays: 30, includeHours: true,
-    onRecentRequests: (key, records) => reported.set(key, records),
+    leaderboard: true, rankDays: 30,
     storage: { keys: async () => [...stored.keys()], get: async key => stored.get(key),
       set: async (key, value) => stored.set(key, value), delete: async key => stored.delete(key) },
     async discover(cutoffMs, rankDay, rankFrom) {
@@ -221,10 +217,6 @@ test('remote usage counts the full history once per host and keeps totals when i
     assert.equal(index.leaderboardUsage().ready, true);
     assert.equal(index.leaderboardHistory().ready, true);
     assert.equal(index.leaderboardHistory().scores[0].tokens, expectedTokens);
-    assert.deepEqual(index.leaderboardHourly().buckets, [[hour, expectedTokens]]);
-    const recent = [...reported.values()].flat();
-    assert.equal(recent.filter(record => record[5] === 'codex').length, sessions);
-    assert.deepEqual(recent.find(record => record[5] === 'hermes')?.slice(2), [12, null, 'test-model', 'hermes']);
     assert.equal(launches, 1);
     const initialWrites = writes;
     await refresh();
@@ -233,7 +225,6 @@ test('remote usage counts the full history once per host and keeps totals when i
     await refresh();
     assert.equal(index.summary().windows.today.tokens, expectedTokens);
     assert.equal(index.leaderboardUsage().tokens, expectedTokens);
-    assert.deepEqual(index.leaderboardHourly().buckets, [[hour, expectedTokens]]);
   } finally {
     await reader.dispose();
   }

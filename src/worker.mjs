@@ -5,16 +5,13 @@ import { createRemoteChannelReader, createRemoteUsageReader } from './remote-cha
 import { createChannelCache } from './channel-cache.mjs';
 import { BACKFILL_BYTES, BACKFILL_UNITS, createUsageIndex, MAX_WINDOW_DAYS } from './usage-summary.mjs';
 import { startLeaderboard } from './leaderboard.mjs';
-import { createSubmissionStats } from './submission-stats.mjs';
 
 const BACKFILL_DELAY_MS = 250, DISCOVERY_MS = 15_000, IDLE_DELAY_MS = 60_000, FIRST_DELAY_MS = 3_000;
-const RECENT_REFRESH_MS = 10_000;
 const PANEL_VIEW_KEY = 'panel-view';
 const PANEL_VIEWS = new Set(['current-data', 'usage', 'leaderboard']);
 
 let controller, remote, computation, cache, usage, remoteUsage, usageAbort, timer, handler, stopLeaderboard, stopPanelView, running = false;
 let locales, localeRegistration;
-let scheduledAt = 0, recentCollectionUntil = 0;
 
 export default async function activate(orca) {
   await deactivate();
@@ -43,8 +40,7 @@ export default async function activate(orca) {
     onOpenTargets: remoteReader.setTargets
   });
   await controller.start({ background: true });
-  const stats = await createSubmissionStats(orca.storage);
-  const history = remoteUsage = createRemoteUsageReader(orca, { ...remoteOptions, includeRecent: true, includeHours: true });
+  const history = remoteUsage = createRemoteUsageReader(orca, remoteOptions);
   usageAbort = new AbortController();
   let discovery, discoveryKey, discoveryAt = 0;
   const index = usage = createUsageIndex({
@@ -52,15 +48,12 @@ export default async function activate(orca) {
     budgetBytes: BACKFILL_BYTES,
     maxUnits: BACKFILL_UNITS,
     leaderboard: true,
-    includeHours: true,
     rankDays: MAX_WINDOW_DAYS,
-    onRecentRequests: stats.observe,
     async discover(cutoffMs, rankDay, rankFrom) {
       const key = `${cutoffMs}/${rankDay}/${rankFrom}`;
-      const interval = Date.now() < recentCollectionUntil ? RECENT_REFRESH_MS : DISCOVERY_MS;
-      if (!discovery || discoveryKey !== key || Date.now() - discoveryAt >= interval) {
+      if (!discovery || discoveryKey !== key || Date.now() - discoveryAt >= DISCOVERY_MS) {
         await history.finish();
-        const localUnits = await compute.call('discover', cutoffMs, { rankDay, rankFrom, includeRecent: true, includeHours: true });
+        const localUnits = await compute.call('discover', cutoffMs, { rankDay, rankFrom });
         const remoteUnits = await history.discover(cutoffMs, rankDay, rankFrom);
         const descriptors = localUnits.descriptors.map(unit => ({ ...unit, read: () => compute.call('usage', unit.key, unit.stamp) }));
         discovery = { ...remoteUnits, localComplete: localUnits.complete, descriptors: descriptors.concat(remoteUnits.descriptors) };
@@ -79,15 +72,6 @@ export default async function activate(orca) {
   });
   try {
     stopLeaderboard = startLeaderboard(orca, {
-      stats: {
-        prepare(session, score) {
-          const time = Date.now();
-          recentCollectionUntil = time + 3 * RECENT_REFRESH_MS;
-          if (scheduledAt > time + RECENT_REFRESH_MS) schedule(orca, 0);
-          return stats.prepare(session, score);
-        },
-        settle: stats.settle
-      },
       async readUsage() {
         await index.ready();
         return index.leaderboardUsage();
@@ -95,10 +79,6 @@ export default async function activate(orca) {
       async readHistory() {
         await index.ready();
         return index.leaderboardHistory();
-      },
-      async readHours() {
-        if (!await index.ready()) return null;
-        return index.leaderboardHourly();
       }
     });
   } catch { orca.log(language.t('notice.leaderboard-url-invalid')); }
@@ -129,11 +109,7 @@ function registerPanelView(orca, t) {
 
 function schedule(orca, delay) {
   clearTimeout(timer);
-  scheduledAt = Date.now() + delay;
-  timer = setTimeout(() => {
-    scheduledAt = 0;
-    void tick(orca);
-  }, delay);
+  timer = setTimeout(() => void tick(orca), delay);
 }
 
 function publishUsage(orca, index) {
@@ -148,8 +124,7 @@ async function tick(orca) {
   try {
     const { pending } = await index.refresh({ signal });
     if (!signal.aborted) publishUsage(orca, index);
-    delay = index.hasBackfill() ? BACKFILL_DELAY_MS : Date.now() < recentCollectionUntil ? RECENT_REFRESH_MS
-      : pending ? DISCOVERY_MS : IDLE_DELAY_MS;
+    delay = index.hasBackfill() ? BACKFILL_DELAY_MS : pending ? DISCOVERY_MS : IDLE_DELAY_MS;
   } catch (error) {
     if (!signal.aborted) orca.log(locales.t('notice.usage-refresh-failed', error?.message ?? 'unknown'));
   }
@@ -160,7 +135,6 @@ export async function deactivate() {
   running = false;
   clearTimeout(timer);
   timer = undefined;
-  scheduledAt = recentCollectionUntil = 0;
   handler?.dispose?.();
   handler = undefined;
   localeRegistration?.dispose?.();

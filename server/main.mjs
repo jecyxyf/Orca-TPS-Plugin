@@ -2,7 +2,6 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { createLeaderboardServer } from './app.mjs';
 import { openLeaderboardStore } from './store.mjs';
-import { HOUR_MS, hourStart } from '../src/leaderboard-stats.mjs';
 
 const env = process.env;
 const port = Number(env.LEADERBOARD_PORT ?? 8787);
@@ -20,20 +19,7 @@ const server = createLeaderboardServer({
   log: message => process.stderr.write(message + '\n')
 });
 server.listen(port, '127.0.0.1', () => process.stdout.write(`榜单服务在本机端口 ${port} 运行。\n`));
-let hourlyTimer;
-function settleHourly() {
-  const now = Date.now();
-  let next = hourStart(now) + HOUR_MS;
-  try { store.hourly.settle(now); }
-  catch (error) {
-    process.stderr.write(`榜单整点结算失败。${error.message}\n`);
-    next = Math.min(next, now + 10_000);
-  }
-  hourlyTimer = setTimeout(settleHourly, Math.max(0, next - Date.now()));
-}
-settleHourly();
 function stop() {
-  clearTimeout(hourlyTimer);
   server.close(() => store.close());
 }
 process.once('SIGINT', stop);

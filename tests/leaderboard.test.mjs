@@ -9,10 +9,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createLeaderboardServer } from '../server/app.mjs';
 import { openLeaderboardStore } from '../server/store.mjs';
 import { startLeaderboard } from '../src/leaderboard.mjs';
-import { createSubmissionStats } from '../src/submission-stats.mjs';
-import { uploadHourChanges } from '../src/hourly-upload.mjs';
-import { createWindowViews } from '../src/leaderboard-windows.mjs';
-import { HOUR_MS, SPEED_WINDOW_MS, hourStart } from '../src/leaderboard-stats.mjs';
 import { createAvatarCache } from '../src/leaderboard-avatars.mjs';
 import { discoverUsageUnits } from '../src/data.mjs';
 import { createUsageIndex, leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
@@ -77,8 +73,8 @@ async function fixture(t, names = ['alice', 'bob']) {
     assert.equal(response.status, 200);
     return (await response.json()).token;
   }
-  const submit = (token, tokens, requestId = randomUUID(), day = leaderboardDay(clock), installationId, stats) => post(
-    '/api/today/submit', { day, tokens, installationId, stats }, { ...bearer(token), 'Idempotency-Key': requestId }
+  const submit = (token, tokens, requestId = randomUUID(), day = leaderboardDay(clock), installationId) => post(
+    '/api/today/submit', { day, tokens, installationId }, { ...bearer(token), 'Idempotency-Key': requestId }
   );
 
   async function websiteLogin(githubName) {
@@ -113,384 +109,8 @@ async function fixture(t, names = ['alice', 'bob']) {
   const form = (route, cookie, fields, origin = ORIGIN) => call(route, {
     method: 'POST', headers: { cookie, origin }, body: new URLSearchParams(fields)
   });
-  return { call, advance, login, get, submit, websiteLogin, authorizePlugin, form, endpoint, store, clock: () => clock };
+  return { call, advance, login, get, submit, websiteLogin, authorizePlugin, form, endpoint, clock: () => clock };
 }
-
-test('speed ranks use accepted uploads over 500 tokens, cap at 100, and refresh at expiry', async t => {
-  const { call, advance, clock, store } = await fixture(t);
-  const first = clock();
-  for (let i = 1; i <= 108; i++) {
-    store.upsertAccount({ id: i, login: `user${i}` });
-    const upload = { day: TODAY, tokens: 1000, requestId: randomUUID(), fingerprint: `body-${i}`,
-      stats: { deltaTokens: i === 104 ? 500 : i === 106 ? 499 : 501,
-        avgTps: i === 107 ? null : i === 108 ? 0 : i, topModel: 'gpt-test', topCli: 'codex' } };
-    assert.equal(store.submit(i, upload, first, 1_000_000), 'accepted');
-    if (i === 103) assert.equal(store.submit(i, upload, first, 1_000_000), 'accepted');
-  }
-  const path = '/api/leaderboard/speeds';
-  const result = await call(path);
-  const { rows } = await result.json();
-  assert.equal(rows.length, 100);
-  assert.deepEqual(rows.slice(0, 2).map(row => [row.username, row.avgTps, row.topCli]),
-    [['user105', 105, 'codex'], ['user103', 103, 'codex']]);
-  assert.equal(rows.filter(row => row.username === 'user103').length, 1);
-  assert.equal((await call(path, { headers: { 'If-None-Match': result.headers.get('etag') } })).status, 304);
-  advance(5 * 60_000);
-  assert.equal((await (await call(path)).json()).rows.length, 100);
-  assert.equal((await (await call('/api/today?stats=1')).json()).rows.every(row => row.recent.points.length === 0), true);
-  assert.equal(store.setBan(1, 105, true, clock(), 'test'), true);
-  assert.equal((await (await call(path)).json()).rows[0].username, 'user103');
-  advance(SPEED_WINDOW_MS - 5 * 60_000);
-  assert.deepEqual((await (await call(path)).json()).rows, []);
-});
-
-test('hourly windows freeze all periods at the same cutoff and merge device updates at the next cutoff', async t => {
-  const { call, advance, clock, login, store } = await fixture(t);
-  const firstToken = await login(), secondToken = await login();
-  const cutoff = hourStart(clock());
-  const firstDevice = randomUUID(), secondDevice = randomUUID(), otherDevice = randomUUID();
-  const patch = (token, body, requestId = randomUUID()) => call('/api/leaderboard/window-data', {
-    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': requestId, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  const getBoard = async hours => (await call(`/api/leaderboard/usage?hours=${hours}`)).json();
-  const olderHour = cutoff - 719 * HOUR_MS;
-  assert.deepEqual((await getBoard(24)).rows, []);
-  const first = { installationId: firstDevice, version: 1, buckets: [[cutoff - HOUR_MS, 10], [cutoff, 20], [olderHour, 70]],
-    coverage: [cutoff - 720 * HOUR_MS, cutoff] };
-  const requestId = randomUUID();
-  assert.equal((await patch('anonymous', first)).status, 401);
-  assert.equal((await patch(firstToken, first, requestId)).status, 201);
-  assert.equal((await patch(firstToken, first, requestId)).status, 201);
-  assert.equal((await patch(firstToken, { ...first, buckets: [[cutoff, 200]] })).status, 409);
-  assert.equal((await patch(firstToken, { installationId: secondDevice, version: 1, buckets: [[cutoff, 30]] })).status, 201);
-  assert.equal((await patch(secondToken, { installationId: otherDevice, version: 1, buckets: [[cutoff - HOUR_MS, 30]] })).status, 201);
-  const old = await getBoard(24);
-  assert.deepEqual(old.rows, []);
-  assert.deepEqual((await getBoard(720)).rows, []);
-  advance(HOUR_MS);
-  const board = await getBoard(24);
-  assert.equal(board.cutoffAt, cutoff + HOUR_MS);
-  assert.equal(board.windowStart, cutoff - 23 * HOUR_MS);
-  assert.deepEqual(board.rows.map(row => [row.username, row.tokens]), [['alice', 60], ['bob', 30]]);
-  assert.equal((await getBoard(168)).rows[0].daily.length, 7);
-  const month = await getBoard(720);
-  assert.equal(month.snapshotId, board.snapshotId);
-  assert.equal(month.rows[0].tokens, 130);
-  assert.equal(month.rows[0].daily[0].tokens, 70);
-  const recent = snapshotId => call(`/api/leaderboard/recent?hours=24&snapshotId=${snapshotId}`);
-  assert.equal((await recent(old.snapshotId)).status, 409);
-  assert.equal((await (await recent(board.snapshotId)).json()).rows.length, 2);
-  assert.equal((await patch(firstToken, { installationId: firstDevice, version: 2, buckets: [[cutoff, 25]] })).status, 201);
-  assert.equal((await getBoard(24)).rows[0].tokens, 60);
-  store.removeScores(2, { day: TODAY, account: 2 }, clock());
-  assert.equal((await recent(board.snapshotId)).status, 409);
-  assert.deepEqual((await getBoard(24)).rows.map(row => row.tokens), [60]);
-  advance(HOUR_MS);
-  assert.equal((await getBoard(24)).rows[0].tokens, 65);
-  assert.equal((await getBoard(720)).rows[0].tokens, 65);
-});
-
-test('hour uploader retries the same bounded payload and marks coverage after the last batch', async () => {
-  const saved = new Map(), sent = [];
-  const now = START + 12 * HOUR_MS;
-  const coverage = [now - 720 * HOUR_MS, now];
-  const buckets = Array.from({ length: 330 }, (_, i) => [now - i * HOUR_MS, 999_000]);
-  const opts = { storage: { get: async key => saved.get(key), set: async (key, value) => saved.set(key, value) },
-    identity: 'test-account', installationId: randomUUID(), now, readHours: async () => ({ buckets, coverage }),
-    send: async packet => {
-      sent.push(JSON.parse(JSON.stringify(packet)));
-      return sent.length === 1 ? { code: 'unavailable' } : { code: 'accepted', version: packet.body.version };
-    }, active: () => true };
-  assert.equal(await uploadHourChanges(opts), 'unavailable');
-  assert.equal(await uploadHourChanges(opts), 'accepted');
-  assert.deepEqual(sent[0], sent[1]);
-  for (let i = 0; i < 5; i++) await uploadHourChanges(opts);
-  assert.equal(sent.slice(1).flatMap(packet => packet.body.buckets).length, buckets.length);
-  assert.ok(sent.every(packet => Buffer.byteLength(JSON.stringify(packet.body)) <= 4096));
-  assert.ok(sent.slice(0, -1).every(packet => packet.body.coverage === undefined));
-  assert.deepEqual(sent.at(-1).body.coverage, coverage);
-});
-
-test('viewer refreshes live stats between hourly snapshots and requests the next snapshot when required', async t => {
-  const { call, advance, clock } = await fixture(t);
-  const requests = [];
-  const storage = { get: async () => null, set: async () => {} };
-  const viewer = createWindowViews({ storage, origin: ORIGIN, now: clock, request: async (route, opts) => {
-    requests.push(route);
-    const response = await call(route, { headers: opts.etag ? { 'If-None-Match': opts.etag } : {} });
-    const serverTime = Date.parse(response.headers.get('date'));
-    return response.status === 304 ? { notModified: true, serverTime } :
-      { ...await response.json(), serverTime, etag: response.headers.get('etag') };
-  } });
-  const signal = new AbortController().signal;
-  const first = await viewer.fetch(24, false, signal);
-  advance(10_000);
-  assert.equal((await viewer.fetch(24, false, signal)).snapshotId, first.snapshotId);
-  assert.equal(requests.filter(route => route.includes('/usage?')).length, 1);
-  advance(HOUR_MS);
-  const second = await viewer.fetch(24, false, signal);
-  assert.notEqual(second.snapshotId, first.snapshotId);
-  assert.equal(requests.filter(route => route.includes('/usage?')).length, 2);
-});
-
-test('five-minute points are recorded once per accepted score and expire from cached rankings', async t => {
-  const api = await fixture(t);
-  const alice = await api.login(), bob = await api.login();
-  const stats = { deltaTokens: 123, avgTps: 42.6, topModel: 'gpt-test', topCli: 'codex' };
-  const requestId = randomUUID(), firstDevice = randomUUID(), secondDevice = randomUUID();
-  assert.equal((await api.submit(alice, 7000, requestId, TODAY, firstDevice, stats)).status, 201);
-  assert.equal((await api.submit(alice, 7000, requestId, TODAY, firstDevice, stats)).status, 201);
-  const submittedAt = api.clock();
-  const route = '/api/today?days=1&stats=1';
-  const first = await api.call(route);
-  const initialTag = first.headers.get('etag');
-  const [initial] = (await first.json()).rows;
-  assert.deepEqual(initial.recent, { points: [{ submittedAt, deltaTokens: 123, avgTps: 42.6 }], topModel: 'gpt-test', topCli: 'codex' });
-  assert.equal((await api.call(route, { headers: { 'If-None-Match': initialTag } })).status, 304);
-  assert.equal((await (await api.call('/api/today')).json()).rows[0].recent, undefined);
-  assert.equal((await api.submit(bob, 100, undefined, TODAY, undefined, { ...stats, deltaTokens: -1 })).status, 400);
-  assert.equal((await api.submit(alice, 10, undefined, TODAY, secondDevice, stats)).status, 429);
-  api.advance(10_000);
-  assert.equal((await api.submit(alice, 10, undefined, TODAY, secondDevice,
-    { deltaTokens: 0, avgTps: null, topModel: null, topCli: null })).status, 201);
-  const next = await api.call(route, { headers: { 'If-None-Match': initialTag } });
-  assert.equal(next.status, 200);
-  const nextTag = next.headers.get('etag');
-  const [combined] = (await next.json()).rows;
-  assert.equal(combined.tokens, 7010);
-  assert.deepEqual(combined.recent.points.map(point => point.deltaTokens), [123, 0]);
-  assert.equal(combined.recent.topModel, null);
-  api.advance(290_000);
-  const aged = await api.call(route, { headers: { 'If-None-Match': nextTag } });
-  assert.equal(aged.status, 200);
-  assert.deepEqual((await aged.json()).rows[0].recent.points, [{ submittedAt: submittedAt + 10_000, deltaTokens: 0, avgTps: null }]);
-  api.advance(10_000);
-  assert.deepEqual((await (await api.call(route)).json()).rows[0].recent.points, []);
-});
-
-test('all ranking periods return current five-minute statistics for exactly their top 100', async t => {
-  const api = await fixture(t);
-  const stats = { deltaTokens: 1, avgTps: null, topModel: null, topCli: 'pi' };
-  const submit = (id, tokens) => {
-    const requestId = randomUUID();
-    return api.store.submit(id, { day: TODAY, requestId, fingerprint: requestId, tokens, stats }, api.clock(), 1_000_000);
-  };
-  for (let id = 1; id <= 101; id++) {
-    api.store.upsertAccount({ id, login: 'sample-' + id });
-    assert.equal(submit(id, 102 - id), 'accepted');
-  }
-  for (const days of [1, 7, 30]) {
-    const rows = (await (await api.call(`/api/today?days=${days}&stats=1`)).json()).rows;
-    assert.equal(rows.length, 100);
-    assert.equal(rows.at(-1).username, 'sample-100');
-    assert.ok(rows.every(row => row.recent.points.length === 1));
-  }
-  api.advance(10_000);
-  assert.equal(submit(101, 200), 'accepted');
-  const updated = (await (await api.call('/api/today?days=7&stats=1')).json()).rows;
-  assert.equal(updated[0].username, 'sample-101');
-  assert.equal(updated[0].recent.points.length, 2);
-  assert.ok(!updated.some(row => row.username === 'sample-100'));
-});
-
-test('daily ranking charts cover the selected Beijing dates and use the saved account total for each date', async t => {
-  const api = await fixture(t);
-  api.store.upsertAccount({ id: 1, login: 'alice' });
-  api.store.upsertAccount({ id: 99, login: 'admin' });
-  const stats = { deltaTokens: 1, avgTps: 9.5, topModel: 'sample', topCli: 'pi' };
-  const dayAgo = days => leaderboardDay(api.clock() - days * 86_400_000);
-  const submit = (offset, tokens, installationId) => {
-    const requestId = randomUUID();
-    const time = api.clock() - offset * 86_400_000;
-    return api.store.submit(1, { day: leaderboardDay(time), tokens, installationId, stats, requestId, fingerprint: requestId }, time, 1000);
-  };
-  for (const [ago, tokens] of [[30, 2], [29, 3], [7, 4], [6, 5], [2, 7]]) assert.equal(submit(ago, tokens), 'accepted');
-  assert.equal(submit(0, 11, randomUUID()), 'accepted');
-  api.advance(10_000);
-  assert.equal(submit(0, 13, randomUUID()), 'accepted');
-
-  const legacy = (await (await api.call('/api/today?days=7&stats=1')).json()).rows[0];
-  assert.equal(legacy.daily, undefined);
-  assert.equal(legacy.recent.points.length, 2);
-  const today = (await (await api.call('/api/today?stats=1&daily=1')).json()).rows[0];
-  assert.equal(today.daily, undefined);
-  assert.equal(today.recent.points.length, 2);
-
-  const weekRoute = '/api/today?days=7&stats=1&daily=1';
-  const week = await api.call(weekRoute);
-  const weekTag = week.headers.get('etag');
-  const [weekly] = (await week.json()).rows;
-  assert.deepEqual(weekly.daily, [{ day: dayAgo(6), tokens: 5 }, { day: dayAgo(2), tokens: 7 }, { day: TODAY, tokens: 24 }]);
-  assert.equal(weekly.daily.reduce((total, point) => total + point.tokens, 0), weekly.tokens);
-  assert.equal(weekly.recent.points.length, 1);
-  assert.equal(weekly.recent.topModel, 'sample');
-  assert.equal((await api.call(weekRoute, { headers: { 'If-None-Match': weekTag } })).status, 304);
-
-  const month = (await (await api.call('/api/today?days=30&stats=1&daily=1')).json()).rows[0];
-  assert.deepEqual(month.daily.slice(0, 2), [{ day: dayAgo(29), tokens: 3 }, { day: dayAgo(7), tokens: 4 }]);
-  assert.equal(month.daily.reduce((total, point) => total + point.tokens, 0), month.tokens);
-  api.store.removeScores(99, { day: dayAgo(2), account: 1 }, api.clock());
-  const changed = await api.call(weekRoute, { headers: { 'If-None-Match': weekTag } });
-  assert.equal(changed.status, 200);
-  assert.deepEqual((await changed.json()).rows[0].daily.map(point => point.day), [dayAgo(6), TODAY]);
-
-  api.advance(START + 86_400_000 - api.clock());
-  const rolled = (await (await api.call(weekRoute)).json()).rows[0];
-  assert.deepEqual(rolled.daily, [{ day: TODAY, tokens: 24 }]);
-});
-
-test('the client freezes its four statistics across restarts and credits only the confirmed batch', async () => {
-  const values = new Map(), storage = { get: key => values.get(key), set: (key, value) => values.set(key, structuredClone(value)) };
-  let time = START + 60_000;
-  const now = () => time;
-  let tracker = await createSubmissionStats(storage, now);
-  const score = { day: TODAY, tokens: 8000, installationId: randomUUID() };
-  const old = ['a'.repeat(24), time - 1, 10000, 90, 'old', 'pi'];
-  time += 1000;
-  const first = ['b'.repeat(24), time, 100, 20, 'alpha', 'pi'];
-  const second = ['c'.repeat(24), time + 1000, 300, 60, 'beta', 'codex'];
-  tracker.observe('local', [old, first, first]);
-  const batch = await tracker.prepare('session-A', score);
-  assert.deepEqual(batch.body.stats, { deltaTokens: 100, avgTps: 20, topModel: 'alpha', topCli: 'pi' });
-  await tracker.settle(batch, 'unavailable');
-  time += 1000;
-  tracker = await createSubmissionStats(storage, now);
-  tracker.observe('local', [old, first]);
-  tracker.observe('ssh:host', [second]);
-  assert.deepEqual(await tracker.prepare('session-A', { ...score, tokens: 8300 }), batch);
-  await tracker.settle(batch, 'accepted');
-  const next = await tracker.prepare('session-A', { ...score, tokens: 8300 });
-  assert.deepEqual(next.body.stats, { deltaTokens: 300, avgTps: 40, topModel: 'beta', topCli: 'codex' });
-});
-
-test('a submission packs only four statistics and two viewers read the same current snapshot after a disconnect', async t => {
-  const api = await fixture(t);
-  const token = await api.login();
-  const connect = async (credential = null) => {
-    const values = new Map(), handlers = new Map(), traffic = [];
-    let online = true;
-    const orca = {
-      storage: { get: async key => values.get(key), set: async (key, value) => values.set(key, structuredClone(value)) },
-      host: { has: () => true, call: async () => ({ value: credential }) },
-      grantedCapabilities: credential ? ['secrets:own'] : [],
-      panels: { handle: (name, run) => { handlers.set(name, run); return { dispose() {} }; } }
-    };
-    const stats = await createSubmissionStats(orca.storage, api.clock);
-    const stop = startLeaderboard(orca, {
-      endpoint: api.endpoint, stats, now: () => new Date(api.clock()), readUsage: async () => ({ day: TODAY, tokens: 2500 }),
-      fetcher(url, options) {
-        traffic.push({ url, ...options });
-        if (!online) throw new Error('offline');
-        return fetch(url, options);
-      }
-    });
-    t.after(stop);
-    return { stats, traffic, online: value => { online = value; },
-      run: (action, fields = {}) => handlers.get('tps.leaderboard')({ action, ...fields }) };
-  };
-  const sender = await connect(token), first = await connect(), second = await connect();
-  api.advance(1000);
-  sender.stats.observe('local', [['d'.repeat(24), api.clock(), 150, 30, 'model-A', 'pi']]);
-  assert.equal((await sender.run('submit')).code, 'accepted');
-  const upload = sender.traffic.filter(entry => entry.url.pathname === '/api/today/submit');
-  assert.equal(upload.length, 1);
-  assert.deepEqual(JSON.parse(upload[0].body).stats, { deltaTokens: 150, avgTps: 30, topModel: 'model-A', topCli: 'pi' });
-  const opening = await first.run('state', { days: 7, force: true });
-  assert.equal(opening.board.rows[0].recent.points[0].deltaTokens, 150);
-  assert.deepEqual(opening.board.rows[0].daily, [{ day: TODAY, tokens: 2500 }]);
-  assert.deepEqual((await second.run('state', { days: 7 })).board.rows, opening.board.rows);
-  assert.deepEqual((await first.run('state', { days: 7 })).board.rows, opening.board.rows);
-  assert.ok(first.traffic.at(-1).headers['If-None-Match']);
-  first.online(false);
-  assert.equal((await first.run('state', { days: 7 })).board.code, 'unavailable');
-  api.advance(300_000);
-  first.online(true);
-  const resumed = await first.run('state', { days: 7 });
-  assert.equal(first.traffic.at(-1).headers['If-None-Match'], undefined);
-  assert.deepEqual(resumed.board.rows[0].recent.points, []);
-});
-
-test('the ranking switch blocks public reads while login and uploads stay available', async t => {
-  const api = await fixture(t);
-  const enabledKey = 'leaderboard:ranking-enabled';
-  const storage = new Map([[enabledKey, false]]), secrets = new Map(), handlers = new Map();
-  const rankingReads = [];
-  let nextRead;
-  const orca = {
-    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value) },
-    host: { has: () => true, call: async (method, { key, value }) => {
-      if (method === 'secrets.get') return { value: secrets.get(key) };
-      if (method === 'secrets.set') secrets.set(key, value);
-    } },
-    grantedCapabilities: ['secrets:own'],
-    panels: { handle(name, handler) { handlers.set(name, handler); return { dispose() { handlers.delete(name); } }; } }
-  };
-  const launch = () => startLeaderboard(orca, {
-    endpoint: api.endpoint, now: () => new Date(api.clock()),
-    readUsage: async () => ({ day: TODAY, tokens: 600, ready: true }),
-    fetcher(url, options) {
-      if (url.pathname === '/api/today') {
-        rankingReads.push(Number(url.searchParams.get('days') ?? 1));
-        if (nextRead) {
-          const { started, reply } = nextRead;
-          nextRead = undefined;
-          started.resolve(options.signal);
-          return reply.promise;
-        }
-      }
-      return fetch(url, options);
-    }
-  });
-  let stop = launch();
-  t.after(() => stop());
-  const run = (action, fields = {}) => handlers.get('tps.leaderboard')({ action, ...fields });
-  const setEnabled = enabled => run('ranking-preference', { enabled });
-
-  assert.deepEqual(await run('ranking-preference'), { enabled: false });
-  assert.equal((await run('state')).board.rows, undefined);
-  assert.deepEqual(await run('cache'), { ranking: null });
-  assert.deepEqual(rankingReads, []);
-  assert.deepEqual(await setEnabled(true), { enabled: true, saved: true });
-  const guest = await run('state');
-  assert.equal(guest.signedIn, false);
-  assert.deepEqual(guest.board.rows, []);
-
-  await setEnabled(false);
-  const login = await run('login');
-  await api.authorizePlugin(login.loginUrl, 'alice');
-  const signedIn = await run('poll');
-  assert.equal(signedIn.code, 'signed_in');
-  assert.equal(signedIn.nextAutomaticAt, api.clock() + 10_000);
-  assert.equal((await run('sync')).code, 'accepted');
-  assert.deepEqual(rankingReads, [1]);
-
-  await setEnabled(true);
-  const blocked = { started: Promise.withResolvers(), reply: Promise.withResolvers() };
-  nextRead = blocked;
-  const old = run('state', { days: 7 });
-  const signal = await blocked.started.promise;
-  const queued = run('state', { days: 30 });
-  assert.deepEqual(await setEnabled(false), { enabled: false, saved: true });
-  assert.equal(signal.aborted, true);
-  assert.deepEqual(await run('cache'), { ranking: null });
-  await setEnabled(true);
-  const fresh = run('state', { days: 7, force: true });
-  blocked.reply.resolve(Response.json({ days: 7, day: TODAY,
-    rows: [{ username: 'stale', rank: 1, tokens: 1, submittedAt: api.clock() }] }));
-  assert.equal((await old).board.rows, undefined);
-  assert.equal((await queued).board.rows, undefined);
-  assert.deepEqual((await fresh).board.rows.map(row => row.username), ['alice']);
-  assert.deepEqual(rankingReads, [1, 7, 7]);
-
-  await setEnabled(false);
-  stop();
-  stop = launch();
-  assert.deepEqual(await run('ranking-preference'), { enabled: false });
-  assert.equal((await run('session')).signedIn, true);
-  assert.equal((await run('state')).board.rows, undefined);
-  assert.deepEqual(rankingReads, [1, 7, 7]);
-});
 
 test('everyone can view today’s ranking, while submissions require login and exclude banned accounts', async t => {
   const api = await fixture(t, ['alice', 'alice', 'bob']);
@@ -953,13 +573,10 @@ test('avatar downloads are bounded and reject non-image or oversized replies', a
   assert.deepEqual(calls, [1, 2, 3, 4, 5]);
   assert.equal(await cache.get('player4'), null);
   assert.deepEqual(calls, [1, 2, 3, 4, 5]);
-  now += 9_999;
-  assert.equal(await cache.get('player4'), null);
-  assert.deepEqual(calls, [1, 2, 3, 4, 5], 'a failed avatar waits one sync interval');
-  now += 1;
+  now += 5 * 60_000;
   assert.equal(await cache.get('player4'), null);
   assert.equal(await cache.get('player1'), image);
-  assert.deepEqual(calls, [1, 2, 3, 4, 5, 4], 'a failed avatar is retried after one sync interval');
+  assert.deepEqual(calls, [1, 2, 3, 4, 5, 4]);
 });
 
 test('avatar lookup by GitHub login accepts only the expected image redirect', async () => {
@@ -1357,7 +974,6 @@ test('usage discovery separates requests on either side of Beijing midnight from
   const dir = await mkdtemp(path.join(tmpdir(), 'tps-rank-usage-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const day = leaderboardDay(Date.now()), start = leaderboardDayStart(day);
-  const cutoff = start + 13 * HOUR_MS, oldest = cutoff - 720 * HOUR_MS;
   const message = (at, output) => ({
     type: 'message', timestamp: new Date(at).toISOString(),
     message: { role: 'assistant', provider: 'test', model: 'test', timestamp: at - 1000,
@@ -1365,16 +981,14 @@ test('usage discovery separates requests on either side of Beijing midnight from
   });
   await writeFile(path.join(dir, 'current.jsonl'), [
     { type: 'session', id: 'current', cwd: dir },
-    message(oldest - 1, 16), message(oldest, 23), message(start - 1, 5), message(start, 40)
+    message(start - 1, 5), message(start, 40)
   ].map(row => JSON.stringify(row)).join('\n') + '\n');
   const values = new Map();
   const index = createUsageIndex({
-    leaderboard: true, now: () => cutoff, rankDays: 30, includeHours: true,
+    leaderboard: true, now: () => Date.now(), rankDays: 30,
     storage: { keys: async () => [...values.keys()], get: async key => values.get(key),
       set: async (key, value) => values.set(key, value), delete: async key => values.delete(key) },
-    discover: (scanCutoff, rankDay, rankFrom) => discoverUsageUnits(scanCutoff, {
-      roots: { pi: [dir] }, includeDefaults: false, rankDay, rankFrom, includeHours: true
-    })
+    discover: (cutoff, rankDay, rankFrom) => discoverUsageUnits(cutoff, { roots: { pi: [dir] }, includeDefaults: false, rankDay, rankFrom })
   });
   assert.equal(index.leaderboardUsage().ready, false);
   await index.refresh();
@@ -1384,62 +998,4 @@ test('usage discovery separates requests on either side of Beijing midnight from
   const history = index.leaderboardHistory();
   assert.equal(history.ready, true);
   assert.deepEqual(history.scores, [{ day: leaderboardDay(start - 1), tokens: 15 }, { day, tokens: 50 }]);
-  assert.deepEqual(index.leaderboardHourly(), {
-    buckets: [[oldest, 33], [start - HOUR_MS, 15], [start, 50]], coverage: [oldest, cutoff]
-  });
-});
-
-test('usage discovery passes only completed recent requests from the same local and remote parser path', async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'tps-recent-usage-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const now = Date.now(), day = leaderboardDay(now);
-  const row = (id, at, output) => ({ id, type: 'message', timestamp: new Date(at).toISOString(),
-    message: { role: 'assistant', model: 'sample', timestamp: at - 2000, usage: { input: 50, output, cacheRead: 10, cacheWrite: 5 } } });
-  await writeFile(path.join(dir, 'sample.jsonl'), [
-    { type: 'session', id: 'sample', cwd: dir }, row('old', now - 310_000, 500), row('new', now - 1000, 400)
-  ].map(message => JSON.stringify(message)).join('\n') + '\n');
-  const [unit] = await discoverUsageUnits(now - 600_000, {
-    roots: { pi: [dir] }, includeDefaults: false, rankDay: day, includeRecent: true
-  });
-  const { recent } = await unit.read();
-  assert.equal(recent.length, 1);
-  assert.match(recent[0][0], /^[a-f0-9]{24}$/);
-  assert.deepEqual(recent[0].slice(1), [now - 1000, 465, 200, 'sample', 'pi']);
-});
-
-test("today's usage uploads whatever has been read so far, even before every file is up to date", async t => {
-  const api = await fixture(t);
-  const storage = new Map(), secrets = new Map(), handlers = new Map();
-  const orca = {
-    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value) },
-    host: { has: () => true, call: async (method, { key, value }) => {
-      if (method === 'secrets.get') return { value: secrets.get(key) };
-      if (method === 'secrets.set') return secrets.set(key, value);
-      if (method === 'secrets.delete') return secrets.delete(key);
-    } },
-    grantedCapabilities: ['secrets:own'],
-    panels: { handle: (name, run) => { handlers.set(name, run); return { dispose: () => handlers.delete(name) }; } }
-  };
-  let tokens = 0;
-  const stop = startLeaderboard(orca, {
-    endpoint: api.endpoint, now: () => new Date(api.clock()),
-    readUsage: async () => ({ day: TODAY, tokens, ready: false })
-  });
-  t.after(() => stop());
-  const run = (action, fields = {}) => handlers.get('tps.leaderboard')({ action, ...fields });
-  await api.authorizePlugin((await run('login')).loginUrl, 'alice');
-  assert.equal((await run('poll')).code, 'signed_in');
-
-  assert.equal((await run('submit')).code, 'usage_unready', 'nothing is uploaded while no usage has been read today');
-  tokens = 300;
-  const manual = await run('submit');
-  assert.equal(manual.code, 'accepted', 'a partial total is uploaded by a manual sync');
-  assert.equal(manual.board.tokens, 300);
-
-  tokens = 450;
-  api.advance(10_000);
-  for (let tries = 0; tries < 40 && (await run('session')).lastUpload?.kind !== 'automatic'; tries++) await delay(50);
-  const automatic = await run('session');
-  assert.deepEqual(automatic.lastUpload, { kind: 'automatic', code: 'accepted', at: api.clock() }, 'automatic sync uploads the partial total too');
-  assert.equal(automatic.board.tokens, 450, 'a later sync replaces the earlier partial total');
 });

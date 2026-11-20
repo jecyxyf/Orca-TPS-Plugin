@@ -1,7 +1,6 @@
 import { createServer } from 'node:http';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
-import { RECENT_STATS_MS, RANKING_HOURS } from '../src/leaderboard-stats.mjs';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
 
 const GITHUB = 'https://github.com';
@@ -74,84 +73,7 @@ export function createLeaderboardServer({
   const deviceLogins = new Map();
   const browserLogins = new Map();
   const requests = new Map();
-  const publicRankings = new Map();
-  const hourlyRankings = new Map();
-  let minute, prunedDay, publicSpeeds;
-
-  function cachedJson(value) {
-    const body = JSON.stringify(value);
-    return { body, etag: '"' + createHash('sha256').update(body).digest('base64url') + '"' };
-  }
-
-  function sendCached(req, res, snapshot) {
-    res.setHeader('ETag', snapshot.etag);
-    if (req.headers['if-none-match'] === snapshot.etag) {
-      res.writeHead(304);
-      return res.end();
-    }
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(snapshot.body);
-  }
-
-  function sendSpeedRanking(req, res, time) {
-    const revision = store.speedRevision();
-    if (!publicSpeeds || publicSpeeds.revision !== revision || time >= publicSpeeds.expiresAt) {
-      const { rows, expiresAt } = store.speedRanking(time);
-      publicSpeeds = { ...cachedJson({ rows }), revision, expiresAt };
-    }
-    res.setHeader('Date', new Date(time).toUTCString());
-    return sendCached(req, res, publicSpeeds);
-  }
-
-  function sendHourlyRanking(req, res, url, time, recent) {
-    const text = url.searchParams.get('hours');
-    const hours = Number(text);
-    if (!RANKING_HOURS.includes(hours) || String(hours) !== text) return send(res, 400, { code: 'invalid' });
-    res.setHeader('Date', new Date(time).toUTCString());
-    const settled = store.hourly.settle(time);
-    const snapshotId = `${settled.cutoff}-${settled.revision}`;
-    if (recent && url.searchParams.get('snapshotId') !== snapshotId) {
-      return send(res, 409, { code: 'snapshot_expired' });
-    }
-    let snapshot = hourlyRankings.get(hours);
-    if (snapshot?.snapshotId !== snapshotId) {
-      const ranking = store.hourly.ranking(hours, settled);
-      snapshot = { snapshotId, members: ranking.rows.map(({ account, username }) => ({ account, username })),
-        response: cachedJson({ ...ranking, rows: ranking.rows.map(({ account, ...row }) => row) }) };
-      hourlyRankings.set(hours, snapshot);
-    }
-    if (!recent) return sendCached(req, res, snapshot.response);
-    const revision = store.rankingRevision();
-    if (!snapshot.recent || snapshot.recent.revision !== revision || time >= snapshot.recent.expiresAt) {
-      const accounts = snapshot.members.map(row => row.account);
-      const entries = store.recentRows(accounts, time, hours !== 24), uploads = store.latestUploads(accounts);
-      let expiresAt = Infinity;
-      const rows = snapshot.members.map(({ account, username }) => {
-        const entry = entries.get(account);
-        if (entry) expiresAt = Math.min(expiresAt, entry.points[0].submittedAt + RECENT_STATS_MS);
-        return { username, submittedAt: uploads.get(account) ?? null, topModel: entry?.topModel ?? null,
-          topCli: entry?.topCli ?? null, ...(hours === 24 ? { points: entry?.points ?? [] } : {}) };
-      });
-      snapshot.recent = { ...cachedJson({ snapshotId, rows }), revision, expiresAt };
-    }
-    return sendCached(req, res, snapshot.recent);
-  }
-
-  function sendPublicRanking(req, res, days, time, day, includeDaily) {
-    const revision = store.rankingRevision();
-    const key = includeDaily ? `${days}/daily` : days;
-    let snapshot = publicRankings.get(key);
-    if (!snapshot || snapshot.revision !== revision || snapshot.day !== day || time >= snapshot.expiresAt) {
-      const ranking = store.ranking(null, time, days, true, includeDaily);
-      let expiresAt = leaderboardDayStart(day) + 86_400_000;
-      for (const row of ranking.rows) {
-        if (row.recent.points.length) expiresAt = Math.min(expiresAt, row.recent.points[0].submittedAt + RECENT_STATS_MS);
-      }
-      snapshot = { ...cachedJson({ authenticated: false, ...ranking }), revision, day, expiresAt };
-      publicRankings.set(key, snapshot);
-    }
-    return sendCached(req, res, snapshot);
-  }
+  let minute, prunedDay;
   const adminCookie = secure ? '__Host-orca_admin' : 'orca_admin';
   const stateCookie = secure ? '__Host-orca_state' : 'orca_state';
   const pluginStateCookie = secure ? '__Host-orca_plugin_state' : 'orca_plugin_state';
@@ -403,7 +325,6 @@ export function createLeaderboardServer({
     }
     const currentMinute = Math.floor(time / 60000);
     if (currentMinute !== minute) {
-      store.pruneRecent(time);
       requests.clear();
       for (const [key, login] of deviceLogins) if (login.expiresAt <= time) deviceLogins.delete(key);
       for (const [key, login] of browserLogins) if (login.expiresAt <= time) browserLogins.delete(key);
@@ -439,20 +360,13 @@ export function createLeaderboardServer({
       return githubConfigured ? pluginPoll(req, res, time) : send(res, 503, { code: 'github_unavailable' });
     }
     if (!route.startsWith('/api/')) return send(res, 404, { code: 'not_found' });
-    if (method === 'GET' && route === '/api/leaderboard/speeds') return sendSpeedRanking(req, res, time);
-    if (method === 'GET' && (route === '/api/leaderboard/usage' || route === '/api/leaderboard/recent')) {
-      return sendHourlyRanking(req, res, url, time, route.endsWith('/recent'));
-    }
 
     const token = /^Bearer ([\w-]{43})$/.exec(req.headers.authorization ?? '')?.[1];
     const account = token ? store.session(digest(token), 'plugin', time) : null;
     if (method === 'GET' && route === '/api/today') {
       const days = url.searchParams.get('days') ?? '1';
       if (!['1', '7', '30'].includes(days)) return send(res, 400, { code: 'invalid' });
-      const includeRecent = url.searchParams.get('stats') === '1';
-      const includeDaily = includeRecent && days !== '1' && url.searchParams.get('daily') === '1';
-      if (!account && includeRecent) return sendPublicRanking(req, res, Number(days), time, day, includeDaily);
-      const ranking = store.ranking(account?.id ?? null, time, Number(days), includeRecent, includeDaily);
+      const ranking = store.ranking(account?.id ?? null, time, Number(days));
       const viewer = account ? { authenticated: true, banned: Boolean(account.banned), username: account.username } : { authenticated: false };
       return send(res, 200, { ...viewer, ...ranking });
     }
@@ -462,20 +376,6 @@ export function createLeaderboardServer({
       return send(res, 200, { ok: true });
     }
     if (account.banned) return send(res, 403, { code: 'banned', username: account.username });
-    if (method === 'POST' && route === '/api/leaderboard/window-data') {
-      const raw = await readBody(req), requestId = req.headers['idempotency-key'];
-      if (typeof requestId !== 'string' || !/^[\w-]{16,128}$/.test(requestId) ||
-          req.headers['content-type']?.split(';')[0] !== 'application/json') return send(res, 400, { code: 'invalid' });
-      const body = parseJson(raw);
-      if (!body || typeof body !== 'object' || Array.isArray(body)) return send(res, 400, { code: 'invalid' });
-      const receivedAt = now();
-      const current = store.session(digest(token), 'plugin', receivedAt);
-      if (!current) return send(res, 401, { code: 'login_required' });
-      if (current.banned) return send(res, 403, { code: 'banned' });
-      store.hourly.settle(receivedAt);
-      const result = store.hourly.submit(current.id, { ...body, requestId, fingerprint: digest(raw) }, receivedAt, maxTokens);
-      return send(res, result.code === 'stale_version' ? 409 : statuses[result.code], result);
-    }
     if (method === 'GET' && route === '/api/today/status') return send(res, 200, store.status(account.id, time));
     if (method === 'GET' && route === '/api/history/status') {
       return send(res, 200, { initialized: store.historyInitialized(account.id), ...store.status(account.id, time) });
@@ -488,7 +388,6 @@ export function createLeaderboardServer({
       const body = validRequestId && req.headers['content-type']?.split(';')[0] === 'application/json' ? parseJson(raw) : null;
       const input = {
         day: body?.day, installationId: body?.installationId, tokens: body?.tokens, scores: body?.scores,
-        stats: body?.stats,
         requestId: (history ? 'history:' : '') + (validRequestId ? requestId : randomUUID()),
         fingerprint: digest(raw ?? 'oversized request')
       };

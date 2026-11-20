@@ -1,8 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { leaderboardDay, leaderboardDayStart, MAX_WINDOW_DAYS } from '../src/usage-summary.mjs';
 import { validInstallationId } from '../src/leaderboard-installation.mjs';
-import { RECENT_STATS_MS, SPEED_WINDOW_MS, SPEED_MIN_DELTA, qualifyingSpeed, validSubmissionStats } from '../src/leaderboard-stats.mjs';
-import { openHourlyRankings } from './hourly-rankings.mjs';
 
 const TEN_MINUTES = 10 * 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
@@ -13,7 +11,6 @@ const DAILY_LOCK_REASON = '10 分钟内提交错误累计 5 次';
 
 export function openLeaderboardStore(filename) {
   const db = new DatabaseSync(filename);
-  let rankingRevision = 0, speedRevision = 0;
   db.exec(`
     PRAGMA journal_mode=WAL;
     PRAGMA busy_timeout=3000;
@@ -62,15 +59,6 @@ export function openLeaderboardStore(filename) {
       PRIMARY KEY(day, account, request_id, fingerprint)
     );
     CREATE INDEX IF NOT EXISTS attempt_window ON attempts(day, account, received_at);
-    CREATE TABLE IF NOT EXISTS submission_stats (
-      account INTEGER NOT NULL REFERENCES accounts(id), request_id TEXT NOT NULL, day TEXT NOT NULL,
-      submitted_at INTEGER NOT NULL, delta_tokens INTEGER NOT NULL, avg_tps REAL, top_model TEXT, top_cli TEXT,
-      PRIMARY KEY(account, request_id)
-    );
-    CREATE INDEX IF NOT EXISTS submission_stats_by_account ON submission_stats(account, submitted_at);
-    CREATE INDEX IF NOT EXISTS submission_stats_by_time ON submission_stats(submitted_at);
-    CREATE INDEX IF NOT EXISTS submission_stats_speed ON submission_stats(avg_tps DESC, submitted_at, account, request_id)
-      WHERE delta_tokens>${SPEED_MIN_DELTA} AND avg_tps>0;
     CREATE TABLE IF NOT EXISTS locks (
       day TEXT NOT NULL, account INTEGER NOT NULL REFERENCES accounts(id), PRIMARY KEY(day, account)
     );
@@ -95,7 +83,6 @@ export function openLeaderboardStore(filename) {
       throw error;
     }
   }
-  const hourly = openHourlyRankings(db, transaction);
 
   const get = (sql, ...values) => db.prepare(sql).get(...values);
   const all = (sql, ...values) => db.prepare(sql).all(...values);
@@ -122,22 +109,7 @@ export function openLeaderboardStore(filename) {
   periodRanks.setReadBigInts(true);
 
   function upsertAccount({ id, login }) {
-    if (run(`INSERT INTO accounts(id, username) VALUES (?, ?) ON CONFLICT(id) DO UPDATE
-      SET username=excluded.username WHERE accounts.username<>excluded.username`, id, login).changes) {
-      rankingRevision++;
-      speedRevision++;
-      hourly.revision();
-    }
-  }
-
-  function speedRanking(now) {
-    const rows = all(`SELECT accounts.username, submitted_at AS submittedAt, avg_tps AS avgTps,
-        top_model AS topModel, top_cli AS topCli
-      FROM submission_stats JOIN accounts ON accounts.id=submission_stats.account
-      WHERE delta_tokens>${SPEED_MIN_DELTA} AND avg_tps>0 AND submitted_at>? AND submitted_at<=? AND accounts.banned=0
-      ORDER BY avg_tps DESC, submitted_at, account, request_id LIMIT 100`, now - SPEED_WINDOW_MS, now)
-      .map((row, index) => ({ ...row, rank: index + 1 }));
-    return { rows, expiresAt: rows.reduce((expiry, row) => Math.min(expiry, row.submittedAt + SPEED_WINDOW_MS), Infinity) };
+    run('INSERT INTO accounts(id, username) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username', id, login);
   }
 
   function bindAdministrator(account) {
@@ -181,7 +153,7 @@ export function openLeaderboardStore(filename) {
     };
   }
 
-  function ranking(account, now, days = 1, includeRecent = false, includeDaily = false) {
+  function ranking(account, now, days = 1) {
     const day = leaderboardDay(now);
     const score = account === null ? null : readScore(account, day);
     const state = account === null ? { day } : status(account, now, score);
@@ -190,10 +162,9 @@ export function openLeaderboardStore(filename) {
       // Sort the exact SQLite totals before converting to numbers for MB display.
       const rows = periodRanks.all(startDay, day, account).map(row => ({
         username: row.username, tokens: Number(row.tokens), submittedAt: Number(row.submittedAt),
-        rank: Number(row.rank), account: Number(row.account), mine: Number(row.account) === account
+        rank: Number(row.rank), mine: Number(row.account) === account
       }));
-      return { ...state, days, startDay, rank: rows.find(row => row.mine)?.rank ?? null,
-        rows: rankingRows(rows.slice(0, 100), now, includeRecent, includeDaily ? { startDay, day } : null) };
+      return { ...state, days, startDay, rank: rows.find(row => row.mine)?.rank ?? null, rows: rows.slice(0, 100) };
     }
     const rows = all(`
       SELECT accounts.username, scores.account, scores.tokens,
@@ -202,62 +173,13 @@ export function openLeaderboardStore(filename) {
       LEFT JOIN score_updates USING (day, account)
       WHERE scores.day=? AND scores.tokens IS NOT NULL
       ORDER BY scores.tokens DESC, scores.submitted_at, scores.account LIMIT 100
-    `, state.day).map((row, index) => ({ ...row, rank: index + 1, mine: row.account === account }));
+    `, state.day).map(({ account: id, ...row }, index) => ({ ...row, rank: index + 1, mine: id === account }));
     const rank = score?.tokens == null ? null : 1 + get(`
       SELECT COUNT(*) AS count FROM scores WHERE day=? AND (
         tokens>? OR (tokens=? AND (submitted_at<? OR (submitted_at=? AND account<?)))
       )
     `, day, score.tokens, score.tokens, score.submitted_at, score.submitted_at, account).count;
-    return { ...state, rank, rows: rankingRows(rows, now, includeRecent) };
-  }
-
-  function recentRows(accounts, now, latestOnly) {
-    const recent = new Map();
-    if (accounts.length) {
-      const placeholders = accounts.map(() => '?').join(',');
-      for (const { account, topModel, topCli, ...point } of all(`
-        SELECT account, submitted_at AS submittedAt, delta_tokens AS deltaTokens, avg_tps AS avgTps,
-          top_model AS topModel, top_cli AS topCli
-        FROM submission_stats WHERE account IN (${placeholders})
-          AND submitted_at>? AND submitted_at<=?
-        ORDER BY submitted_at`, ...accounts, now - RECENT_STATS_MS, now)) {
-        const entry = recent.get(account) ?? { points: [] };
-        if (latestOnly) entry.points[0] = point;
-        else entry.points.push(point);
-        entry.topModel = topModel;
-        entry.topCli = topCli;
-        recent.set(account, entry);
-      }
-    }
-    return recent;
-  }
-
-  function latestUploads(accounts) {
-    if (!accounts.length) return new Map();
-    const placeholders = accounts.map(() => '?').join(',');
-    return new Map(all(`SELECT account, MAX(updated_at) AS time FROM score_updates
-      WHERE account IN (${placeholders}) GROUP BY account`, ...accounts).map(({ account, time }) => [account, time]));
-  }
-
-  function rankingRows(rows, now, includeRecent, dailyWindow = null) {
-    if (!includeRecent && !dailyWindow) return rows.map(({ account, ...row }) => row);
-    const daily = new Map(), accounts = rows.map(row => row.account);
-    const recent = includeRecent ? recentRows(accounts, now, Boolean(dailyWindow)) : null;
-    if (dailyWindow && rows.length) {
-      const placeholders = accounts.map(() => '?').join(',');
-      for (const { account, ...point } of all(`
-        SELECT account, day, tokens FROM scores WHERE account IN (${placeholders})
-          AND day BETWEEN ? AND ? AND tokens IS NOT NULL ORDER BY day`, ...accounts, dailyWindow.startDay, dailyWindow.day)) {
-        const points = daily.get(account) ?? [];
-        points.push(point);
-        daily.set(account, points);
-      }
-    }
-    return rows.map(({ account, ...row }) => ({
-      ...row,
-      ...(includeRecent ? { recent: recent.get(account) ?? { points: [], topModel: null, topCli: null } } : {}),
-      ...(dailyWindow ? { daily: daily.get(account) ?? [] } : {})
-    }));
+    return { ...state, rank, rows };
   }
 
   function uploadGate(account, day, { requestId, fingerprint, installationId }, now) {
@@ -313,16 +235,14 @@ export function openLeaderboardStore(filename) {
   }
 
   function submit(account, input, now, maxTokens) {
-    const { day: requestedDay, installationId, tokens, requestId, stats } = input;
+    const { day: requestedDay, installationId, tokens, requestId } = input;
     const day = leaderboardDay(now);
-    let changed = false;
-    const outcome = transaction(() => {
+    return transaction(() => {
       const blocked = uploadGate(account, day, input, now);
       if (blocked) return blocked;
       const score = get('SELECT tokens FROM scores WHERE day=? AND account=?', day, account);
       if (score?.tokens === null) return 'removed';
-      if (requestedDay !== day || !validInstallation(installationId) || !validTokens(tokens, maxTokens) || reusedRequest(account, day, requestId) ||
-        (stats !== undefined && (!validSubmissionStats(stats) || get('SELECT 1 FROM submission_stats WHERE account=? AND request_id=?', account, requestId)))) {
+      if (requestedDay !== day || !validInstallation(installationId) || !validTokens(tokens, maxTokens) || reusedRequest(account, day, requestId)) {
         return invalidUpload(account, day, input, now);
       }
       if (installationId === undefined && get('SELECT 1 FROM installation_scores WHERE day=? AND account=? LIMIT 1', day, account)) {
@@ -340,23 +260,14 @@ export function openLeaderboardStore(filename) {
       if (installationId !== undefined) saveInstallationScore(day, account, installationId, tokens);
       run(`INSERT INTO score_updates VALUES (?, ?, ?)
         ON CONFLICT(day, account) DO UPDATE SET updated_at=excluded.updated_at`, day, account, now);
-      if (stats !== undefined) run('INSERT INTO submission_stats VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        account, requestId, day, now, stats.deltaTokens, stats.avgTps, stats.topModel, stats.topCli);
-      changed = true;
       return recordAttempt(account, day, input, 'accepted', now);
     });
-    if (changed) {
-      rankingRevision++;
-      if (qualifyingSpeed(stats)) speedRevision++;
-    }
-    return outcome;
   }
 
   function initializeHistory(account, input, now, maxTokens) {
     const { day: requestedDay, installationId, scores, requestId } = input;
     const day = leaderboardDay(now);
-    let inserted = 0;
-    const outcome = transaction(() => {
+    return transaction(() => {
       if (historyInitialized(account)) return 'initialized';
       const blocked = uploadGate(account, day, input, now);
       if (blocked) return blocked;
@@ -366,6 +277,7 @@ export function openLeaderboardStore(filename) {
         return invalidUpload(account, day, input, now);
       }
       if (nextUpload(account, now) !== null) return recordAttempt(account, day, input, 'too_soon', now);
+      let inserted = 0;
       for (const row of scores) {
         const added = run('INSERT INTO scores(day, account, tokens, submitted_at) VALUES (?, ?, ?, ?) ON CONFLICT(day, account) DO NOTHING',
           row.day, account, row.tokens, now).changes;
@@ -375,15 +287,11 @@ export function openLeaderboardStore(filename) {
       run('INSERT INTO score_initializations VALUES (?, ?)', account, inserted ? now : null);
       return recordAttempt(account, day, input, 'accepted', now);
     });
-    if (inserted) rankingRevision++;
-    return outcome;
   }
 
   function banAccount(account, reason) {
     const changed = run('UPDATE accounts SET banned=1 WHERE id=? AND banned=0', account);
     if (!changed.changes) return false;
-    speedRevision++;
-    hourly.revision();
     run(`INSERT INTO ban_reasons(account, reason) VALUES (?, ?)
       ON CONFLICT(account) DO UPDATE SET reason=excluded.reason`, account, reason);
     return true;
@@ -396,8 +304,6 @@ export function openLeaderboardStore(filename) {
         run('UPDATE accounts SET banned=0 WHERE id=? AND banned=1', account).changes > 0;
       if (!changed) return false;
       if (!banned) {
-        speedRevision++;
-        hourly.revision();
         run('DELETE FROM upload_attempt_clock WHERE account=?', account);
         run('DELETE FROM installation_upload_clock WHERE account=?', account);
       }
@@ -411,15 +317,11 @@ export function openLeaderboardStore(filename) {
     const filter = (day ? ' AND day=?' : '') + (account ? ' AND account=?' : '');
     const params = [...(day ? [day] : []), ...(account ? [account] : [])];
     transaction(() => {
-      hourly.remove({ day, account });
-      run('DELETE FROM submission_stats WHERE 1=1' + filter, ...params);
       run('DELETE FROM installation_scores WHERE 1=1' + filter, ...params);
       run('UPDATE scores SET tokens=NULL WHERE day>=?' + filter, first, ...params);
       run('DELETE FROM scores WHERE day<?' + filter, first, ...params);
       audit(actor, account ? 'delete' : 'clear', [day || 'all', account].filter(Boolean).join('/'), now);
     });
-    rankingRevision++;
-    speedRevision++;
   }
 
   function adminView(day, search, currentDay = day) {
@@ -465,12 +367,6 @@ export function openLeaderboardStore(filename) {
   return {
     upsertAccount, bindAdministrator, administrator, session, status, ranking, submit, historyInitialized, initializeHistory,
     setBan, removeScores, adminView, prune,
-    rankingRevision: () => rankingRevision, speedRanking, speedRevision: () => speedRevision, hourly, recentRows, latestUploads,
-    pruneRecent: now => {
-      run('DELETE FROM submission_stats WHERE submitted_at<=?', now - SPEED_WINDOW_MS);
-      run(`DELETE FROM submission_stats WHERE submitted_at<=? AND (delta_tokens<=${SPEED_MIN_DELTA} OR COALESCE(avg_tps, 0)<=0)`,
-        now - RECENT_STATS_MS);
-    },
     addSession: (digest, account, kind, expires) => run('INSERT INTO sessions VALUES (?, ?, ?, ?)', digest, account, kind, expires),
     removeSession: digest => run('DELETE FROM sessions WHERE digest=?', digest),
     close: () => db.close()

@@ -20,12 +20,6 @@ description: 在 TPS Plugin 的用户可见功能、界面、工具支持或安�
 
 ## 发布时核对
 
-只有用户明确要求发布时才操作。发布统一通过 **GitHub Release** 完成，不再单独推送标签。
-
-1. **准备版本**：确认要发布的提交已经合并到 `main`。`orca-plugin.json`、`package.json` 的版本号和 `CHANGELOG.md` 的版本小节都改成 `X.Y.Z`，并把 `[Unreleased]` 的内容移到该小节。
-2. **写入目录记录**：用发布提交运行 `orca plugin release-entry . --json`，把 CLI 生成的提交号、内容哈希和配图写入 `orca-catalog.json` 的新版本记录，保留已有版本。运行 `orca plugin validate orca-catalog.json`。
-3. **发布 Release**：在 GitHub 上新建 Release，标签填 `vX.Y.Z`，目标选发布提交（Release 会自动创建这个标签）；标题写 `TPS Plugin X.Y.Z`；说明使用 `CHANGELOG.md` 中该版本的内容。
-   - 有 `gh` 时运行：`gh release create vX.Y.Z --target <发布提交> --title "TPS Plugin X.Y.Z" --notes-file <说明文件>`。
-   - 没有 `gh` 或者没登录时，请用户运行 `! gh auth login` 登录，或者让用户在 GitHub 网页上按以上内容创建 Release。
-4. **标签规则**：Orca 社区目录只收录 `vX.Y.Z` 标签，而且同一个版本以第一次看到的提交为准。不要单独推送、移动或删除已有的版本标签，也不要发布草稿 Release 或者预发布版本来代替正式版本。
-5. **发布后核对**：确认 Release 的标签指向发布提交。对照 [Orca 公开页](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin) 和 [Orca 社区目录](https://github.com/stablyai/orca-community-plugins/blob/main/status.json)，看实际显示的版本。公开页仍显示旧版时，查看 `status.json` 里本仓库的状态和收录程序最近一次提交的时间，向用户报告 GitHub 上的最新 Release 和 Orca 当前显示的版本。
+- 在用户已授权发布时，按当前 [Orca 上架流程](https://github.com/stablyai/orca/blob/main/docs/reference/plugin-authoring.md#4-list-it-in-the-orca-plugin-directory) 操作。确保 `orca-plugin.json`、`package.json` 和 `vX.Y.Z` 标签版本一致。
+- 用对应的发布提交运行 `orca plugin release-entry . --json`，将 CLI 生成的提交号、内容哈希和配图等写入项目的 `orca-catalog.json` 新版本记录，保留已有版本。运行 `orca plugin validate orca-catalog.json`，核对推送的标签指向该发布提交。
+- 发布后对照 [Orca 公开页](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin) 和 [Orca 社区目录](https://github.com/stablyai/orca-community-plugins/blob/main/orca-catalog.json)，确认实际显示的版本。公开页仍显示旧版时，报告已推送的 GitHub 版本和 Orca 当前显示的版本。

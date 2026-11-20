@@ -1,11 +1,8 @@
 import { sourceMessage } from './locales.mjs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { leaderboardDay, leaderboardDayStart } from './usage-summary.mjs';
+import { leaderboardDay } from './usage-summary.mjs';
 import { validInstallationId } from './leaderboard-installation.mjs';
 import { createAvatarCache, githubLoginKey } from './leaderboard-avatars.mjs';
-import { validStatsLabel, validStatsPoint } from './leaderboard-stats.mjs';
-import { uploadHourChanges } from './hourly-upload.mjs';
-import { createWindowViews } from './leaderboard-windows.mjs';
 
 const METHOD = 'tps.leaderboard';
 const SECRET = 'leaderboard-session';
@@ -13,7 +10,6 @@ const ACCOUNT_CACHE = 'leaderboard:account';
 const INSTALLATION = 'leaderboard:installation-id';
 const HISTORY = 'leaderboard:history';
 const RANKING_CACHE = 'leaderboard:ranking';
-const RANKING_ENABLED = 'leaderboard:ranking-enabled';
 const DEFAULT_ENDPOINT = 'https://43.157.2.14';
 const LOGIN_TIMEOUT = 10 * 60 * 1000;
 const LOGIN_POLL = 2000;
@@ -25,32 +21,17 @@ const sessionKey = value => value ? createHash('sha256').update(value).digest('h
 const tokenPattern = /^[\w-]{43}$/;
 const validUsername = value => typeof value === 'string' && value.length > 0 && value.length <= 39;
 
-function publicRows(rows, days, day) {
+function publicRows(rows, days) {
   if (!Array.isArray(rows) || rows.length > 100 || !rows.every(row =>
     row && typeof row.username === 'string' && Number.isSafeInteger(row.rank) && row.rank > 0 &&
     Number.isInteger(row.tokens) && row.tokens > 0 && row.tokens <= days * Number.MAX_SAFE_INTEGER &&
     Number.isSafeInteger(row.submittedAt) && Number.isFinite(new Date(row.submittedAt).getTime())
   )) return null;
-  const firstDay = day && leaderboardDay(leaderboardDayStart(day) - (days - 1) * 86_400_000);
-  return rows.map(({ rank, username, tokens, submittedAt, recent, daily }) => ({
-    rank, username, tokens, submittedAt,
-    ...(recent && Array.isArray(recent.points) && recent.points.length <= 30 && recent.points.every(point =>
-      point && Number.isSafeInteger(point.submittedAt) && validStatsPoint(point)) &&
-      validStatsLabel(recent.topModel) && validStatsLabel(recent.topCli) ? {
-        recent: { points: recent.points.map(({ submittedAt, deltaTokens, avgTps }) => ({ submittedAt, deltaTokens, avgTps })),
-          topModel: recent.topModel, topCli: recent.topCli }
-      } : {}),
-    ...(days > 1 && firstDay && Array.isArray(daily) && daily.length <= days && daily.every((point, index) =>
-      point && typeof point.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(point.day) &&
-      point.day >= firstDay && point.day <= day && (index === 0 || point.day > daily[index - 1].day) &&
-      Number.isSafeInteger(point.tokens) && point.tokens > 0) ? {
-        daily: daily.map(({ day, tokens }) => ({ day, tokens }))
-      } : {})
-  }));
+  return rows.map(({ rank, username, tokens, submittedAt }) => ({ rank, username, tokens, submittedAt }));
 }
 
 export function startLeaderboard(orca, {
-  readUsage, readHistory, readHours, stats, endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
+  readUsage, readHistory, endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
   fetcher = fetch, avatarFetcher = fetch, now = () => new Date()
 }) {
   const base = new URL(endpoint);
@@ -60,7 +41,6 @@ export function startLeaderboard(orca, {
   }
   const lifetime = new AbortController();
   const avatars = createAvatarCache({ fetcher: avatarFetcher, now: () => now().getTime(), signal: lifetime.signal });
-  const windows = createWindowViews({ storage: orca.storage, origin: base.origin, request, now: () => now().getTime() });
   const host = orca.host;
   let token = '', login, submitting, uploadingKind = null, scheduling = false, nextAttempt = null;
   let credentialWrite = Promise.resolve();
@@ -73,14 +53,8 @@ export function startLeaderboard(orca, {
   const rankingRequests = new Map();
   let rankingQueue = Promise.resolve();
   let rankingRequest = 0;
-  let rankingAccess, rankingPreferenceWrite = Promise.resolve();
-  const rankingPreferenceReady = Promise.resolve().then(() => orca.storage.get(RANKING_ENABLED))
-    .catch(() => undefined).then(enabled => {
-      if (enabled !== false && !lifetime.signal.aborted) rankingAccess = new AbortController();
-    });
   let lastUpload = null, lastSyncAt = null, manualQueued = false, localUploadAt = 0;
   let installationReady;
-  let hourUploadRunning = false, nextHourUploadAt = 0, uploadWake;
   const secretAvailable = method => orca.grantedCapabilities?.includes('secrets:own') && host?.has(method);
   const today = () => leaderboardDay(now().getTime());
 
@@ -118,11 +92,10 @@ export function startLeaderboard(orca, {
 
   function rememberRanking(cache, day, rows, updatedAt) {
     cache.value = { day, rows, updatedAt };
-    const standings = rows.map(({ rank, username, tokens, submittedAt }) => ({ rank, username, tokens, submittedAt }));
-    const signature = JSON.stringify([day, standings]);
+    const signature = JSON.stringify([day, rows]);
     if (signature === cache.signature) return;
     cache.signature = signature;
-    const saved = { ...cache.value, rows: standings, origin: base.origin };
+    const saved = { ...cache.value, origin: base.origin };
     cache.write = cache.write.then(async () => {
       try { await orca.storage.set(cache.key, saved); }
       catch { if (cache.signature === signature) cache.signature = undefined; }
@@ -230,89 +203,48 @@ export function startLeaderboard(orca, {
     await persistCredentials();
   }
 
-  async function request(path, { body, auth = true, credential = auth ? token : '', requestId, etag, acceptEtag = false,
-    viewHeaders = false, signal } = {}) {
+  async function request(path, { body, auth = true, credential = auth ? token : '', requestId } = {}) {
     try {
       const headers = { Accept: 'application/json' };
       if (credential) headers.Authorization = 'Bearer ' + credential;
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       if (requestId) headers['Idempotency-Key'] = requestId;
-      if (etag) headers['If-None-Match'] = etag;
       const response = await fetcher(new URL(path, base), {
         method: body === undefined ? 'GET' : 'POST', headers, redirect: 'error',
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(10_000), ...(signal ? [signal] : [])])
+        signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(10_000)])
       });
-      const serverTime = viewHeaders ? Date.parse(response.headers?.get?.('date') ?? '') : undefined;
-      if (response.status === 304 && etag) return { notModified: true, ...(viewHeaders ? { serverTime } : {}) };
       const result = await response.json();
       if (!result || typeof result !== 'object') return { code: 'unavailable' };
       if (auth && credential && token === credential && response.status === 401) {
         await saveToken('', 'session_expired');
       }
-      if (viewHeaders) return { ...result, serverTime, etag: response.headers?.get?.('etag') };
-      return acceptEtag ? { ...result, etag: response.headers?.get?.('etag') } : result;
+      return result;
     } catch {
       return { code: 'unavailable' };
     }
   }
 
-  async function rankingPreference(enabled) {
-    await rankingPreferenceReady;
-    if (typeof enabled !== 'boolean' || lifetime.signal.aborted) return { enabled: Boolean(rankingAccess) };
-    if (enabled !== Boolean(rankingAccess)) {
-      if (enabled) rankingAccess = new AbortController();
-      else {
-        rankingAccess.abort();
-        rankingAccess = undefined;
-        windows.clear();
-      }
-      try { orca.panels.post?.(METHOD + '.ranking-preference', { enabled }); } catch {}
-    }
-    const writing = rankingPreferenceWrite.then(() => orca.storage.set(RANKING_ENABLED, enabled));
-    rankingPreferenceWrite = writing.catch(() => {});
-    const saved = await writing.then(() => true, () => false);
-    return { enabled: Boolean(rankingAccess), saved };
-  }
-
-  async function state(days, force = false) {
-    await rankingPreferenceReady;
-    const signal = rankingAccess?.signal;
-    if (!signal) return panelState(days);
-    const running = rankingRequests.get(days);
-    if (running?.signal === signal) return running.promise;
-    const pending = { signal, promise: undefined };
-    pending.promise = rankingQueue.then(() => fetchState(days, force, signal)).finally(() => {
-      if (rankingRequests.get(days) === pending) rankingRequests.delete(days);
-    });
+  function state(days) {
+    if (rankingRequests.has(days)) return rankingRequests.get(days);
+    const pending = rankingQueue.then(() => fetchState(days)).finally(() => rankingRequests.delete(days));
     rankingRequests.set(days, pending);
-    rankingQueue = pending.promise.catch(() => {});
-    return pending.promise;
+    rankingQueue = pending.catch(() => {});
+    return pending;
   }
 
-  async function fetchState(days, force, signal) {
-    if (signal.aborted) return panelState(days);
+  async function fetchState(days) {
     const cache = rankingCache(days);
     const requested = ++rankingRequest;
-    const path = stats ? `/api/today?days=${days}&stats=1${days > 1 ? '&daily=1' : ''}`
-      : days === 1 ? '/api/today' : '/api/today?days=' + days;
-    const etag = !force && cache.snapshot?.day === today() ? cache.etag : undefined;
-    const reply = await request(path, { auth: false, etag, acceptEtag: Boolean(stats), signal });
-    if (signal.aborted) return panelState(days);
-    const board = reply.notModified ? cache.snapshot : reply;
+    const board = await request(days === 1 ? '/api/today' : '/api/today?days=' + days, { auth: false });
     const updatedAt = now().getTime();
-    const rows = (board?.days ?? 1) === days && board?.day === leaderboardDay(updatedAt) ? publicRows(board.rows, days, board.day) : null;
+    const rows = (board.days ?? 1) === days && board.day === leaderboardDay(updatedAt) ? publicRows(board.rows, days) : null;
     if (rows && requested > cache.latestRequest) {
       cache.latestRequest = requested;
-      if (!reply.notModified) {
-        cache.snapshot = board;
-        cache.etag = reply.etag;
-      }
       rememberRanking(cache, board.day, rows, updatedAt);
     }
-    if (!rows) cache.etag = undefined;
     const ranking = rows ? { day: board.day, rows, ...(board.startDay ? { startDay: board.startDay } : {}) }
-      : { code: board?.code ?? 'unavailable' };
+      : { code: board.code ?? 'unavailable' };
     return panelState(days, ranking, rows ? updatedAt : null);
   }
 
@@ -448,8 +380,7 @@ export function startLeaderboard(orca, {
   async function performSubmission(preview, kind, stillEnabled) {
     if (!token) return { code: 'login_required' };
     const credential = token;
-    // Upload whatever today's total has been read so far; later syncs replace it as more files are read.
-    if (!Number.isSafeInteger(preview?.tokens) || preview.tokens < 1) return { code: 'usage_unready' };
+    if (!preview?.ready || !Number.isSafeInteger(preview.tokens) || preview.tokens < 1) return { code: 'usage_unready' };
     const id = await installationId();
     if (!id) return { code: 'installation_unavailable' };
     if (!stillEnabled() || token !== credential || lifetime.signal.aborted) return { code: 'upload_disabled' };
@@ -461,20 +392,14 @@ export function startLeaderboard(orca, {
     if (status.submitted && status.tokens === null) return { code: 'removed', ...status };
     if (nextUploadAt > time) return { code: 'too_soon', ...status, nextUploadAt };
 
-    const score = { day: preview.day, installationId: id, tokens: preview.tokens };
-    const options = stats ? await stats.prepare(sessionKey(credential), score) : { requestId: randomUUID(), body: score };
-    if (!stillEnabled() || token !== credential || lifetime.signal.aborted) return { code: 'upload_disabled' };
-    const requestedAt = now().getTime();
-    let result = await request('/api/today/submit', { ...options, credential });
+    const requestId = randomUUID();
+    const options = { requestId, body: { day: preview.day, installationId: id, tokens: preview.tokens } };
+    let result = await request('/api/today/submit', options);
     if (kind === 'automatic' && result.code === 'unavailable' && token === credential && stillEnabled()) {
-      result = await request('/api/today/submit', { ...options, credential });
+      result = await request('/api/today/submit', options);
     }
-    if (stats) await stats.settle(options, result.code);
     if (token === credential) {
-      if (result.code !== 'banned') {
-        const start = SYNC_SUCCEEDED.has(result.code) ? requestedAt : now().getTime();
-        localUploadAt = Math.max(start + UPLOAD_INTERVAL, result.nextUploadAt ?? 0);
-      }
+      if (result.code !== 'banned') localUploadAt = now().getTime() + UPLOAD_INTERVAL;
       rememberUpload(result);
     }
     return result;
@@ -507,16 +432,13 @@ export function startLeaderboard(orca, {
     scheduling = true;
     try {
       const preview = await readUsage();
-      if (!stillSignedIn() || !(preview?.tokens >= 1)) return;
+      if (!stillSignedIn() || !preview.ready || preview.tokens < 1) return;
       const kind = manualQueued ? 'manual' : 'automatic';
       manualQueued = false;
       const result = await submit(preview, kind, stillSignedIn);
       if (stillSignedIn()) {
         recordUpload(kind, result.code);
-        if (!banned) {
-          const retryAt = SYNC_SUCCEEDED.has(result.code) ? localUploadAt : now().getTime() + UPLOAD_INTERVAL;
-          nextAttempt = Math.max(retryAt, result.nextUploadAt ?? 0, result.lockedUntil ?? 0);
-        }
+        if (!banned) nextAttempt = Math.max(now().getTime() + UPLOAD_INTERVAL, result.nextUploadAt ?? 0, result.lockedUntil ?? 0);
       }
     } finally { scheduling = false; }
   }
@@ -564,24 +486,6 @@ export function startLeaderboard(orca, {
     } finally { job.running = false; }
   }
 
-  async function runHourUpload() {
-    const time = now().getTime();
-    if (!readHours || !token || !username || banned || hourUploadRunning || time < nextHourUploadAt || lifetime.signal.aborted) return;
-    const credential = token, identity = githubLoginKey(username);
-    const active = () => token === credential && githubLoginKey(username) === identity && !banned && !lifetime.signal.aborted;
-    if (!identity) return;
-    hourUploadRunning = true;
-    nextHourUploadAt = time + UPLOAD_INTERVAL;
-    try {
-      const id = await installationId();
-      if (!id || !active()) return;
-      const outcome = await uploadHourChanges({ storage: orca.storage, identity: `${base.origin}/${identity}/${id}`,
-        installationId: id, now: time, readHours, active,
-        send: options => request('/api/leaderboard/window-data', { ...options, credential }) });
-      if (outcome === 'not_found') nextHourUploadAt = time + 5 * 60_000;
-    } finally { hourUploadRunning = false; }
-  }
-
   async function manualSync(payload, days) {
     const reply = code => ({ code, ...panelState(days) });
     if (!token) return reply('login_required');
@@ -621,25 +525,10 @@ export function startLeaderboard(orca, {
 
   const registration = orca.panels.handle(METHOD, async payload => {
     const days = payload?.days === 7 || payload?.days === 30 ? payload.days : 1;
-    if (payload?.action === 'ranking-preference') return rankingPreference(payload.enabled);
-    if (payload?.action === 'window-state' || payload?.action === 'window-cache') {
-      await rankingPreferenceReady;
-      const signal = rankingAccess?.signal;
-      if (!signal) return {};
-      const hours = payload.days === 0 ? 0 : days * 24;
-      if (payload.action === 'window-cache') return { ranking: await windows.load(hours, signal) };
-      const result = await windows.fetch(hours, payload.force === true, signal);
-      if (signal.aborted) return {};
-      const { updatedAt, ...board } = result;
-      return { board, updatedAt: updatedAt ?? null };
-    }
     if (payload?.action === 'cache') {
-      await rankingPreferenceReady;
-      const signal = rankingAccess?.signal;
-      if (!signal) return { ranking: null };
       const cache = rankingCache(days);
       if (!cache.value) await cache.ready;
-      return { ranking: !signal.aborted && cache.value?.day === today() ? cache.value : null };
+      return { ranking: cache.value?.day === today() ? cache.value : null };
     }
     if (payload?.action === 'usage') return { local: await readUsage() };
     await ready;
@@ -647,12 +536,12 @@ export function startLeaderboard(orca, {
       case 'avatar': {
         const key = githubLoginKey(payload.username);
         if (key === null) return { image: null };
-        const known = githubLoginKey(username) === key || windows.known(key) || [...rankingCaches.values()].some(cache =>
+        const known = githubLoginKey(username) === key || [...rankingCaches.values()].some(cache =>
           cache.value?.rows.some(row => githubLoginKey(row.username) === key));
         return { image: known ? await avatars.get(key) : null };
       }
       case 'session': return panelState(days);
-      case 'state': return state(days, payload.force === true);
+      case 'state': return state(days);
       case 'login': return beginLogin();
       case 'poll': return pollLogin(days);
       case 'cancel':
@@ -676,33 +565,16 @@ export function startLeaderboard(orca, {
       default: return { code: 'invalid' };
     }
   });
-  function wakeForUpload() {
-    if (uploadWake || !token || !Number.isFinite(nextAttempt) || lifetime.signal.aborted) return;
-    const remaining = nextAttempt - now().getTime();
-    if (remaining <= 0 || remaining > 1000) return;
-    uploadWake = setTimeout(() => {
-      uploadWake = undefined;
-      void runScheduled().catch(() => {}).finally(publishSession);
-    }, remaining);
-    uploadWake.unref?.();
-  }
-
   function tick() {
     void ready.then(() => { revokeSessions(); publishSession(); });
-    if (readHours) void ready.then(runHourUpload).catch(() => {});
-    void runHistoryInitialization().catch(() => {}).then(runScheduled).catch(() => {}).finally(() => {
-      publishSession();
-      wakeForUpload();
-    });
+    void runHistoryInitialization().catch(() => {}).then(runScheduled).catch(() => {}).finally(publishSession);
   }
   const timer = setInterval(tick, 1000);
   timer.unref?.();
   tick();
   return () => {
     lifetime.abort();
-    rankingAccess?.abort();
     clearInterval(timer);
-    clearTimeout(uploadWake);
     registration.dispose?.();
   };
 }

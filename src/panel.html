@@ -14,10 +14,8 @@
       --line: #e5e5ea;
       --purple: #8f32d6;
       --blue: #0066e6;
-      --ladder-own-rank: #8b5a05;
       --orange: #b45300;
       --green: #007f48;
-      --usage-wave-low: #267456;
       --cache: #9c6500;
       --speed: #c72e3a;
       --speed-bg: #f0f0f3;
@@ -39,10 +37,8 @@
       --line: #3a3a3e;
       --purple: #d38aff;
       --blue: #64b0ff;
-      --ladder-own-rank: #f0bf63;
       --orange: #ffb340;
       --green: #4ade80;
-      --usage-wave-low: #60a589;
       --cache: #e8b65b;
       --speed: #ff6b72;
       --speed-bg: #303034;
@@ -131,66 +127,20 @@
     .section-title { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; font-weight: 700; }
     .section-detail { margin: 0; color: var(--muted); font-size: 11px; }
     .ladder-card { padding: 12px 16px; }
-    #leaderboard { --ladder-medal-size: 48px; --ladder-medal-scale: .85; }
-    .war-tabs.ladder-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 6px; }
-    .ladder-tabs .war-tab { min-width: 0; padding-inline: 3px; font-size: 12px; overflow-wrap: anywhere; }
-    html:lang(zh-CN) .ladder-tabs { grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); }
+    .ladder-refresh-time { font-variant-numeric: tabular-nums; }
+    .ladder-tabs { margin-top: 6px; }
     .ladder-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
     .ladder-control { min-height: 36px; padding-inline: 12px; font-size: 13px; font-weight: 700; }
     .ladder-secondary { color: var(--muted); background: var(--tag-bg); }
     .ladder-note { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
-    .ladder-toolbar {
-      --ladder-toolbar-title-width: clamp(52px, 18vw, 78px);
-      --ladder-toolbar-action-width: 28px;
-      --ladder-toolbar-next-width: clamp(51px, 18.75vw, 92px);
-      --ladder-toolbar-last-width: 67px;
-      display: grid;
-      grid-template-columns: minmax(0, var(--ladder-toolbar-title-width)) var(--ladder-toolbar-action-width)
-        minmax(var(--ladder-toolbar-spacer-min, 0px), 1fr) var(--ladder-toolbar-next-width) var(--ladder-toolbar-last-width);
-      grid-template-areas: "title action . next last";
-      align-items: center; column-gap: 6px;
-      font-variant-numeric: tabular-nums;
+    .ladder-sync {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center; gap: 7px; margin-top: 8px; font-variant-numeric: tabular-nums;
     }
-    html:lang(zh-CN) .ladder-toolbar { --ladder-toolbar-title-width: 4em; }
-    .ladder-upload-toolbar { margin-top: 8px; }
-    .ladder-rank-toolbar {
-      --ladder-toolbar-spacer-min: var(--ladder-toolbar-action-width);
-      grid-template-areas: "title action toggle next last";
-    }
-    .ladder-rank-toolbar.is-off {
-      grid-template-columns: minmax(0, var(--ladder-toolbar-title-width)) var(--ladder-toolbar-action-width);
-      grid-template-areas: "title toggle";
-    }
-    .ladder-rank-toolbar.is-off :is(.ladder-refresh, .ladder-toolbar-field) { display: none; }
-    .ladder-toolbar .section-title { grid-area: title; }
-    .ladder-toolbar .ladder-refresh { grid-area: action; }
-    .ladder-rank-toggle {
-      grid-area: toggle; justify-self: start; display: grid; place-items: center;
-      width: var(--ladder-toolbar-action-width); height: 28px; padding: 0;
-      border: 0; border-radius: 6px; background: transparent; cursor: pointer;
-    }
-    .ladder-rank-toggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-    .ladder-rank-toggle:disabled { cursor: default; opacity: .55; }
-    .ladder-rank-toggle span {
-      display: flex; align-items: center; width: 24px; height: 14px; padding: 1px;
-      border: 1px solid var(--muted); border-radius: 8px; background: var(--tag-bg);
-    }
-    .ladder-rank-toggle span::before {
-      content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--muted);
-    }
-    .ladder-rank-toggle[aria-checked="true"] span {
-      justify-content: flex-end; background: var(--blue); border-color: var(--blue);
-    }
-    .ladder-rank-toggle[aria-checked="true"] span::before { background: var(--surface); }
-    .ladder-toolbar .section-title, .ladder-toolbar-value {
-      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .ladder-toolbar-field { display: flex; justify-content: flex-end; align-items: center; gap: 4px; min-width: 0; font-size: 11px; }
-    .ladder-toolbar-field svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
-    .ladder-toolbar-next { grid-area: next; }
-    .ladder-toolbar-last { grid-area: last; }
+    .ladder-sync .ladder-note { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .ladder-sync-result { margin-inline-start: auto; text-align: right; }
     .ladder-sync-error { color: var(--error); overflow-wrap: anywhere; }
-    .ladder-toolbar .is-queued { color: var(--blue); }
+    .ladder-sync .is-queued { color: var(--blue); }
     .ladder-actions .ladder-note { margin: 0; }
     .ladder-status { margin: 8px 0 0; font-size: 12px; overflow-wrap: anywhere; }
     .ladder-status:empty, .ladder-mine:empty { display: none; }
@@ -204,27 +154,22 @@
     .ladder-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .ladder-avatar svg { display: block; width: 78%; height: 78%; }
     .ladder-account-name .ladder-avatar { width: 32px; height: 32px; }
-    .ladder-user-stats { margin: 8px 0 0; border-block-start: 1px solid var(--line); }
-    .ladder-user-stat {
-      display: grid; grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1.4fr));
-      align-items: center; column-gap: 8px; min-height: 30px; padding-block: 1px;
-      border-block-end: 1px solid var(--line); line-height: 1.25;
-    }
-    .ladder-user-stat dt { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
-    .ladder-user-stat dd { min-width: 0; margin: 0; font-variant-numeric: tabular-nums; }
-    .ladder-user-position { display: flex; align-items: center; gap: 4px; }
-    .ladder-user-position .ladder-medal, .ladder-row-user .ladder-medal { zoom: var(--ladder-medal-scale); }
-    .ladder-user-rank { font-size: 16px; font-weight: 750; overflow-wrap: anywhere; }
-    .ladder-user-tokens { color: var(--blue); font-size: 14px; font-weight: 650; text-align: end; overflow-wrap: anywhere; }
+    .ladder-user-grid, .ladder-badges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 8px; }
+    .ladder-user-grid { margin-top: 12px; row-gap: 5px; align-items: start; }
+    .ladder-user-stat { min-width: 0; margin: 0; padding-inline: 2px; text-align: center; }
+    .ladder-user-stat + .ladder-user-stat { border-inline-start: 1px solid var(--line); }
+    .ladder-user-stat dt { color: var(--muted); font-size: 13px; }
+    .ladder-user-stat dd { margin: 1px 0 0; font-variant-numeric: tabular-nums; }
+    .ladder-user-rank { font-size: 16px; font-weight: 750; }
+    .ladder-user-tokens { color: var(--blue); font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
     .ladder-mine {
       min-width: 0; margin: 0; color: var(--purple); font-size: 24px; font-weight: 800; line-height: 1.25;
       letter-spacing: -.3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .ladder-badge-slot { display: inline-flex; flex: none; }
-    .ladder-badge-slot:empty { display: none; }
+    .ladder-badges { grid-column: 1 / -1; }
+    .ladder-badge-slot { display: grid; place-items: center; min-height: 48px; }
     .ladder-medal {
-      position: relative; display: inline-block; flex-shrink: 0;
-      width: var(--ladder-medal-size); height: var(--ladder-medal-size);
+      position: relative; display: inline-block; flex-shrink: 0; width: 48px; height: 48px;
       filter: drop-shadow(0 1px 1px rgb(0 0 0 / 25%));
     }
     .ladder-medal-7 { --medal-phase: -1.2s; }
@@ -309,57 +254,32 @@
       0%, 37%, 66%, 100% { opacity: 0; transform: scale(.35); }
       50% { opacity: 1; transform: scale(1); }
     }
-    .ladder-refresh { width: var(--ladder-toolbar-action-width, 28px); min-height: 28px; padding: 0; border-radius: 9px; }
+    .ladder-title-actions { display: flex; align-items: center; gap: 6px; }
+    .ladder-refresh { width: 28px; min-height: 28px; padding: 0; border-radius: 9px; }
     .ladder-preview { padding: 9px 11px; border-radius: 13px; background: var(--button-bg); }
     .ladder-preview p { margin: 0 0 6px; }
     .ladder-preview .ladder-note { margin-bottom: 8px; }
     .ladder-rows { margin: 6px 0 0; padding: 0; list-style: none; }
     .ladder-rows:empty { margin: 0; }
     .ladder-rows li {
-      --ladder-row-size: calc(var(--ladder-medal-size) * var(--ladder-medal-scale));
-      --ladder-row-gap: 8px;
-      display: grid; grid-template-columns: auto var(--ladder-row-gap) minmax(0, 1fr) auto;
-      grid-template-rows: var(--ladder-row-size) auto auto;
-      grid-template-areas:
-        "rank   .      name   total"
-        "recent recent recent recent"
-        "time   time   time   time";
-      row-gap: 5px; align-items: center; padding: 9px 0;
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas: "rank name total" "rank time total";
+      column-gap: 8px; align-items: center; padding: 8px 0;
       border-top: 1px solid var(--line); font-variant-numeric: tabular-nums;
     }
     .ladder-rank {
-      grid-area: rank; display: grid; place-items: center; min-width: 3ch; height: 100%;
-      padding-inline: 2px; color: var(--muted); font-size: 20px; font-weight: 750;
+      grid-area: rank; min-width: 3ch; padding: 4px; border-radius: 9px; text-align: center;
+      background: var(--tag-bg); color: var(--muted); font-size: 11px; font-weight: 700;
     }
-    .ladder-self .ladder-rank { color: var(--ladder-own-rank); }
-    .ladder-row-user { grid-area: name; display: flex; gap: 4px; align-items: center; min-width: 0; margin-inline-end: var(--ladder-row-gap); }
-    .ladder-row-user .ladder-avatar {
-      --ladder-row-avatar-size: calc(var(--ladder-row-size) * .9);
-      width: var(--ladder-row-avatar-size); height: var(--ladder-row-avatar-size);
-    }
-    .ladder-name {
-      min-width: 0; font-size: 18px; line-height: var(--ladder-row-size); color: var(--purple); font-weight: 750;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
+    .ladder-self .ladder-rank { background: var(--button-bg); color: var(--blue); }
+    .ladder-row-user { grid-area: name; display: flex; gap: 4px; align-items: center; min-width: 0; }
+    .ladder-row-user .ladder-medal { zoom: .85; }
+    .ladder-name { min-width: 0; color: var(--purple); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ladder-total {
-      grid-area: total; display: grid; align-content: center; height: 100%;
-      padding-inline: 8px; border-radius: 11px; background: var(--button-bg); color: var(--blue);
-      font-size: 14px; line-height: 1.15; font-weight: 750; text-align: end; overflow-wrap: anywhere; max-width: 15ch;
+      grid-area: total; padding: 4px 8px; border-radius: 11px; background: var(--button-bg); color: var(--blue);
+      font-size: 14px; font-weight: 750; text-align: end; overflow-wrap: anywhere; max-width: 15ch;
     }
     .ladder-time { grid-area: time; color: var(--muted); font-size: 11px; }
-    .ladder-rows .ladder-speed-row { --ladder-row-size: 32px; }
-    .ladder-speed-row .ladder-total { white-space: nowrap; }
-    .ladder-speed-row .ladder-recent-tools { font-size: 11px; }
-    .ladder-recent-caption { margin: 7px 0 0; color: var(--muted); font-size: 11px; }
-    .ladder-recent { grid-area: recent; min-width: 0; }
-    .ladder-chart {
-      display: block; width: 100%; height: 30px;
-      background: transparent; color: var(--blue);
-    }
-    .ladder-chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin-top: 3px; }
-    .ladder-recent-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 4px; font-size: 11px; }
-    .ladder-recent-tools { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .ladder-recent-speed { flex: none; color: var(--blue); white-space: nowrap; }
     .refresh.is-busy svg { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .messages:empty { display: none; }
@@ -467,20 +387,8 @@
       .speed-value { font-size: 17px; }
       .war, .heat, .ladder-card { padding-inline: 12px; }
       .ladder-mine { font-size: 22px; }
-      .ladder-user-stat { column-gap: 6px; }
-      .ladder-user-stat dt { font-size: 12px; }
-      .ladder-user-position { gap: 2px; }
-      #leaderboard { --ladder-medal-scale: .7; }
-      .ladder-user-rank, .ladder-user-tokens { font-size: 13px; }
-      .ladder-toolbar {
-        --ladder-toolbar-action-width: 24px;
-        --ladder-toolbar-next-width: 42px;
-        --ladder-toolbar-last-width: 59px;
-        column-gap: 3px;
-      }
-      .ladder-toolbar-field { gap: 3px; font-size: 10px; }
-      .ladder-toolbar-field svg { width: 12px; height: 12px; }
-      .ladder-rows li { --ladder-row-gap: 6px; }
+      .ladder-user-grid, .ladder-badges { column-gap: 2px; }
+      .ladder-user-stat { padding-inline: 0; }
       .war-totals { gap: 6px; }
       .war-value { font-size: 17px; }
       .ladder-total { padding-inline: 6px; font-size: 12px; }
@@ -538,45 +446,28 @@
             </div>
             <button class="refresh ladder-control" id="ladder-logout" type="button"><span data-i18n="sign-out"></span></button>
           </div>
-          <dl class="ladder-user-stats" id="ladder-personal-ranks" data-i18n-aria-label="personal-ranking" hidden>
-            <div class="ladder-user-stat">
-              <dt data-i18n="last-twenty-four-hours"></dt>
-              <dd class="ladder-user-position">
-                <span class="ladder-badge-slot" id="ladder-user-badge-1"></span>
-                <span class="ladder-user-rank" id="ladder-user-rank-1" data-localized-text>—</span>
-              </dd>
-              <dd class="ladder-user-tokens" id="ladder-user-tokens-1" data-i18n-title="daily-ranked-usage">—</dd>
+          <div class="ladder-user-grid" data-i18n-aria-label="personal-ranking">
+            <div class="ladder-badges" id="ladder-medals" hidden>
+              <div class="ladder-badge-slot" id="ladder-user-badge-1"></div>
+              <div class="ladder-badge-slot" id="ladder-user-badge-7"></div>
+              <div class="ladder-badge-slot" id="ladder-user-badge-30"></div>
             </div>
-            <div class="ladder-user-stat">
-              <dt data-i18n="last-seven-days"></dt>
-              <dd class="ladder-user-position">
-                <span class="ladder-badge-slot" id="ladder-user-badge-7"></span>
-                <span class="ladder-user-rank" id="ladder-user-rank-7" data-localized-text>—</span>
-              </dd>
-              <dd class="ladder-user-tokens" id="ladder-user-tokens-7" data-i18n-title="weekly-ranked-usage">—</dd>
-            </div>
-            <div class="ladder-user-stat">
-              <dt data-i18n="last-thirty-days"></dt>
-              <dd class="ladder-user-position">
-                <span class="ladder-badge-slot" id="ladder-user-badge-30"></span>
-                <span class="ladder-user-rank" id="ladder-user-rank-30" data-localized-text>—</span>
-              </dd>
-              <dd class="ladder-user-tokens" id="ladder-user-tokens-30" data-i18n-title="monthly-ranked-usage">—</dd>
-            </div>
-          </dl>
-          <div class="ladder-toolbar ladder-upload-toolbar">
-            <h2 class="section-title" data-i18n="data-upload" data-i18n-title="data-upload"></h2>
-            <button class="refresh ladder-refresh" id="ladder-sync-now" type="button" data-i18n-aria-label="upload-now" data-i18n-title="upload-now">
+            <dl class="ladder-user-stat"><dt><span data-i18n="daily-rank"></span></dt>
+              <dd class="ladder-user-rank" id="ladder-user-rank-1" data-localized-text>—</dd><dd class="ladder-user-tokens" id="ladder-user-tokens-1" data-i18n-title="daily-ranked-usage">—</dd>
+            </dl>
+            <dl class="ladder-user-stat"><dt><span data-i18n="weekly-rank"></span></dt>
+              <dd class="ladder-user-rank" id="ladder-user-rank-7" data-localized-text>—</dd><dd class="ladder-user-tokens" id="ladder-user-tokens-7" data-i18n-title="weekly-ranked-usage">—</dd>
+            </dl>
+            <dl class="ladder-user-stat"><dt><span data-i18n="monthly-rank"></span></dt>
+              <dd class="ladder-user-rank" id="ladder-user-rank-30" data-localized-text>—</dd><dd class="ladder-user-tokens" id="ladder-user-tokens-30" data-i18n-title="monthly-ranked-usage">—</dd>
+            </dl>
+          </div>
+          <div class="ladder-sync">
+            <button class="refresh ladder-refresh" id="ladder-sync-now" type="button" data-i18n-aria-label="sync-now" data-i18n-title="sync-now">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-.4-8 6 6 0 0 1 11.5-1.7A4.8 4.8 0 0 1 18 18h-1M12 19v-8m-3 3 3-3 3 3"/></svg>
             </button>
-            <div class="ladder-toolbar-field ladder-toolbar-next" data-i18n-title="next-upload-countdown">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="next-upload-countdown"><path d="M6 3h12M6 21h12M7 3v3c0 2.2 2.1 4.2 5 6-2.9 1.8-5 3.8-5 6v3M17 3v3c0 2.2-2.1 4.2-5 6 2.9 1.8 5 3.8 5 6v3"/></svg>
-              <span class="ladder-toolbar-value" id="ladder-sync-countdown" data-localized-text>—</span>
-            </div>
-            <div class="ladder-toolbar-field ladder-toolbar-last" data-i18n-title="last-upload-time">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="last-upload-time"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-              <time class="ladder-toolbar-value" id="ladder-sync-result" data-localized-text>—</time>
-            </div>
+            <p class="ladder-note" id="ladder-sync-countdown" data-localized-text hidden></p>
+            <p class="ladder-note ladder-sync-result" id="ladder-sync-result" data-localized-text></p>
           </div>
           <p class="ladder-note ladder-sync-error" id="ladder-sync-error" role="status" data-localized-text hidden></p>
         </div>
@@ -584,35 +475,23 @@
         <p class="ladder-note" id="ladder-logout-pending" role="status" data-localized-text hidden></p>
       </div>
       <section class="ladder-card" aria-labelledby="ladder-rank-title">
-        <div class="ladder-toolbar ladder-rank-toolbar is-off" id="ladder-rank-toolbar">
-          <h2 class="section-title" id="ladder-rank-title" data-i18n="period-rankings" data-i18n-title="period-rankings"></h2>
-          <button class="refresh ladder-refresh" id="ladder-update" type="button" data-i18n-aria-label="refresh-leaderboard" data-i18n-title="sync-now">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>
-          </button>
-          <button class="ladder-rank-toggle" id="ladder-rank-toggle" type="button" role="switch" aria-checked="false"
-            aria-controls="ladder-ranking-content ladder-personal-ranks" data-i18n-aria-label="ranking-toggle"
-            data-i18n-title="ranking-toggle" disabled><span aria-hidden="true"></span></button>
-          <div class="ladder-toolbar-field ladder-toolbar-next" data-i18n-title="next-sync-countdown">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="next-sync-countdown"><path d="M6 3h12M6 21h12M7 3v3c0 2.2 2.1 4.2 5 6-2.9 1.8-5 3.8-5 6v3M17 3v3c0 2.2-2.1 4.2-5 6 2.9 1.8 5 3.8 5 6v3"/></svg>
-            <span class="ladder-toolbar-value" id="ladder-refresh-countdown" data-localized-text>—</span>
+        <div class="section-head">
+          <div class="ladder-title-actions">
+            <h2 class="section-title" id="ladder-rank-title" data-localized-text><span data-i18n="daily-rank"></span></h2>
+            <button class="refresh ladder-refresh" id="ladder-update" type="button" data-i18n-aria-label="refresh-leaderboard" data-i18n-title="refresh-leaderboard">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>
+            </button>
           </div>
-          <div class="ladder-toolbar-field ladder-toolbar-last" data-i18n-title="last-sync-time">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="last-sync-time"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-            <time class="ladder-toolbar-value" id="ladder-refresh-time" data-localized-text>—</time>
-          </div>
+          <time class="section-detail ladder-refresh-time" id="ladder-refresh-time" data-localized-text hidden></time>
         </div>
-        <div id="ladder-ranking-content" hidden>
-          <div class="war-tabs ladder-tabs" role="group" data-i18n-aria-label="ranking-period">
-            <button class="war-tab" type="button" data-rank-days="1" aria-pressed="true"><span data-i18n="last-twenty-four-hours"></span></button>
-            <button class="war-tab" type="button" data-rank-days="7" aria-pressed="false"><span data-i18n="last-seven-days"></span></button>
-            <button class="war-tab" type="button" data-rank-days="30" aria-pressed="false"><span data-i18n="last-thirty-days"></span></button>
-            <button class="war-tab" type="button" data-rank-days="0" aria-pressed="false"><span data-i18n="leaderboard-speed-tab"></span></button>
-          </div>
-          <p class="ladder-note" id="ladder-freshness" role="status" data-localized-text hidden></p>
-          <p class="ladder-recent-caption" id="ladder-recent-caption" data-i18n="leaderboard-five-minute-usage" hidden></p>
-          <ol class="ladder-rows" id="ladder-rows" data-i18n-aria-label="daily-usage-rankings"></ol>
-          <p class="ladder-note" id="ladder-empty" data-localized-text hidden><span data-i18n="empty-today"></span></p>
+        <div class="war-tabs ladder-tabs" role="group" data-i18n-aria-label="ranking-period">
+          <button class="war-tab" type="button" data-rank-days="1" aria-pressed="true"><span data-i18n="today"></span></button>
+          <button class="war-tab" type="button" data-rank-days="7" aria-pressed="false"><span data-i18n="last-seven-days"></span></button>
+          <button class="war-tab" type="button" data-rank-days="30" aria-pressed="false"><span data-i18n="last-thirty-days"></span></button>
         </div>
+        <p class="ladder-note" id="ladder-freshness" role="status" data-localized-text hidden></p>
+        <ol class="ladder-rows" id="ladder-rows" data-i18n-aria-label="daily-usage-rankings"></ol>
+        <p class="ladder-note" id="ladder-empty" data-localized-text hidden><span data-i18n="empty-today"></span></p>
       </section>
     </section>
     <section class="panel-view" id="usage" role="tabpanel" aria-labelledby="tab-usage" tabindex="0" data-testid="usage-group" hidden>
@@ -690,10 +569,10 @@
   </main>
 
   <template id="ladder-avatar-fallback">
-    <svg viewBox="0 0 24 24" data-icon="black-hat" aria-hidden="true" focusable="false">
-      <ellipse cx="12" cy="16.6" rx="10" ry="3.1" fill="#101114" stroke="#8c929d" stroke-width=".9"/>
-      <path fill="#17191c" stroke="#8c929d" stroke-width=".9" stroke-linejoin="round" d="M6.6 15.8C6.3 11.2 7 6.9 9 5.7c1.2-.7 2 .2 3 .2s1.8-.9 3-.2c2 1.2 2.7 5.5 2.4 10.1Z"/>
-      <path fill="#f1faee" d="M6.7 13.3h10.6l-.1 2.1c-3.5 1-7 1-10.4 0Z"/>
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M12 2c-3.6 0-6.5 3.6-7.5 8.2L3 18.4 6.1 21h11.8l3.1-2.6-1.5-8.2C18.5 5.6 15.6 2 12 2Z"/>
+      <path fill="var(--button-bg)" d="m12 6-4.1 3.2L7 14.4l2.3 3.3h5.4l2.3-3.3-.9-5.2Z"/>
+      <path fill="currentColor" d="M8.9 11.8h2v1.7h-2zm4.2 0h2v1.7h-2z"/>
     </svg>
   </template>
   <template id="record-template">
@@ -881,7 +760,6 @@
       };
     })();
     const t = locale.t;
-    const AGENT_LABELS = { codex: 'Codex CLI', claude: 'Claude Code', opencode: 'OpenCode', opencode2: 'OpenCode', pi: 'Pi Agent', antigravity: 'Antigravity CLI', hermes: 'Hermes Agent' };
     function updateList(container, items, previous, keyOf, create) {
       const next = new Map();
       let position = container.firstChild;
@@ -1088,6 +966,7 @@
       }
       // 用量战况: totals per window from the background index (tps.summary); counts only, never message text.
       const USAGE_REFRESH_MS = 30_000;
+      const AGENT_LABELS = { codex: 'Codex CLI', claude: 'Claude Code', opencode: 'OpenCode', opencode2: 'OpenCode', pi: 'Pi Agent', antigravity: 'Antigravity CLI', hermes: 'Hermes Agent' };
       function agentLabel(provider) {
         return AGENT_LABELS[provider || current?.activeSession?.provider] ?? '';
       }
@@ -1452,13 +1331,13 @@
       const boardDay = () => new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const rankTabs = [...group.querySelectorAll('[data-rank-days]')];
       const periods = [
-        { days: 1, mark: 'Ⅰ', title: 'last-twenty-four-hours' }, { days: 7, mark: '7', title: 'seven-day-period' },
+        { days: 1, mark: 'Ⅰ', title: 'today-period' }, { days: 7, mark: '7', title: 'seven-day-period' },
         { days: 30, mark: '30', title: 'thirty-day-period' }
       ];
       const podium = ['gold-medal', 'silver-medal', 'bronze-medal'];
       const messages = {
         unavailable: 'leaderboard-unavailable', github_unavailable: 'github-login-unavailable',
-        login_required: 'login-required', banned: 'account-banned', server_update_required: 'leaderboard-server-update-required',
+        login_required: 'login-required', banned: 'account-banned',
         installation_unavailable: 'installation-save-failed', upgrade_required: 'update-required',
         session_expired: 'session-expired',
         login_expired: 'login-expired', login_denied: 'github-login-denied',
@@ -1475,130 +1354,53 @@
       const messageFor = code => Object.hasOwn(messages, code) ? t(messages[code]) : undefined;
       let model, session, pendingLogin, retryLogin, rankDays = 1;
       const cachedRankings = new Map(), summaryQueue = new Set(), rankRequests = new Map();
-      const RANK_REFRESH_MS = 10_000, RECENT_STATS_MS = 5 * 60_000, HOUR_MS = 3_600_000, DAY_MS = 86_400_000;
-      let rankingPending, rankWake, sessionPushVersion = 0, rankingSubscription;
-      let rankingAccess, rankingPreferenceSubscription, rankingPreferenceVersion = 0, rankingPreferenceFailed = false;
+      const RANK_REFRESH_MS = 5000;
+      let rankingPending, sessionPushVersion = 0, rankingSubscription;
       let busy = false, restoringSession = false, manualSyncPending = false;
       let revision = 0, drawnRows = '', renderedDay = '', loginProblem = '', messageCode = '';
-      let summaryAccount = '';
-      let rankingNodes = new Map(), leaderboardFrame, nextRecentExpiry = Infinity;
-      let animateToday = false, pulseDay = '', latestPulses = new Map();
-      const usagePainters = new WeakMap();
+      let summaryAccount = '', summaryUpload = null;
+      let rankingNodes = new Map(), leaderboardFrame;
 
-      async function request(action, payload = {}, signal = lifetime.signal) {
+      async function request(action, payload = {}) {
         try {
-          const result = await bridge.request('tps.leaderboard', { action, days: rankDays, ...payload }, { signal, timeoutMs: 30000 });
+          const result = await bridge.request('tps.leaderboard', { action, days: rankDays, ...payload }, { signal: lifetime.signal, timeoutMs: 30000 });
           if (result && typeof result === 'object') return result;
         } catch {}
         return { code: 'unavailable' };
       }
 
-      // avatar-view:start
-      // Shows the black hat icon until a GitHub avatar loads. A loaded avatar is reused for every
-      // slot of that user and never requested again; a default avatar is requested once per new
-      // slot, or again when the caller asks for a retry after a sync.
-      function createAvatarView({ fallback, createImage, load, visible, Observer }) {
-        const IMAGE_PATTERN = /^data:image\/(?:png|jpeg|webp|gif);base64,/;
-        const images = new Map(), loading = new Map(), slots = new Set(), waiting = new Set();
-        const keyOf = username => typeof username === 'string' ? username.toLowerCase() : '';
-        const observer = Observer ? new Observer(entries => {
-          for (const { target, isIntersecting } of entries) {
-            if (!isIntersecting || !visible() || !waiting.delete(target)) continue;
-            observer.unobserve(target);
-            void fetchAvatar(target.dataset.username);
-          }
-        }, { rootMargin: '48px 0px' }) : null;
-
-        function showImage(avatar, image) {
-          const img = createImage();
-          img.alt = '';
-          img.decoding = 'async';
-          img.src = image;
-          avatar.replaceChildren(img);
-          avatar.dataset.avatar = 'image';
+      const observedAvatars = new Set();
+      const avatarObserver = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+        for (const { target, isIntersecting } of entries) {
+          if (!isIntersecting || group.hidden || !observedAvatars.delete(target)) continue;
+          avatarObserver.unobserve(target);
+          void loadAvatar(target);
         }
+      }, { rootMargin: '48px 0px' }) : null;
 
-        function showFallback(avatar) {
-          if (avatar.dataset.avatar === 'fallback') return;
-          avatar.replaceChildren(fallback());
-          avatar.dataset.avatar = 'fallback';
-        }
-
-        function decodes(image) {
-          return new Promise(resolve => {
-            const img = createImage();
-            img.addEventListener('load', () => resolve(true), { once: true });
-            img.addEventListener('error', () => resolve(false), { once: true });
-            img.src = image;
-          });
-        }
-
-        function paint(key) {
-          const image = images.get(key);
-          for (const avatar of slots) {
-            if (!avatar.isConnected) slots.delete(avatar);
-            else if (keyOf(avatar.dataset.username) === key && avatar.dataset.avatar !== 'image') showImage(avatar, image);
-          }
-        }
-
-        function fetchAvatar(username) {
-          const key = keyOf(username);
-          if (!key || images.has(key) || loading.has(key)) return loading.get(key);
-          const job = Promise.resolve().then(() => load(username)).then(async image => {
-            if (typeof image !== 'string' || !IMAGE_PATTERN.test(image) || !await decodes(image)) return;
-            images.set(key, image);
-            paint(key);
-          }).catch(() => {}).finally(() => loading.delete(key));
-          loading.set(key, job);
-          return job;
-        }
-
-        function stopWaiting(avatar) {
-          if (waiting.delete(avatar)) observer.unobserve(avatar);
-        }
-
-        function set(avatar, username = '', { retry = false } = {}) {
-          const key = keyOf(username), changed = keyOf(avatar.dataset.username) !== key || !avatar.dataset.avatar;
-          avatar.dataset.username = username;
-          slots.add(avatar);
-          if (images.has(key)) {
-            stopWaiting(avatar);
-            if (avatar.dataset.avatar !== 'image' || changed) showImage(avatar, images.get(key));
-            return;
-          }
-          if (changed) {
-            stopWaiting(avatar);
-            avatar.dataset.avatar = '';
-            showFallback(avatar);
-          }
-          if (!key || !(changed || retry)) return;
-          if (!observer) {
-            void fetchAvatar(username);
-            return;
-          }
-          stopWaiting(avatar);
-          waiting.add(avatar);
-          observer.observe(avatar);
-        }
-
-        function dispose() {
-          observer?.disconnect();
-          waiting.clear();
-          slots.clear();
-        }
-
-        return { set, dispose };
+      async function loadAvatar(avatar) {
+        const username = avatar.dataset.username;
+        const { image } = await request('avatar', { username });
+        if (typeof image !== 'string' || !/^data:image\/(?:png|jpeg|webp|gif);base64,/.test(image)) return;
+        const stillCurrent = () => !lifetime.signal.aborted && avatar.isConnected && avatar.dataset.username === username;
+        if (!stillCurrent()) return;
+        const img = document.createElement('img');
+        img.alt = '';
+        img.decoding = 'async';
+        img.addEventListener('load', () => { if (stillCurrent()) avatar.replaceChildren(img); }, { once: true });
+        img.src = image;
       }
-      // avatar-view:end
 
-      const avatarView = createAvatarView({
-        fallback: () => element('avatar-fallback').content.cloneNode(true),
-        createImage: () => document.createElement('img'),
-        load: async username => (await request('avatar', { username }))?.image,
-        visible: () => !group.hidden && !lifetime.signal.aborted,
-        Observer: typeof IntersectionObserver === 'function' ? IntersectionObserver : null
-      });
-      const setAvatar = (avatar, username, options) => avatarView.set(avatar, username, options);
+      function setAvatar(avatar, username = '') {
+        if (username === avatar.dataset.username) return;
+        avatar.dataset.username = username;
+        avatar.replaceChildren(element('avatar-fallback').content.cloneNode(true));
+        if (observedAvatars.delete(avatar)) avatarObserver.unobserve(avatar);
+        if (username && avatarObserver) {
+          observedAvatars.add(avatar);
+          avatarObserver.observe(avatar);
+        }
+      }
 
       function medal(rank, period) {
         const place = podium[rank - 1];
@@ -1627,245 +1429,15 @@
         return badge;
       }
 
-      const usageChartLabel = () => t(rankDays === 1 ? 'leaderboard-five-minute-usage' : 'leaderboard-daily-usage');
-      const speedText = value => Number.isFinite(value) ? `${locale.number(value, {
-        maximumFractionDigits: 1, ...(value >= 10_000 ? { notation: 'scientific' } : {}) })} tokens/s` : '—';
-      const leaderboardTime = time => locale.date(time, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
-      const toolText = (model, cli) => `${model ?? '—'} · ${Object.hasOwn(AGENT_LABELS, cli) ? AGENT_LABELS[cli] : cli ?? '—'}`;
-      const chartVerticalPadding = 4;
-
-      function dailyUsagePoints(daily, left, days) {
-        if (!Array.isArray(daily)) return [];
-        const totals = new Map(daily.map(point => [point.at ?? point.day, point]));
-        return Array.from({ length: days }, (_, offset) => {
-          const at = left + offset * DAY_MS;
-          const day = new Date(at + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-          const value = totals.get(at) ?? totals.get(day);
-          return { day, tokens: value?.tokens ?? 0, ...(typeof value?.complete === 'boolean' ? { at, complete: value.complete } : {}) };
-        });
-      }
-
-      function dailyUsagePath(points, x, y) {
-        const levels = points.map(y);
-        const changes = levels.slice(1).map((level, index) => level - levels[index]);
-        const tangents = levels.map((_, index) => {
-          const before = changes[index - 1] ?? changes[index];
-          const after = changes[index] ?? before;
-          // Keep peaks, valleys, and flat stretches within the recorded range.
-          return before * after > 0 ? 2 * before * after / (before + after) : 0;
-        });
-        const line = new Path2D();
-        let startX = x(points[0]);
-        line.moveTo(startX, levels[0]);
-        for (let index = 1; index < points.length; index++) {
-          const endX = x(points[index]);
-          const third = (endX - startX) / 3;
-          line.bezierCurveTo(
-            startX + third, levels[index - 1] + tangents[index - 1] / 3,
-            endX - third, levels[index] - tangents[index] / 3,
-            endX, levels[index]
-          );
-          startX = endX;
-        }
-        return line;
-      }
-
-      function paintUsagePath(ctx, line, baseline, firstX, lastX) {
-        const colors = window.getComputedStyle(document.documentElement);
-        const low = colors.getPropertyValue('--usage-wave-low').trim();
-        const high = colors.getPropertyValue('--speed').trim();
-
-        const area = new Path2D(line);
-        area.lineTo(lastX, baseline);
-        area.lineTo(firstX, baseline);
-        area.closePath();
-
-        const gradient = ctx.createLinearGradient(0, baseline, 0, chartVerticalPadding);
-        gradient.addColorStop(0, low);
-        gradient.addColorStop(1, high);
-        ctx.strokeStyle = ctx.fillStyle = gradient;
-        ctx.save();
-        ctx.globalAlpha = 0.5;
-        ctx.fill(area);
-        ctx.restore();
-        ctx.stroke(line);
-      }
-
-      function pulseX(point, left, width) {
-        const offset = Math.max(0, Math.min(1, (point.submittedAt - left) / RECENT_STATS_MS));
-        return width * offset;
-      }
-
-      function drawSubmissionPulses(chart, points, left, animateAfter) {
-        const maximum = Math.max(1, ...points.map(point => point.deltaTokens));
-        const animate = points.some(point => point.submittedAt > animateAfter) &&
-          !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        let frame, startedAt;
-
-        function schedule() {
-          if (frame === undefined) frame = requestAnimationFrame(draw);
-        }
-
-        function draw(time) {
-          frame = undefined;
-          if (!chart.isConnected || lifetime.signal.aborted) return;
-          const { width, height } = chart.getBoundingClientRect(), density = window.devicePixelRatio || 1;
-          if (width <= 0 || height <= 2 * chartVerticalPadding) return;
-          const pixelWidth = Math.round(width * density), pixelHeight = Math.round(height * density);
-          if (chart.width !== pixelWidth) chart.width = pixelWidth;
-          if (chart.height !== pixelHeight) chart.height = pixelHeight;
-          const ctx = chart.getContext('2d');
-          if (!ctx) return;
-          ctx.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
-          ctx.clearRect(0, 0, width, height);
-          const baseline = height - chartVerticalPadding;
-          ctx.lineWidth = 1.4;
-          ctx.lineCap = ctx.lineJoin = 'round';
-          const halfWidth = Math.min(3.25, width / 70);
-          startedAt ??= time;
-          const progress = animate ? Math.min(1, (time - startedAt) / 200) : 1;
-          const riseAt = point => point.submittedAt > animateAfter ? 1 - (1 - progress) ** 2 : 1;
-          const [first] = points;
-          const last = points.at(-1);
-          const start = pulseX(first, left, width) - (first.deltaTokens > 0 ? halfWidth : 0);
-          const end = pulseX(last, left, width) + (last.deltaTokens > 0 ? halfWidth : 0);
-          const line = new Path2D();
-          line.moveTo(start, baseline);
-          for (const point of points) {
-            const x = pulseX(point, left, width);
-            if (point.deltaTokens > 0) {
-              const peak = baseline - Math.max(1.5, (baseline - chartVerticalPadding) * point.deltaTokens / maximum) * riseAt(point);
-              line.lineTo(x - halfWidth, baseline);
-              line.bezierCurveTo(x - halfWidth * 0.54, baseline, x - halfWidth * 0.38, peak, x, peak);
-              line.bezierCurveTo(x + halfWidth * 0.38, peak, x + halfWidth * 0.54, baseline, x + halfWidth, baseline);
-            } else line.lineTo(x, baseline);
-          }
-          paintUsagePath(ctx, line, baseline, start, end);
-          for (const point of points) {
-            if (point.deltaTokens > 0) continue;
-            ctx.beginPath();
-            ctx.arc(pulseX(point, left, width), baseline, 1.4 * riseAt(point), 0, Math.PI * 2);
-            ctx.fill();
-          }
-          if (progress < 1) schedule();
-        }
-
-        usagePainters.set(chart, schedule);
-        schedule();
-      }
-
-      function usageCard({ recent, daily }, now, animateAfter, windowStart) {
-        const container = document.createElement('div'), chart = document.createElement('canvas');
-        const meta = document.createElement('div'), tools = document.createElement('span');
-        container.className = 'ladder-recent';
-        chart.className = 'ladder-chart';
-        chart.width = 320;
-        chart.height = 60;
-        chart.setAttribute('role', 'img');
-        chart.setAttribute('aria-label', usageChartLabel());
-        meta.className = 'ladder-recent-meta';
-        tools.className = 'ladder-recent-tools';
-        const byDay = rankDays > 1, latest = recent?.points.at(-1);
-        const dateLabel = time => locale.date(time, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' });
-        const timeOf = point => byDay ? point.at : point.submittedAt;
-        const tokensOf = point => byDay ? point.tokens : point.deltaTokens;
-        const span = byDay ? (rankDays - 1) * DAY_MS : RECENT_STATS_MS;
-        const left = byDay ? windowStart : now - span;
-        const points = byDay ? dailyUsagePoints(daily, left, rankDays) : recent?.points ?? [];
-        tools.textContent = toolText(recent?.topModel, recent?.topCli);
-        tools.title = tools.textContent;
-        meta.append(tools);
-        if (!byDay) {
-          const speed = document.createElement('strong');
-          speed.className = 'ladder-recent-speed';
-          speed.textContent = speedText(latest?.avgTps);
-          speed.title = t('leaderboard-average-speed');
-          meta.append(speed);
-        }
-        const pointTitle = point => byDay ? `${dateLabel(point.at)} – ${dateLabel(point.at + DAY_MS)} · ${point.tokens === 0 ? `${locale.number(0)} MB` : formatTokenMB(point.tokens)}` +
-          (point.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '')
-          : `${shortClock(point.submittedAt)} · ${locale.number(point.deltaTokens)} Token · ${speedText(point.avgTps)}`;
-        const latestPoint = points.at(-1);
-        chart.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : usageChartLabel();
-        container.append(chart);
-        if (byDay) {
-          const axis = document.createElement('div');
-          axis.className = 'ladder-chart-axis';
-          for (const offset of [0, Math.round((rankDays - 1) / 2), rankDays - 1]) {
-            const label = document.createElement('span');
-            label.textContent = dateLabel(left + (offset + 1) * DAY_MS);
-            axis.append(label);
-          }
-          container.append(axis);
-        }
-        container.append(meta);
-        if (!latestPoint) return container;
-        if (byDay) {
-          const width = chart.width, height = chart.height - chartVerticalPadding * 2;
-          const maximum = Math.max(1, ...points.map(tokensOf));
-          const x = point => width * Math.min(1, (timeOf(point) - left) / span);
-          const y = point => chartVerticalPadding + height * (1 - tokensOf(point) / maximum);
-          const paint = () => {
-            const ctx = chart.getContext('2d');
-            if (!ctx) return;
-            ctx.clearRect(0, 0, chart.width, chart.height);
-            ctx.lineWidth = 2;
-            paintUsagePath(ctx, dailyUsagePath(points, x, y), chart.height - chartVerticalPadding, x(points[0]), x(latestPoint));
-            for (const point of points) {
-              ctx.beginPath();
-              ctx.arc(x(point), y(point), 3, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          };
-          usagePainters.set(chart, paint);
-          paint();
-          chart.addEventListener('pointermove', event => {
-            const rect = chart.getBoundingClientRect();
-            const position = (event.clientX - rect.left) * chart.width / rect.width;
-            const nearest = points.reduce((a, b) => Math.abs(x(a) - position) <= Math.abs(x(b) - position) ? a : b);
-            chart.title = Math.abs(x(nearest) - position) > width * DAY_MS / span / 2 ? usageChartLabel() : pointTitle(nearest);
-          });
-        } else {
-          drawSubmissionPulses(chart, points, left, animateAfter);
-          chart.addEventListener('pointermove', event => {
-            const { left: edge, width } = chart.getBoundingClientRect();
-            const distance = point => Math.abs(pulseX(point, left, width) - (event.clientX - edge));
-            const nearest = points.reduce((a, b) => distance(a) <= distance(b) ? a : b);
-            chart.title = distance(nearest) <= 10 ? pointTitle(nearest) : usageChartLabel();
-          });
-        }
-        return container;
-      }
-
-      function renderRows(rows, username, ranking) {
-        const now = Date.now();
-        const speedBoard = rankDays === 0;
-        nextRecentExpiry = Infinity;
-        if (speedBoard) {
-          const offset = ranking?.clockOffset ?? 0;
-          rows = rows.filter(row => row.submittedAt + DAY_MS - offset > now)
-            .map((row, index) => ({ ...row, rank: index + 1 }));
-          for (const row of rows) nextRecentExpiry = Math.min(nextRecentExpiry, row.submittedAt + DAY_MS - offset);
-        }
-        rows = rows.map(row => {
-          if (!row.recent) return row;
-          const points = row.recent.points.filter(point => point.submittedAt > now - RECENT_STATS_MS);
-          if (points.length) nextRecentExpiry = Math.min(nextRecentExpiry, points[0].submittedAt + RECENT_STATS_MS);
-          return { ...row, recent: { ...row.recent, points } };
-        });
-        const previousPulses = animateToday && pulseDay === renderedDay ? latestPulses : null;
-        pulseDay = rankDays === 1 ? renderedDay : '';
-        latestPulses = new Map(rankDays === 1 ? rows.map(row => [row.username, row.recent?.points.at(-1)?.submittedAt ?? -Infinity]) : []);
-        const signature = JSON.stringify([rankDays, ranking?.snapshotId, username, rows]);
+      function renderRows(rows, username) {
+        const signature = JSON.stringify([rankDays, username, rows]);
         if (signature === drawnRows) return;
         const period = periods.find(entry => entry.days === rankDays);
         drawnRows = signature;
-        const keyOf = row => JSON.stringify([rankDays, ranking?.snapshotId, username === row.username, row]);
+        const keyOf = row => JSON.stringify([rankDays, username === row.username, row]);
         rankingNodes = updateList(element('rows'), rows, rankingNodes, keyOf, row => {
           const item = document.createElement('li');
           if (username && row.username === username) item.classList.add('ladder-self');
-          if (speedBoard) item.classList.add('ladder-speed-row');
           const rank = document.createElement('span'), name = document.createElement('span'), user = document.createElement('div');
           const total = document.createElement('strong'), time = document.createElement('time');
           rank.className = 'ladder-rank';
@@ -1881,62 +1453,50 @@
           avatar.className = 'ladder-avatar';
           avatar.setAttribute('aria-hidden', 'true');
           setAvatar(avatar, row.username);
-          const badge = period && medal(row.rank, period);
-          if (badge) user.append(badge);
           user.append(avatar, name);
-          total.textContent = speedBoard ? speedText(row.avgTps) : formatTokenMB(row.tokens);
-          if (speedBoard) total.title = t('leaderboard-average-speed');
-          const uploadedAt = row.lastUploadAt ?? row.submittedAt;
-          const uploaded = speedBoard ? leaderboardTime(uploadedAt) : clock(uploadedAt);
-          time.setAttribute('data-localized-text', '');
-          time.textContent = (speedBoard ? uploaded : t('last-upload-at', uploaded)) +
-            (row.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '');
-          time.dateTime = new Date(uploadedAt).toISOString();
-          item.append(rank, user, total);
-          if (speedBoard) {
-            const tools = document.createElement('span');
-            tools.className = 'ladder-recent ladder-recent-tools';
-            tools.textContent = toolText(row.topModel, row.topCli);
-            tools.title = tools.textContent;
-            item.append(tools);
-          } else item.append(usageCard(row, now, previousPulses?.get(row.username) ?? Infinity, ranking.windowStart));
-          item.append(time);
+          const badge = medal(row.rank, period);
+          if (badge) user.append(badge);
+          total.textContent = formatTokenMB(row.tokens);
+          const uploaded = clock(row.submittedAt);
+          if (rankDays !== 1) time.setAttribute('data-localized-text', '');
+          time.textContent = rankDays === 1 ? uploaded : t('last-upload-at', uploaded);
+          time.dateTime = new Date(row.submittedAt).toISOString();
+          item.append(rank, user, total, time);
           return item;
         });
-        // Rows changed after a sync: give a still-default account avatar another chance too.
-        setAvatar(element('account-avatar'), username, { retry: true });
+        for (const avatar of observedAvatars) {
+          if (avatar.isConnected) continue;
+          avatarObserver.unobserve(avatar);
+          observedAvatars.delete(avatar);
+        }
       }
 
-      function renderAccount(username) {
+      function renderAccount(username, account) {
         const identity = element('mine');
         identity.textContent = username || t('signed-in-label');
         identity.title = username ?? '';
-        setAvatar(element('account-avatar'), username);
-        if (!rankingAccess) return;
+        let hasMedals = false;
         for (const period of periods) {
           const ranking = cachedRankings.get(period.days);
-          const row = username && ranking?.rows.find(row => row.username === username);
+          const row = username && ranking?.day === renderedDay ? ranking.rows.find(row => row.username === username) : null;
+          const freshToday = period.days === 1 && account.day === renderedDay && account.submitted &&
+            (!row || account.submittedAt >= row.submittedAt);
+          const tokens = freshToday ? account.tokens : row?.tokens;
           element('user-rank-' + period.days).textContent = row ? t('rank-position', locale.number(row.rank)) : '—';
-          element('user-tokens-' + period.days).textContent = formatTokenMB(row?.tokens);
+          element('user-tokens-' + period.days).textContent = formatTokenMB(tokens);
           const place = row?.rank >= 1 && row.rank <= podium.length ? row.rank : 0;
+          if (place) hasMedals = true;
           const slot = element('user-badge-' + period.days);
           if (Number(slot.dataset.place ?? 0) === place) continue;
           slot.dataset.place = place;
           slot.querySelector('.ladder-medal')?.remove();
           if (place) slot.append(medal(place, period));
         }
+        setAvatar(element('account-avatar'), username);
+        element('medals').hidden = !hasMedals;
       }
 
-      function countdownText(nextAt, time) {
-        const seconds = Math.ceil((nextAt - time) / 1000);
-        if (seconds <= 0) return '';
-        const hours = Math.floor(seconds / 3600);
-        const timer = [Math.floor(seconds / 60) % 60, seconds % 60]
-          .map(value => locale.number(value, { minimumIntegerDigits: 2 })).join(':');
-        return hours ? locale.number(hours) + ':' + timer : timer;
-      }
-
-      function renderUploadCountdown(snapshot, signedIn, time) {
+      function renderSyncCountdown(snapshot, signedIn, time) {
         const note = element('sync-countdown');
         const button = element('sync-now');
         const uploading = manualSyncPending || Boolean(snapshot?.uploading);
@@ -1944,40 +1504,32 @@
         button.disabled = !signedIn || busy || uploading || queued || Boolean(snapshot?.board?.banned) || snapshot?.board?.lockedUntil > time;
         button.classList.toggle('is-queued', queued);
         const queuedNote = queued ? t('sync-queued') : '';
-        const buttonTitle = queuedNote || t('upload-now');
-        if (button.title !== buttonTitle) button.title = buttonTitle;
+        if (button.title !== (queuedNote || t('sync-now'))) button.title = queuedNote || t('sync-now');
+        if (note.title !== queuedNote) note.title = queuedNote;
         let text = '';
         if (signedIn && !snapshot?.board?.banned) {
-          if (uploading) text = t('uploading-countdown');
+          if (uploading) text = t('sync-in-progress');
           else if (Number.isFinite(snapshot.nextAutomaticAt)) {
-            text = countdownText(snapshot.nextAutomaticAt, time) || t('upload-waiting');
+            const seconds = Math.ceil((snapshot.nextAutomaticAt - time) / 1000);
+            if (seconds > 0) {
+              const hours = Math.floor(seconds / 3600);
+              const timer = [Math.floor(seconds / 60) % 60, seconds % 60]
+                .map(value => locale.number(value, { minimumIntegerDigits: 2 })).join(':');
+              text = t('next-sync-countdown', hours ? locale.number(hours) + ':' + timer : timer);
+            } else text = t('sync-waiting');
           }
         }
         if (note.textContent !== (text || '—')) note.textContent = text || '—';
-        const hint = queuedNote || text;
-        if (note.title !== hint) note.title = hint;
+        note.hidden = false;
       }
 
-      function renderRankCountdown(time) {
-        const note = element('refresh-countdown');
-        const scheduled = rankRequests.get(rankDays);
-        const text = rankingPending?.days === rankDays ? t('sync-in-progress')
-          : scheduled?.day === renderedDay ? countdownText(scheduled.next, time) || t('sync-waiting') : '—';
-        if (note.textContent !== text) note.textContent = text;
-        if (note.title !== text) note.title = text;
-      }
-
-      function renderToolbarTime(note, lastAt) {
+      function renderSyncResult(snapshot) {
+        const note = element('sync-result');
+        const lastAt = snapshot?.lastSyncAt;
         const validTime = Number.isFinite(lastAt);
-        const text = validTime ? shortClock(lastAt) : '—';
+        const text = t('last-sync-time', validTime ? shortClock(lastAt) : '—');
         note.title = validTime ? clock(lastAt) : '';
         if (note.textContent !== text) note.textContent = text;
-        if (validTime) note.dateTime = new Date(lastAt).toISOString();
-        else note.removeAttribute('datetime');
-      }
-
-      function renderUploadResult(snapshot) {
-        renderToolbarTime(element('sync-result'), snapshot?.lastSyncAt);
         const failure = element('sync-error'), record = snapshot?.lastUpload;
         const failed = Number.isFinite(record?.at) && !['accepted', 'initialized', 'duplicate'].includes(record.code);
         const error = failed ? t('last-sync-failed', shortClock(record.at), messageFor(record.code) ?? t('sync-failure-unknown')) : '';
@@ -1991,20 +1543,26 @@
         renderedDay = boardDay();
         const time = Date.now();
         const { board = {} } = model ?? {};
-        const snapshot = session ?? {};
-        const { board: account = {}, sessionProblem, initializing, historyProblem } = snapshot;
+        const snapshot = session ?? model ?? {};
+        const { board: account = board, sessionProblem, initializing, historyProblem } = snapshot;
         const selected = model?.days === rankDays;
-        const readyBoard = Array.isArray(board.rows);
+        const readyBoard = board.day === renderedDay && Array.isArray(board.rows);
         const live = selected && readyBoard;
         const cached = cachedRankings.get(rankDays);
-        const cachedRanking = cached ?? null;
-        const ranking = rankingAccess ? (live ? board : cachedRanking) : null;
+        const cachedRanking = cached?.day === renderedDay ? cached : null;
+        const ranking = live ? board : cachedRanking;
         const freshness = element('freshness');
         const notice = !ranking && !(selected && board.code) ? t('loading-leaderboard') : '';
         if (freshness.textContent !== notice) freshness.textContent = notice;
         freshness.hidden = !notice;
-        const refreshedAt = rankingAccess ? ((live ? model.updatedAt : null) ?? cachedRanking?.updatedAt ?? null) : null;
-        renderToolbarTime(element('refresh-time'), refreshedAt);
+        const refreshedAt = (live ? model.updatedAt : null) ?? cachedRanking?.updatedAt ?? null;
+        const refreshTime = element('refresh-time');
+        refreshTime.hidden = refreshedAt === null;
+        if (refreshedAt !== null) {
+          refreshTime.dateTime = new Date(refreshedAt).toISOString();
+          refreshTime.title = clock(refreshedAt);
+          refreshTime.textContent = t('leaderboard-refreshed-at', shortClock(refreshedAt));
+        }
         const signedIn = snapshot.signedIn ?? account.authenticated;
         const checkingLogin = typeof signedIn !== 'boolean';
         element('controls').hidden = false;
@@ -2018,28 +1576,23 @@
           : snapshot.logoutPending ? t('logout-pending') : '';
         if (logoutNote.textContent !== logoutText) logoutNote.textContent = logoutText;
         logoutNote.hidden = !logoutText;
-        const boardProblem = rankingAccess && selected ? messageFor(board.code) : undefined;
+        const boardProblem = selected ? messageFor(board.code) : undefined;
         const sessionStatus = checkingLogin ? t('checking-login') : '';
         const locked = account.lockedUntil > time;
         const authProblem = pendingLogin ? undefined : messageFor(sessionProblem);
         const actionMessage = messageFor(code);
-        const preferenceProblem = rankingPreferenceFailed ? t('ranking-preference-failed') : undefined;
-        element('status').textContent = authProblem ?? actionMessage ?? messageFor(loginProblem) ?? preferenceProblem ??
+        element('status').textContent = authProblem ?? actionMessage ?? messageFor(loginProblem) ??
           (account.banned ? messageFor('banned') : boardProblem) ??
           (locked ? messageFor('locked') : messageFor(historyProblem) ?? (initializing ? messageFor('history_pending') : sessionStatus));
-        const speedBoard = rankDays === 0;
-        element('rows').setAttribute('aria-label', t(speedBoard ? 'leaderboard-speed-tab' : 'period-rankings'));
-        element('empty').textContent = t('empty-rankings');
-        element('recent-caption').textContent = ranking?.cutoffAt === undefined ? usageChartLabel()
-          : `${usageChartLabel()} · ${t('leaderboard-cutoff', leaderboardTime(ranking.cutoffAt))}`;
-        element('recent-caption').hidden = speedBoard || !ranking;
+        element('rank-title').textContent = rankDays === 1 ? t('daily-rank') : t('period-rankings');
+        element('rows').setAttribute('aria-label', t(rankDays === 1 ? 'daily-usage-rankings' : 'period-rankings'));
+        element('empty').textContent = rankDays === 1 ? t('empty-today') : t('empty-rankings');
+        element('empty').hidden = !ranking || ranking.rows.length > 0;
         const username = signedIn ? account.username : '';
-        renderRows(ranking?.rows ?? [], username, ranking);
-        element('empty').hidden = !ranking || rankingNodes.size > 0;
-        if (signedIn) renderAccount(username);
-        renderUploadCountdown(snapshot, signedIn, time);
-        renderUploadResult(signedIn ? snapshot : null);
-        if (rankingAccess) renderRankCountdown(time);
+        renderRows(ranking?.rows ?? [], username);
+        if (signedIn) renderAccount(username, account);
+        renderSyncCountdown(snapshot, signedIn, time);
+        renderSyncResult(signedIn ? snapshot : null);
       }
 
       function scheduleRender() {
@@ -2048,12 +1601,11 @@
       }
 
       async function showCache(days = rankDays) {
-        const signal = rankingAccess?.signal;
-        if (!signal || days === 0 || cachedRankings.has(days)) return;
-        const { ranking } = await request('window-cache', { days }, signal);
-        if (signal.aborted || !ranking || ranking.hours !== days * 24) return;
+        if (cachedRankings.get(days)?.day === boardDay()) return;
+        const { ranking } = await request('cache', { days });
+        if (lifetime.signal.aborted || !ranking || ranking.day !== boardDay()) return;
         const cachedRanking = cachedRankings.get(days);
-        if (cachedRanking?.updatedAt >= ranking.updatedAt) return;
+        if (cachedRanking?.day === ranking.day && cachedRanking.updatedAt >= ranking.updatedAt) return;
         cachedRankings.set(days, ranking);
         scheduleRender();
       }
@@ -2074,109 +1626,75 @@
 
       function cacheRanking(result, days) {
         const { board, updatedAt } = result;
-        if (!rankingAccess || !Number.isSafeInteger(updatedAt) || !Array.isArray(board?.rows) || (days && board.hours !== days * 24)) return false;
-        cachedRankings.set(days, { ...board, updatedAt });
+        if (!Number.isSafeInteger(updatedAt) || board?.day !== boardDay() || !Array.isArray(board.rows)) return false;
+        const rows = board.rows.map(({ rank, username, tokens, submittedAt }) => ({ rank, username, tokens, submittedAt }));
+        cachedRankings.set(days, { day: board.day, rows, updatedAt });
         return true;
       }
 
-      function showRankingState(result, days) {
-        model = { days, board: result.board ?? { code: result.code }, updatedAt: result.updatedAt };
+      function showState(result, days = rankDays, updateSession = true) {
+        model = result.board ? result : { ...model, days, board: { code: result.code } };
+        if (typeof result.signedIn === 'boolean' && (updateSession || !session)) session = result;
         cacheRanking(result, days);
-        render();
-        if (days === 1 && Array.isArray(model.board.rows)) animateToday = true;
+        render(result.code ?? '');
         showSummaries();
       }
 
       function showSummaries() {
-        const signal = rankingAccess?.signal;
-        if (!signal || group.hidden) return;
-        const current = session, name = current?.signedIn && current.board?.username;
-        if (!name) { summaryAccount = ''; summaryQueue.clear(); return; }
-        const cutoff = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
-        const key = cutoff + '/' + name;
-        if (summaryAccount === key) return;
+        const current = session ?? model, name = current?.signedIn && current.board?.username;
+        if (!name) { summaryAccount = ''; summaryUpload = null; return; }
+        if (group.hidden) return;
+        const day = boardDay(), key = day + '/' + name;
+        const uploaded = current.lastUpload?.code === 'accepted' ? current.lastUpload.at : null;
+        const first = summaryAccount !== key, justUploaded = !first && uploaded !== null && uploaded !== summaryUpload;
+        if (!first && !justUploaded) return;
         summaryAccount = key;
+        if (first || uploaded !== null) summaryUpload = uploaded;
         for (const { days } of periods) {
-          if (days === rankDays || cachedRankings.get(days)?.cutoffAt === cutoff) continue;
-          void showCache(days);
-          summaryQueue.add(days);
+          if (days === rankDays) continue;
+          if (justUploaded) summaryQueue.add(days);
+          else void showCache(days).then(() => {
+            if (summaryAccount === key && cachedRankings.get(days)?.day !== day) summaryQueue.add(days);
+          });
         }
       }
 
       async function refresh(days = rankDays, force = false) {
-        const signal = rankingAccess?.signal;
-        if (!signal || group.hidden || lifetime.signal.aborted) return;
+        if (group.hidden || lifetime.signal.aborted) return;
         if (renderedDay !== boardDay()) render('');
+        if (busy) return;
         if (rankingPending) {
           if (!force) return;
           const running = rankingPending;
           try { await running.promise; } catch { /* A manual refresh may retry. */ }
-          if (signal.aborted) return;
           if (running.days !== days || !running.succeeded) return refresh(days, true);
           return;
         }
         const previous = rankRequests.get(days);
         if (!force && previous?.day === renderedDay && Date.now() < previous.next) return;
-        const startedAt = Date.now();
-        const day = renderedDay;
+        const requestedAt = revision, day = renderedDay;
         const pending = { days, succeeded: false, promise: undefined };
         summaryQueue.delete(days);
         rankingPending = pending;
-        renderRankCountdown(Date.now());
         pending.promise = (async () => {
-          const result = await request('window-state', { days, force }, signal);
-          if (signal.aborted) return;
-          pending.succeeded = Array.isArray(result.board?.rows) && !result.board.code;
-          const retry = pending.succeeded ? 0 : Math.min((previous?.retry || 5000) * 2, 30_000);
-          rankRequests.set(days, { day, retry, next: retry ? Date.now() + retry : startedAt + RANK_REFRESH_MS });
+          const result = await request('state', { days });
+          if (lifetime.signal.aborted) return;
+          pending.succeeded = Array.isArray(result.board?.rows);
+          const retry = pending.succeeded ? 0 : Math.min((previous?.retry || 500) * 2, 30_000);
+          rankRequests.set(days, { day, retry, next: Date.now() + (retry || RANK_REFRESH_MS) });
           if (!pending.succeeded && days !== rankDays) summaryQueue.add(days);
-          if (days !== rankDays) {
+          if (days !== rankDays || revision !== requestedAt) {
             if (cacheRanking(result, days)) scheduleRender();
-          } else showRankingState(result, days);
-        })().finally(() => {
-          if (rankingPending !== pending) return;
-          rankingPending = undefined;
-          if (!group.hidden && !lifetime.signal.aborted) {
-            const now = Date.now();
-            renderRankCountdown(now);
-            clearTimeout(rankWake);
-            const next = rankRequests.get(rankDays)?.next;
-            if (rankingAccess && Number.isFinite(next)) rankWake = setTimeout(() => void refresh(), Math.max(0, next - now));
-          }
-        });
+          } else showState(result, days, false);
+        })().finally(() => { rankingPending = undefined; });
         return pending.promise;
       }
 
       function showCachedRanking() {
-        animateToday = false;
         render('');
+        void showCache().then(() => refresh());
         if (!session) void refreshSession();
-        if (!rankingAccess) return;
-        void showCache();
-        void refresh(rankDays, true);
         showSummaries();
-      }
-
-      function setRankingEnabled(enabled) {
-        if (enabled === Boolean(rankingAccess)) return;
-        element('rank-toggle').setAttribute('aria-checked', String(enabled));
-        element('rank-toolbar').classList.toggle('is-off', !enabled);
-        element('ranking-content').hidden = !enabled;
-        element('personal-ranks').hidden = !enabled;
-        if (enabled) {
-          rankingAccess = new AbortController();
-          if (!group.hidden) showCachedRanking();
-        } else {
-          rankingAccess.abort();
-          clearTimeout(rankWake);
-          rankingAccess = rankingPending = model = undefined;
-          cachedRankings.clear();
-          rankRequests.clear();
-          summaryQueue.clear();
-          summaryAccount = '';
-          nextRecentExpiry = Infinity;
-          render('');
-        }
       }
 
       async function logout() {
@@ -2193,8 +1711,9 @@
         } finally { busy = false; }
         if (lifetime.signal.aborted) return;
         if (revision !== requestedAt) { render(); return; }
-        if (typeof result.signedIn === 'boolean') session = result;
-        render(result.code);
+        if (result.board) showState(result);
+        else render(result.code);
+        if (result.code === 'signed_out') void refresh();
       }
 
       async function poll() {
@@ -2210,8 +1729,8 @@
         revision++;
         pendingLogin = undefined;
         if (result.code === 'signed_in') {
-          if (typeof result.signedIn === 'boolean') session = result;
-          render(result.code);
+          showState(result);
+          void refresh();
         } else {
           loginProblem = Date.now() >= attempt.expiresAt ? 'login_expired' : result.code;
           render(loginProblem);
@@ -2220,7 +1739,6 @@
 
       if (!bridge?.request) return;
       for (const tab of rankTabs) tab.addEventListener('click', () => {
-        if (!rankingAccess) return;
         const days = Number(tab.dataset.rankDays);
         if (days === rankDays) return;
         rankDays = days;
@@ -2228,17 +1746,6 @@
         showCachedRanking();
       });
       group.addEventListener('tps-view-opened', showCachedRanking);
-      window.addEventListener('online', () => {
-        animateToday = false;
-        void refresh(rankDays, true);
-      }, { signal: lifetime.signal });
-      function redrawUsageCharts() {
-        for (const chart of element('rows').querySelectorAll('.ladder-chart')) usagePainters.get(chart)?.();
-      }
-      const usageResize = new ResizeObserver(redrawUsageCharts);
-      const usageTheme = new MutationObserver(redrawUsageCharts);
-      usageResize.observe(element('rows'));
-      usageTheme.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
       document.addEventListener('tps-language-changed', () => {
         drawnRows = '';
         rankingNodes.clear();
@@ -2246,26 +1753,9 @@
         render();
       }, { signal: lifetime.signal });
       element('update').addEventListener('click', async () => {
-        if (!rankingAccess) return;
         const button = element('update');
         button.classList.add('is-busy');
         try { await refresh(rankDays, true); } finally { button.classList.remove('is-busy'); }
-      });
-      const rankToggle = element('rank-toggle');
-      rankToggle.addEventListener('click', async () => {
-        const enabled = !rankingAccess;
-        const version = rankingPreferenceVersion;
-        rankToggle.disabled = true;
-        rankingPreferenceFailed = false;
-        if (!enabled) setRankingEnabled(false);
-        const preference = await request('ranking-preference', { enabled });
-        if (lifetime.signal.aborted) return;
-        rankingPreferenceFailed = preference.saved !== true;
-        if (version === rankingPreferenceVersion && typeof preference.enabled === 'boolean') {
-          setRankingEnabled(preference.enabled);
-        }
-        rankToggle.disabled = false;
-        render();
       });
       element('sync-now').addEventListener('click', async () => {
         if (element('sync-now').disabled) return;
@@ -2278,6 +1768,7 @@
         if (revision !== requestedAt) { scheduleRender(); return; }
         if (typeof result.signedIn === 'boolean') session = result;
         render(['locked', 'banned', 'removed'].includes(result.code) || typeof result.signedIn !== 'boolean' ? result.code : '');
+        showSummaries();
       });
       element('login').addEventListener('click', async () => {
         if (busy || pendingLogin) return;
@@ -2331,27 +1822,14 @@
         sessionPushVersion += 1;
         session = next;
         scheduleRender();
-      });
-      rankingPreferenceSubscription = bridge.on?.('tps.leaderboard.ranking-preference', preference => {
-        if (lifetime.signal.aborted || typeof preference?.enabled !== 'boolean') return;
-        rankingPreferenceVersion++;
-        setRankingEnabled(preference.enabled);
-      });
-      void request('ranking-preference').then(preference => {
-        if (lifetime.signal.aborted) return;
-        if (!rankingPreferenceVersion) setRankingEnabled(preference.enabled !== false);
-        rankToggle.disabled = false;
+        showSummaries();
       });
       void refreshSession();
+      for (const { days } of periods) void showCache(days);
       const interval = setInterval(() => {
         if (group.hidden) return;
-        const time = Date.now();
-        if (time >= nextRecentExpiry) render();
-        const snapshot = session;
-        renderUploadCountdown(snapshot, snapshot?.signedIn ?? snapshot?.board?.authenticated, time);
-        if (!rankingAccess) return;
-        renderRankCountdown(time);
-        showSummaries();
+        const snapshot = session ?? model;
+        renderSyncCountdown(snapshot, snapshot?.signedIn ?? snapshot?.board?.authenticated, Date.now());
         void refresh();
         if (!rankingPending) {
           for (const days of summaryQueue) {
@@ -2362,15 +1840,11 @@
       }, 1000);
       window.addEventListener('pagehide', () => {
         lifetime.abort();
-        rankingAccess?.abort();
-        avatarView.dispose();
-        usageResize.disconnect();
-        usageTheme.disconnect();
+        avatarObserver?.disconnect();
+        observedAvatars.clear();
         rankingSubscription?.dispose();
-        rankingPreferenceSubscription?.dispose();
         cancelAnimationFrame(leaderboardFrame);
         clearTimeout(retryLogin);
-        clearTimeout(rankWake);
         clearInterval(interval);
       }, { once: true });
     })();
