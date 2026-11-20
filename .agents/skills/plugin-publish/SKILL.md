@@ -1,11 +1,16 @@
 ---
-name: docs-update
-description: 在 TPS Plugin 的用户可见功能、界面、工具支持或安装方式变更并验证后，同步维护中英文 README 与 Orca 官方插件目录的介绍和配图。
+name: plugin-publish
+description: 负责 TPS Plugin 的版本发布和插件发布。核对版本号，同步中英文 README 与 Orca 插件目录资料，并在明确要求发布时创建 GitHub Release 和核验 Orca 插件目录。
 ---
 
-# 同步项目说明
+# TPS Plugin 版本发布与插件发布
 
 根据本次代码改动和验证结果，确定用户会看到的变化，以及哪些说明或截图需要更新。只修改受影响的内容。
+
+## 插件版本
+
+- 加载以版本号命名的开发分支或检查文档时，核对目标版本与 `orca-plugin.json`、`package.json` 的 `version`。用户指定了版本时，以指定版本为准。
+- 更新版本时同步修改这两个字段，运行 `orca plugin validate . --json`。如果本地 Orca 已加载该分支，重新加载后核对运行状态和实际显示的版本。
 
 ## 中英文 README
 
@@ -22,7 +27,7 @@ description: 在 TPS Plugin 的用户可见功能、界面、工具支持或安�
 
 只有用户明确要求发布时才操作。发布统一通过 **GitHub Release** 完成，不再单独推送标签。
 
-1. **准备版本**：确认要发布的提交已经合并到 `main`。`orca-plugin.json`、`package.json` 的版本号和 `CHANGELOG.md` 的版本小节都改成 `X.Y.Z`，并把 `[Unreleased]` 的内容移到该小节。
+1. **准备版本**：确认要发布的提交已经合并到 `main`，并按上面的规则核对两处版本号。在 `CHANGELOG.md` 添加 `X.Y.Z` 的版本小节，把 `[Unreleased]` 的内容移到该小节。
 2. **写入目录记录**：用发布提交运行 `orca plugin release-entry . --json`，把 CLI 生成的提交号、内容哈希和配图写入 `orca-catalog.json` 的新版本记录，保留已有版本。运行 `orca plugin validate orca-catalog.json`。
 3. **发布 Release**：在 GitHub 上新建 Release，标签填 `vX.Y.Z`，目标选发布提交（Release 会自动创建这个标签）；标题写 `TPS Plugin X.Y.Z`；说明使用 `CHANGELOG.md` 中该版本的内容。
    - 有 `gh` 时运行：`gh release create vX.Y.Z --target <发布提交> --title "TPS Plugin X.Y.Z" --notes-file <说明文件>`。

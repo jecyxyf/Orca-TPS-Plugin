@@ -46,4 +46,4 @@
 | 榜单与侧栏 | `node --test tests/leaderboard.test.mjs tests/panel.test.mjs tests/locales.test.mjs` |
 | 全量检查 | `npm test`，并检查实际发包，确认已有榜单请求携带短期统计，提交仍为一次请求。 |
 | 手工验收 | 以两个看榜端和至少一个提交端联调。检查周期切换、网络恢复和五分钟到期。验收优先使用本地或测试环境。 |
-| 发布资料 | 验证后用 `docs-update` 检查中英文 README 和 Orca 插件目录。发布时先准备兼容旧客户端的服务端，再更新插件。 |
+| 发布资料 | 验证后用 `plugin-publish` 检查中英文 README 和 Orca 插件目录。发布时先准备兼容旧客户端的服务端，再更新插件。 |

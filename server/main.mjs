@@ -5,6 +5,7 @@ import { openLeaderboardStore } from './store.mjs';
 import { HOUR_MS, hourStart } from '../src/leaderboard-stats.mjs';
 
 const env = process.env;
+const host = env.LEADERBOARD_HOST ?? '127.0.0.1';
 const port = Number(env.LEADERBOARD_PORT ?? 8787);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid LEADERBOARD_PORT');
 const filename = resolve(env.LEADERBOARD_DB ?? 'server/.data/leaderboard.sqlite');
@@ -19,7 +20,7 @@ const server = createLeaderboardServer({
   maxTokens: Number(env.LEADERBOARD_MAX_TOKENS ?? Number.MAX_SAFE_INTEGER),
   log: message => process.stderr.write(message + '\n')
 });
-server.listen(port, '127.0.0.1', () => process.stdout.write(`榜单服务在本机端口 ${port} 运行。\n`));
+server.listen(port, host, () => process.stdout.write(`榜单服务监听 ${host}:${port}。\n`));
 let hourlyTimer;
 function settleHourly() {
   const now = Date.now();

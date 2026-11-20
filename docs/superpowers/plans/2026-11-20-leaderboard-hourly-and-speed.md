@@ -52,6 +52,6 @@
 | 榜单、面板和翻译 | `node --test tests/leaderboard.test.mjs tests/panel.test.mjs tests/locales.test.mjs` |
 | 全量回归 | `npm test` 和 `git diff --check` |
 | 本地联调 | 用一个提交端和两个查看端，通过固定时钟跨整点和 24 小时边界。核对速度榜复用原上传包、小时包只发变化项、查看端拿到同一份前 100。 |
-| 用户说明 | 功能验证后用 `docs-update` 更新 `README.md`、`README.zh-CN.md` 及受影响的预览图，检查 `orca-plugin.json` 的简介和配图。清单或上架图有变化时运行 `orca plugin validate . --json`。 |
+| 用户说明 | 功能验证后用 `plugin-publish` 更新 `README.md`、`README.zh-CN.md` 及受影响的预览图，检查 `orca-plugin.json` 的简介和配图。清单或上架图有变化时运行 `orca plugin validate . --json`。 |
 
 发布顺序为兼容旧客户端的服务端在先，支持小时用量的新插件在后。联调以本地或测试环境为准，正式部署单独确认。
