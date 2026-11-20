@@ -1,4 +1,4 @@
-# 每日 Token 天梯榜服务
+# Token 天梯榜服务
 
 榜单和管理后台运行在同一个 Node.js 服务。Orca 插件使用 HTTPS 提交统计，SQLite 存在服务端磁盘。
 
@@ -25,6 +25,18 @@
 本地使用 Node.js 24 LTS 运行 `node --env-file=server/.env server/main.mjs`，打开 `/admin` 登录。注册单独的本地 OAuth 应用时，回调改为本地服务的 `/auth/github/callback`。运行 `npm test` 可用模拟 GitHub 服务验证完整的登录、提交、排名和管理流程。
 
 部署期间可以先启动服务。GitHub 凭据还未配置时，管理页显示待配置，`/healthz` 返回 `githubConfigured: false`。
+
+## 用量榜和速度榜
+
+| 接口 | 用途 |
+| --- | --- |
+| `POST /api/today/submit` | 原有 10 秒上传。带有有效速度且新增用量超过 500 Token 的成功上传可进入速度榜。 |
+| `POST /api/leaderboard/window-data` | 登录后，按设备提交变化的小时总量和已扫描的范围。请求体上限为 4096 字节。 |
+| `GET /api/leaderboard/usage?hours=24` | 读取整点榜单，也支持 `168` 和 `720`。 |
+| `GET /api/leaderboard/recent?hours=24&snapshotId=…` | 读取当前榜单用户的近期信息。 |
+| `GET /api/leaderboard/speeds` | 读取过去 24 小时最快的 100 笔合格上传。 |
+
+先部署兼容旧插件的服务端，再更新插件。首次启动时 SQLite 自动增加小时榜所需的表。旧每日榜继续使用现有数据，小时榜历史由新版插件按可读日志逐步上报。
 
 ## Ubuntu 部署
 

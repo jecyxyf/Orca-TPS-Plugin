@@ -132,7 +132,9 @@
     .section-detail { margin: 0; color: var(--muted); font-size: 11px; }
     .ladder-card { padding: 12px 16px; }
     #leaderboard { --ladder-medal-size: 48px; --ladder-medal-scale: .85; }
-    .ladder-tabs { margin-top: 6px; }
+    .war-tabs.ladder-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 6px; }
+    .ladder-tabs .war-tab { min-width: 0; padding-inline: 3px; font-size: 12px; overflow-wrap: anywhere; }
+    html:lang(zh-CN) .ladder-tabs { grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); }
     .ladder-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
     .ladder-control { min-height: 36px; padding-inline: 12px; font-size: 13px; font-weight: 700; }
     .ladder-secondary { color: var(--muted); background: var(--tag-bg); }
@@ -345,6 +347,9 @@
       font-size: 14px; line-height: 1.15; font-weight: 750; text-align: end; overflow-wrap: anywhere; max-width: 15ch;
     }
     .ladder-time { grid-area: time; color: var(--muted); font-size: 11px; }
+    .ladder-rows .ladder-speed-row { --ladder-row-size: 32px; }
+    .ladder-speed-row .ladder-total { white-space: nowrap; }
+    .ladder-speed-row .ladder-recent-tools { font-size: 11px; }
     .ladder-recent-caption { margin: 7px 0 0; color: var(--muted); font-size: 11px; }
     .ladder-recent { grid-area: recent; min-width: 0; }
     .ladder-chart {
@@ -535,7 +540,7 @@
           </div>
           <dl class="ladder-user-stats" id="ladder-personal-ranks" data-i18n-aria-label="personal-ranking" hidden>
             <div class="ladder-user-stat">
-              <dt data-i18n="today"></dt>
+              <dt data-i18n="last-twenty-four-hours"></dt>
               <dd class="ladder-user-position">
                 <span class="ladder-badge-slot" id="ladder-user-badge-1"></span>
                 <span class="ladder-user-rank" id="ladder-user-rank-1" data-localized-text>—</span>
@@ -598,9 +603,10 @@
         </div>
         <div id="ladder-ranking-content" hidden>
           <div class="war-tabs ladder-tabs" role="group" data-i18n-aria-label="ranking-period">
-            <button class="war-tab" type="button" data-rank-days="1" aria-pressed="true"><span data-i18n="today"></span></button>
+            <button class="war-tab" type="button" data-rank-days="1" aria-pressed="true"><span data-i18n="last-twenty-four-hours"></span></button>
             <button class="war-tab" type="button" data-rank-days="7" aria-pressed="false"><span data-i18n="last-seven-days"></span></button>
             <button class="war-tab" type="button" data-rank-days="30" aria-pressed="false"><span data-i18n="last-thirty-days"></span></button>
+            <button class="war-tab" type="button" data-rank-days="0" aria-pressed="false"><span data-i18n="leaderboard-speed-tab"></span></button>
           </div>
           <p class="ladder-note" id="ladder-freshness" role="status" data-localized-text hidden></p>
           <p class="ladder-recent-caption" id="ladder-recent-caption" data-i18n="leaderboard-five-minute-usage" hidden></p>
@@ -1446,13 +1452,13 @@
       const boardDay = () => new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const rankTabs = [...group.querySelectorAll('[data-rank-days]')];
       const periods = [
-        { days: 1, mark: 'Ⅰ', title: 'today-period' }, { days: 7, mark: '7', title: 'seven-day-period' },
+        { days: 1, mark: 'Ⅰ', title: 'last-twenty-four-hours' }, { days: 7, mark: '7', title: 'seven-day-period' },
         { days: 30, mark: '30', title: 'thirty-day-period' }
       ];
       const podium = ['gold-medal', 'silver-medal', 'bronze-medal'];
       const messages = {
         unavailable: 'leaderboard-unavailable', github_unavailable: 'github-login-unavailable',
-        login_required: 'login-required', banned: 'account-banned',
+        login_required: 'login-required', banned: 'account-banned', server_update_required: 'leaderboard-server-update-required',
         installation_unavailable: 'installation-save-failed', upgrade_required: 'update-required',
         session_expired: 'session-expired',
         login_expired: 'login-expired', login_denied: 'github-login-denied',
@@ -1469,12 +1475,12 @@
       const messageFor = code => Object.hasOwn(messages, code) ? t(messages[code]) : undefined;
       let model, session, pendingLogin, retryLogin, rankDays = 1;
       const cachedRankings = new Map(), summaryQueue = new Set(), rankRequests = new Map();
-      const RANK_REFRESH_MS = 10_000, RECENT_STATS_MS = 5 * 60_000, DAY_MS = 86_400_000;
-      let rankingPending, sessionPushVersion = 0, rankingSubscription;
+      const RANK_REFRESH_MS = 10_000, RECENT_STATS_MS = 5 * 60_000, HOUR_MS = 3_600_000, DAY_MS = 86_400_000;
+      let rankingPending, rankWake, sessionPushVersion = 0, rankingSubscription;
       let rankingAccess, rankingPreferenceSubscription, rankingPreferenceVersion = 0, rankingPreferenceFailed = false;
       let busy = false, restoringSession = false, manualSyncPending = false;
       let revision = 0, drawnRows = '', renderedDay = '', loginProblem = '', messageCode = '';
-      let summaryAccount = '', summaryUpload = null;
+      let summaryAccount = '';
       let rankingNodes = new Map(), leaderboardFrame, nextRecentExpiry = Infinity;
       let animateToday = false, pulseDay = '', latestPulses = new Map();
       const usagePainters = new WeakMap();
@@ -1622,14 +1628,21 @@
       }
 
       const usageChartLabel = () => t(rankDays === 1 ? 'leaderboard-five-minute-usage' : 'leaderboard-daily-usage');
+      const speedText = value => Number.isFinite(value) ? `${locale.number(value, {
+        maximumFractionDigits: 1, ...(value >= 10_000 ? { notation: 'scientific' } : {}) })} tokens/s` : '—';
+      const leaderboardTime = time => locale.date(time, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+      const toolText = (model, cli) => `${model ?? '—'} · ${Object.hasOwn(AGENT_LABELS, cli) ? AGENT_LABELS[cli] : cli ?? '—'}`;
       const chartVerticalPadding = 4;
 
       function dailyUsagePoints(daily, left, days) {
         if (!Array.isArray(daily)) return [];
-        const totals = new Map(daily.map(({ day, tokens }) => [day, tokens]));
+        const totals = new Map(daily.map(point => [point.at ?? point.day, point]));
         return Array.from({ length: days }, (_, offset) => {
-          const day = new Date(left + offset * DAY_MS).toISOString().slice(0, 10);
-          return { day, tokens: totals.get(day) ?? 0 };
+          const at = left + offset * DAY_MS;
+          const day = new Date(at + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          const value = totals.get(at) ?? totals.get(day);
+          return { day, tokens: value?.tokens ?? 0, ...(typeof value?.complete === 'boolean' ? { at, complete: value.complete } : {}) };
         });
       }
 
@@ -1742,7 +1755,7 @@
         schedule();
       }
 
-      function usageCard({ recent, daily }, now, animateAfter) {
+      function usageCard({ recent, daily }, now, animateAfter, windowStart) {
         const container = document.createElement('div'), chart = document.createElement('canvas');
         const meta = document.createElement('div'), tools = document.createElement('span');
         container.className = 'ladder-recent';
@@ -1754,17 +1767,13 @@
         meta.className = 'ladder-recent-meta';
         tools.className = 'ladder-recent-tools';
         const byDay = rankDays > 1, latest = recent?.points.at(-1);
-        const dayStart = day => Date.parse(day + 'T00:00:00Z');
-        const dateLabel = time => locale.date(time, { timeZone: 'UTC', month: 'numeric', day: 'numeric' });
-        const timeOf = point => byDay ? dayStart(point.day) : point.submittedAt;
+        const dateLabel = time => locale.date(time, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' });
+        const timeOf = point => byDay ? point.at : point.submittedAt;
         const tokensOf = point => byDay ? point.tokens : point.deltaTokens;
         const span = byDay ? (rankDays - 1) * DAY_MS : RECENT_STATS_MS;
-        const left = (byDay ? dayStart(renderedDay) : now) - span;
+        const left = byDay ? windowStart : now - span;
         const points = byDay ? dailyUsagePoints(daily, left, rankDays) : recent?.points ?? [];
-        const speedText = value => Number.isFinite(value) ? `${locale.number(value, { maximumFractionDigits: 1 })} tokens/s` : '—';
-        const cli = recent?.topCli;
-        const cliLabel = Object.hasOwn(AGENT_LABELS, cli) ? AGENT_LABELS[cli] : cli;
-        tools.textContent = latest ? `${recent.topModel ?? '—'} · ${cliLabel ?? '—'}` : '— · —';
+        tools.textContent = toolText(recent?.topModel, recent?.topCli);
         tools.title = tools.textContent;
         meta.append(tools);
         if (!byDay) {
@@ -1774,7 +1783,8 @@
           speed.title = t('leaderboard-average-speed');
           meta.append(speed);
         }
-        const pointTitle = point => byDay ? `${point.day} · ${point.tokens === 0 ? `${locale.number(0)} MB` : formatTokenMB(point.tokens)}`
+        const pointTitle = point => byDay ? `${dateLabel(point.at)} – ${dateLabel(point.at + DAY_MS)} · ${point.tokens === 0 ? `${locale.number(0)} MB` : formatTokenMB(point.tokens)}` +
+          (point.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '')
           : `${shortClock(point.submittedAt)} · ${locale.number(point.deltaTokens)} Token · ${speedText(point.avgTps)}`;
         const latestPoint = points.at(-1);
         chart.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : usageChartLabel();
@@ -1784,7 +1794,7 @@
           axis.className = 'ladder-chart-axis';
           for (const offset of [0, Math.round((rankDays - 1) / 2), rankDays - 1]) {
             const label = document.createElement('span');
-            label.textContent = dateLabel(left + offset * DAY_MS);
+            label.textContent = dateLabel(left + (offset + 1) * DAY_MS);
             axis.append(label);
           }
           container.append(axis);
@@ -1828,9 +1838,16 @@
         return container;
       }
 
-      function renderRows(rows, username) {
+      function renderRows(rows, username, ranking) {
         const now = Date.now();
+        const speedBoard = rankDays === 0;
         nextRecentExpiry = Infinity;
+        if (speedBoard) {
+          const offset = ranking?.clockOffset ?? 0;
+          rows = rows.filter(row => row.submittedAt + DAY_MS - offset > now)
+            .map((row, index) => ({ ...row, rank: index + 1 }));
+          for (const row of rows) nextRecentExpiry = Math.min(nextRecentExpiry, row.submittedAt + DAY_MS - offset);
+        }
         rows = rows.map(row => {
           if (!row.recent) return row;
           const points = row.recent.points.filter(point => point.submittedAt > now - RECENT_STATS_MS);
@@ -1840,14 +1857,15 @@
         const previousPulses = animateToday && pulseDay === renderedDay ? latestPulses : null;
         pulseDay = rankDays === 1 ? renderedDay : '';
         latestPulses = new Map(rankDays === 1 ? rows.map(row => [row.username, row.recent?.points.at(-1)?.submittedAt ?? -Infinity]) : []);
-        const signature = JSON.stringify([rankDays, renderedDay, username, rows]);
+        const signature = JSON.stringify([rankDays, ranking?.snapshotId, username, rows]);
         if (signature === drawnRows) return;
         const period = periods.find(entry => entry.days === rankDays);
         drawnRows = signature;
-        const keyOf = row => JSON.stringify([rankDays, renderedDay, username === row.username, row]);
+        const keyOf = row => JSON.stringify([rankDays, ranking?.snapshotId, username === row.username, row]);
         rankingNodes = updateList(element('rows'), rows, rankingNodes, keyOf, row => {
           const item = document.createElement('li');
           if (username && row.username === username) item.classList.add('ladder-self');
+          if (speedBoard) item.classList.add('ladder-speed-row');
           const rank = document.createElement('span'), name = document.createElement('span'), user = document.createElement('div');
           const total = document.createElement('strong'), time = document.createElement('time');
           rank.className = 'ladder-rank';
@@ -1863,22 +1881,33 @@
           avatar.className = 'ladder-avatar';
           avatar.setAttribute('aria-hidden', 'true');
           setAvatar(avatar, row.username);
-          const badge = medal(row.rank, period);
+          const badge = period && medal(row.rank, period);
           if (badge) user.append(badge);
           user.append(avatar, name);
-          total.textContent = formatTokenMB(row.tokens);
-          const uploaded = clock(row.submittedAt);
+          total.textContent = speedBoard ? speedText(row.avgTps) : formatTokenMB(row.tokens);
+          if (speedBoard) total.title = t('leaderboard-average-speed');
+          const uploadedAt = row.lastUploadAt ?? row.submittedAt;
+          const uploaded = speedBoard ? leaderboardTime(uploadedAt) : clock(uploadedAt);
           time.setAttribute('data-localized-text', '');
-          time.textContent = t('last-upload-at', uploaded);
-          time.dateTime = new Date(row.submittedAt).toISOString();
-          item.append(rank, user, total, usageCard(row, now, previousPulses?.get(row.username) ?? Infinity), time);
+          time.textContent = (speedBoard ? uploaded : t('last-upload-at', uploaded)) +
+            (row.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '');
+          time.dateTime = new Date(uploadedAt).toISOString();
+          item.append(rank, user, total);
+          if (speedBoard) {
+            const tools = document.createElement('span');
+            tools.className = 'ladder-recent ladder-recent-tools';
+            tools.textContent = toolText(row.topModel, row.topCli);
+            tools.title = tools.textContent;
+            item.append(tools);
+          } else item.append(usageCard(row, now, previousPulses?.get(row.username) ?? Infinity, ranking.windowStart));
+          item.append(time);
           return item;
         });
         // Rows changed after a sync: give a still-default account avatar another chance too.
         setAvatar(element('account-avatar'), username, { retry: true });
       }
 
-      function renderAccount(username, account) {
+      function renderAccount(username) {
         const identity = element('mine');
         identity.textContent = username || t('signed-in-label');
         identity.title = username ?? '';
@@ -1886,12 +1915,9 @@
         if (!rankingAccess) return;
         for (const period of periods) {
           const ranking = cachedRankings.get(period.days);
-          const row = username && ranking?.day === renderedDay ? ranking.rows.find(row => row.username === username) : null;
-          const freshToday = period.days === 1 && account.day === renderedDay && account.submitted &&
-            (!row || account.submittedAt >= row.submittedAt);
-          const tokens = freshToday ? account.tokens : row?.tokens;
+          const row = username && ranking?.rows.find(row => row.username === username);
           element('user-rank-' + period.days).textContent = row ? t('rank-position', locale.number(row.rank)) : '—';
-          element('user-tokens-' + period.days).textContent = formatTokenMB(tokens);
+          element('user-tokens-' + period.days).textContent = formatTokenMB(row?.tokens);
           const place = row?.rank >= 1 && row.rank <= podium.length ? row.rank : 0;
           const slot = element('user-badge-' + period.days);
           if (Number(slot.dataset.place ?? 0) === place) continue;
@@ -1968,10 +1994,10 @@
         const snapshot = session ?? {};
         const { board: account = {}, sessionProblem, initializing, historyProblem } = snapshot;
         const selected = model?.days === rankDays;
-        const readyBoard = board.day === renderedDay && Array.isArray(board.rows);
+        const readyBoard = Array.isArray(board.rows);
         const live = selected && readyBoard;
         const cached = cachedRankings.get(rankDays);
-        const cachedRanking = cached?.day === renderedDay ? cached : null;
+        const cachedRanking = cached ?? null;
         const ranking = rankingAccess ? (live ? board : cachedRanking) : null;
         const freshness = element('freshness');
         const notice = !ranking && !(selected && board.code) ? t('loading-leaderboard') : '';
@@ -2001,14 +2027,16 @@
         element('status').textContent = authProblem ?? actionMessage ?? messageFor(loginProblem) ?? preferenceProblem ??
           (account.banned ? messageFor('banned') : boardProblem) ??
           (locked ? messageFor('locked') : messageFor(historyProblem) ?? (initializing ? messageFor('history_pending') : sessionStatus));
-        element('rows').setAttribute('aria-label', t(rankDays === 1 ? 'daily-usage-rankings' : 'period-rankings'));
-        element('empty').textContent = rankDays === 1 ? t('empty-today') : t('empty-rankings');
-        element('empty').hidden = !ranking || ranking.rows.length > 0;
-        element('recent-caption').textContent = usageChartLabel();
-        element('recent-caption').hidden = !ranking?.rows.length;
+        const speedBoard = rankDays === 0;
+        element('rows').setAttribute('aria-label', t(speedBoard ? 'leaderboard-speed-tab' : 'period-rankings'));
+        element('empty').textContent = t('empty-rankings');
+        element('recent-caption').textContent = ranking?.cutoffAt === undefined ? usageChartLabel()
+          : `${usageChartLabel()} · ${t('leaderboard-cutoff', leaderboardTime(ranking.cutoffAt))}`;
+        element('recent-caption').hidden = speedBoard || !ranking;
         const username = signedIn ? account.username : '';
-        renderRows(ranking?.rows ?? [], username);
-        if (signedIn) renderAccount(username, account);
+        renderRows(ranking?.rows ?? [], username, ranking);
+        element('empty').hidden = !ranking || rankingNodes.size > 0;
+        if (signedIn) renderAccount(username);
         renderUploadCountdown(snapshot, signedIn, time);
         renderUploadResult(signedIn ? snapshot : null);
         if (rankingAccess) renderRankCountdown(time);
@@ -2021,11 +2049,11 @@
 
       async function showCache(days = rankDays) {
         const signal = rankingAccess?.signal;
-        if (!signal || cachedRankings.get(days)?.day === boardDay()) return;
-        const { ranking } = await request('cache', { days }, signal);
-        if (signal.aborted || !ranking || ranking.day !== boardDay()) return;
+        if (!signal || days === 0 || cachedRankings.has(days)) return;
+        const { ranking } = await request('window-cache', { days }, signal);
+        if (signal.aborted || !ranking || ranking.hours !== days * 24) return;
         const cachedRanking = cachedRankings.get(days);
-        if (cachedRanking?.day === ranking.day && cachedRanking.updatedAt >= ranking.updatedAt) return;
+        if (cachedRanking?.updatedAt >= ranking.updatedAt) return;
         cachedRankings.set(days, ranking);
         scheduleRender();
       }
@@ -2046,9 +2074,8 @@
 
       function cacheRanking(result, days) {
         const { board, updatedAt } = result;
-        if (!rankingAccess || !Number.isSafeInteger(updatedAt) || board?.day !== boardDay() || !Array.isArray(board.rows)) return false;
-        const rows = board.rows.map(({ rank, username, tokens, submittedAt, recent, daily }) => ({ rank, username, tokens, submittedAt, recent, daily }));
-        cachedRankings.set(days, { day: board.day, rows, updatedAt });
+        if (!rankingAccess || !Number.isSafeInteger(updatedAt) || !Array.isArray(board?.rows) || (days && board.hours !== days * 24)) return false;
+        cachedRankings.set(days, { ...board, updatedAt });
         return true;
       }
 
@@ -2064,19 +2091,15 @@
         const signal = rankingAccess?.signal;
         if (!signal || group.hidden) return;
         const current = session, name = current?.signedIn && current.board?.username;
-        if (!name) { summaryAccount = ''; summaryUpload = null; return; }
-        const day = boardDay(), key = day + '/' + name;
-        const uploaded = current.lastUpload?.code === 'accepted' ? current.lastUpload.at : null;
-        const first = summaryAccount !== key, justUploaded = !first && uploaded !== null && uploaded !== summaryUpload;
-        if (!first && !justUploaded) return;
+        if (!name) { summaryAccount = ''; summaryQueue.clear(); return; }
+        const cutoff = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
+        const key = cutoff + '/' + name;
+        if (summaryAccount === key) return;
         summaryAccount = key;
-        if (first || uploaded !== null) summaryUpload = uploaded;
         for (const { days } of periods) {
-          if (days === rankDays) continue;
-          if (justUploaded) summaryQueue.add(days);
-          else void showCache(days).then(() => {
-            if (!signal.aborted && summaryAccount === key && cachedRankings.get(days)?.day !== day) summaryQueue.add(days);
-          });
+          if (days === rankDays || cachedRankings.get(days)?.cutoffAt === cutoff) continue;
+          void showCache(days);
+          summaryQueue.add(days);
         }
       }
 
@@ -2094,17 +2117,18 @@
         }
         const previous = rankRequests.get(days);
         if (!force && previous?.day === renderedDay && Date.now() < previous.next) return;
+        const startedAt = Date.now();
         const day = renderedDay;
         const pending = { days, succeeded: false, promise: undefined };
         summaryQueue.delete(days);
         rankingPending = pending;
         renderRankCountdown(Date.now());
         pending.promise = (async () => {
-          const result = await request('state', { days, force }, signal);
+          const result = await request('window-state', { days, force }, signal);
           if (signal.aborted) return;
-          pending.succeeded = Array.isArray(result.board?.rows);
-          const retry = pending.succeeded ? 0 : Math.min((previous?.retry || 500) * 2, 30_000);
-          rankRequests.set(days, { day, retry, next: Date.now() + (retry || RANK_REFRESH_MS) });
+          pending.succeeded = Array.isArray(result.board?.rows) && !result.board.code;
+          const retry = pending.succeeded ? 0 : Math.min((previous?.retry || 5000) * 2, 30_000);
+          rankRequests.set(days, { day, retry, next: retry ? Date.now() + retry : startedAt + RANK_REFRESH_MS });
           if (!pending.succeeded && days !== rankDays) summaryQueue.add(days);
           if (days !== rankDays) {
             if (cacheRanking(result, days)) scheduleRender();
@@ -2112,7 +2136,13 @@
         })().finally(() => {
           if (rankingPending !== pending) return;
           rankingPending = undefined;
-          if (!group.hidden && !lifetime.signal.aborted) renderRankCountdown(Date.now());
+          if (!group.hidden && !lifetime.signal.aborted) {
+            const now = Date.now();
+            renderRankCountdown(now);
+            clearTimeout(rankWake);
+            const next = rankRequests.get(rankDays)?.next;
+            if (rankingAccess && Number.isFinite(next)) rankWake = setTimeout(() => void refresh(), Math.max(0, next - now));
+          }
         });
         return pending.promise;
       }
@@ -2138,12 +2168,13 @@
           if (!group.hidden) showCachedRanking();
         } else {
           rankingAccess.abort();
+          clearTimeout(rankWake);
           rankingAccess = rankingPending = model = undefined;
           cachedRankings.clear();
           rankRequests.clear();
           summaryQueue.clear();
           summaryAccount = '';
-          summaryUpload = null;
+          nextRecentExpiry = Infinity;
           render('');
         }
       }
@@ -2320,6 +2351,7 @@
         renderUploadCountdown(snapshot, snapshot?.signedIn ?? snapshot?.board?.authenticated, time);
         if (!rankingAccess) return;
         renderRankCountdown(time);
+        showSummaries();
         void refresh();
         if (!rankingPending) {
           for (const days of summaryQueue) {
@@ -2338,6 +2370,7 @@
         rankingPreferenceSubscription?.dispose();
         cancelAnimationFrame(leaderboardFrame);
         clearTimeout(retryLogin);
+        clearTimeout(rankWake);
         clearInterval(interval);
       }, { once: true });
     })();

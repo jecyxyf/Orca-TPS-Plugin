@@ -4,7 +4,7 @@
   "id": "tps-stats",
   "name": "TPS Plugin",
   "version": "1.6.4",
-  "description": "Track request speed and token usage in Orca, compare models, and see five-minute and daily usage on a cross-device leaderboard.",
+  "description": "Track request speed and token usage in Orca, compare models, and explore hourly usage rankings and the fastest uploads from the past 24 hours.",
   "author": {
     "name": "jecyxyf",
     "url": "https://github.com/jecyxyf"
@@ -32,8 +32,8 @@
     },
     {
       "path": "assets/five-minute-stats/leaderboard.png",
-      "alt": "30-day leaderboard with a rankings switch, separate upload and sync controls, and shaded usage curves",
-      "caption": "Leaderboard · Follow five-minute activity and daily usage trends",
+      "alt": "Orca sidebar showing the 30-day usage ranking and the 24-hour speed ranking",
+      "caption": "Leaderboard · Compare usage trends and the fastest uploads",
       "theme": "dark"
     }
   ],

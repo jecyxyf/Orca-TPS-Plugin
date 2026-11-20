@@ -4,6 +4,8 @@ import { leaderboardDay, leaderboardDayStart } from './usage-summary.mjs';
 import { validInstallationId } from './leaderboard-installation.mjs';
 import { createAvatarCache, githubLoginKey } from './leaderboard-avatars.mjs';
 import { validStatsLabel, validStatsPoint } from './leaderboard-stats.mjs';
+import { uploadHourChanges } from './hourly-upload.mjs';
+import { createWindowViews } from './leaderboard-windows.mjs';
 
 const METHOD = 'tps.leaderboard';
 const SECRET = 'leaderboard-session';
@@ -48,7 +50,7 @@ function publicRows(rows, days, day) {
 }
 
 export function startLeaderboard(orca, {
-  readUsage, readHistory, stats, endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
+  readUsage, readHistory, readHours, stats, endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
   fetcher = fetch, avatarFetcher = fetch, now = () => new Date()
 }) {
   const base = new URL(endpoint);
@@ -58,6 +60,7 @@ export function startLeaderboard(orca, {
   }
   const lifetime = new AbortController();
   const avatars = createAvatarCache({ fetcher: avatarFetcher, now: () => now().getTime(), signal: lifetime.signal });
+  const windows = createWindowViews({ storage: orca.storage, origin: base.origin, request, now: () => now().getTime() });
   const host = orca.host;
   let token = '', login, submitting, uploadingKind = null, scheduling = false, nextAttempt = null;
   let credentialWrite = Promise.resolve();
@@ -77,6 +80,7 @@ export function startLeaderboard(orca, {
     });
   let lastUpload = null, lastSyncAt = null, manualQueued = false, localUploadAt = 0;
   let installationReady;
+  let hourUploadRunning = false, nextHourUploadAt = 0, uploadWake;
   const secretAvailable = method => orca.grantedCapabilities?.includes('secrets:own') && host?.has(method);
   const today = () => leaderboardDay(now().getTime());
 
@@ -226,7 +230,8 @@ export function startLeaderboard(orca, {
     await persistCredentials();
   }
 
-  async function request(path, { body, auth = true, credential = auth ? token : '', requestId, etag, acceptEtag = false, signal } = {}) {
+  async function request(path, { body, auth = true, credential = auth ? token : '', requestId, etag, acceptEtag = false,
+    viewHeaders = false, signal } = {}) {
     try {
       const headers = { Accept: 'application/json' };
       if (credential) headers.Authorization = 'Bearer ' + credential;
@@ -238,12 +243,14 @@ export function startLeaderboard(orca, {
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(10_000), ...(signal ? [signal] : [])])
       });
-      if (response.status === 304 && etag) return { notModified: true };
+      const serverTime = viewHeaders ? Date.parse(response.headers?.get?.('date') ?? '') : undefined;
+      if (response.status === 304 && etag) return { notModified: true, ...(viewHeaders ? { serverTime } : {}) };
       const result = await response.json();
       if (!result || typeof result !== 'object') return { code: 'unavailable' };
       if (auth && credential && token === credential && response.status === 401) {
         await saveToken('', 'session_expired');
       }
+      if (viewHeaders) return { ...result, serverTime, etag: response.headers?.get?.('etag') };
       return acceptEtag ? { ...result, etag: response.headers?.get?.('etag') } : result;
     } catch {
       return { code: 'unavailable' };
@@ -258,6 +265,7 @@ export function startLeaderboard(orca, {
       else {
         rankingAccess.abort();
         rankingAccess = undefined;
+        windows.clear();
       }
       try { orca.panels.post?.(METHOD + '.ranking-preference', { enabled }); } catch {}
     }
@@ -456,13 +464,17 @@ export function startLeaderboard(orca, {
     const score = { day: preview.day, installationId: id, tokens: preview.tokens };
     const options = stats ? await stats.prepare(sessionKey(credential), score) : { requestId: randomUUID(), body: score };
     if (!stillEnabled() || token !== credential || lifetime.signal.aborted) return { code: 'upload_disabled' };
+    const requestedAt = now().getTime();
     let result = await request('/api/today/submit', { ...options, credential });
     if (kind === 'automatic' && result.code === 'unavailable' && token === credential && stillEnabled()) {
       result = await request('/api/today/submit', { ...options, credential });
     }
     if (stats) await stats.settle(options, result.code);
     if (token === credential) {
-      if (result.code !== 'banned') localUploadAt = now().getTime() + UPLOAD_INTERVAL;
+      if (result.code !== 'banned') {
+        const start = SYNC_SUCCEEDED.has(result.code) ? requestedAt : now().getTime();
+        localUploadAt = Math.max(start + UPLOAD_INTERVAL, result.nextUploadAt ?? 0);
+      }
       rememberUpload(result);
     }
     return result;
@@ -501,7 +513,10 @@ export function startLeaderboard(orca, {
       const result = await submit(preview, kind, stillSignedIn);
       if (stillSignedIn()) {
         recordUpload(kind, result.code);
-        if (!banned) nextAttempt = Math.max(now().getTime() + UPLOAD_INTERVAL, result.nextUploadAt ?? 0, result.lockedUntil ?? 0);
+        if (!banned) {
+          const retryAt = SYNC_SUCCEEDED.has(result.code) ? localUploadAt : now().getTime() + UPLOAD_INTERVAL;
+          nextAttempt = Math.max(retryAt, result.nextUploadAt ?? 0, result.lockedUntil ?? 0);
+        }
       }
     } finally { scheduling = false; }
   }
@@ -549,6 +564,24 @@ export function startLeaderboard(orca, {
     } finally { job.running = false; }
   }
 
+  async function runHourUpload() {
+    const time = now().getTime();
+    if (!readHours || !token || !username || banned || hourUploadRunning || time < nextHourUploadAt || lifetime.signal.aborted) return;
+    const credential = token, identity = githubLoginKey(username);
+    const active = () => token === credential && githubLoginKey(username) === identity && !banned && !lifetime.signal.aborted;
+    if (!identity) return;
+    hourUploadRunning = true;
+    nextHourUploadAt = time + UPLOAD_INTERVAL;
+    try {
+      const id = await installationId();
+      if (!id || !active()) return;
+      const outcome = await uploadHourChanges({ storage: orca.storage, identity: `${base.origin}/${identity}/${id}`,
+        installationId: id, now: time, readHours, active,
+        send: options => request('/api/leaderboard/window-data', { ...options, credential }) });
+      if (outcome === 'not_found') nextHourUploadAt = time + 5 * 60_000;
+    } finally { hourUploadRunning = false; }
+  }
+
   async function manualSync(payload, days) {
     const reply = code => ({ code, ...panelState(days) });
     if (!token) return reply('login_required');
@@ -589,6 +622,17 @@ export function startLeaderboard(orca, {
   const registration = orca.panels.handle(METHOD, async payload => {
     const days = payload?.days === 7 || payload?.days === 30 ? payload.days : 1;
     if (payload?.action === 'ranking-preference') return rankingPreference(payload.enabled);
+    if (payload?.action === 'window-state' || payload?.action === 'window-cache') {
+      await rankingPreferenceReady;
+      const signal = rankingAccess?.signal;
+      if (!signal) return {};
+      const hours = payload.days === 0 ? 0 : days * 24;
+      if (payload.action === 'window-cache') return { ranking: await windows.load(hours, signal) };
+      const result = await windows.fetch(hours, payload.force === true, signal);
+      if (signal.aborted) return {};
+      const { updatedAt, ...board } = result;
+      return { board, updatedAt: updatedAt ?? null };
+    }
     if (payload?.action === 'cache') {
       await rankingPreferenceReady;
       const signal = rankingAccess?.signal;
@@ -603,7 +647,7 @@ export function startLeaderboard(orca, {
       case 'avatar': {
         const key = githubLoginKey(payload.username);
         if (key === null) return { image: null };
-        const known = githubLoginKey(username) === key || [...rankingCaches.values()].some(cache =>
+        const known = githubLoginKey(username) === key || windows.known(key) || [...rankingCaches.values()].some(cache =>
           cache.value?.rows.some(row => githubLoginKey(row.username) === key));
         return { image: known ? await avatars.get(key) : null };
       }
@@ -632,9 +676,24 @@ export function startLeaderboard(orca, {
       default: return { code: 'invalid' };
     }
   });
+  function wakeForUpload() {
+    if (uploadWake || !token || !Number.isFinite(nextAttempt) || lifetime.signal.aborted) return;
+    const remaining = nextAttempt - now().getTime();
+    if (remaining <= 0 || remaining > 1000) return;
+    uploadWake = setTimeout(() => {
+      uploadWake = undefined;
+      void runScheduled().catch(() => {}).finally(publishSession);
+    }, remaining);
+    uploadWake.unref?.();
+  }
+
   function tick() {
     void ready.then(() => { revokeSessions(); publishSession(); });
-    void runHistoryInitialization().catch(() => {}).then(runScheduled).catch(() => {}).finally(publishSession);
+    if (readHours) void ready.then(runHourUpload).catch(() => {});
+    void runHistoryInitialization().catch(() => {}).then(runScheduled).catch(() => {}).finally(() => {
+      publishSession();
+      wakeForUpload();
+    });
   }
   const timer = setInterval(tick, 1000);
   timer.unref?.();
@@ -643,6 +702,7 @@ export function startLeaderboard(orca, {
     lifetime.abort();
     rankingAccess?.abort();
     clearInterval(timer);
+    clearTimeout(uploadWake);
     registration.dispose?.();
   };
 }
