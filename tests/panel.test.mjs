@@ -116,15 +116,17 @@ test('today usage connects pulses at real timestamps and animates new points onc
     bezierCurveTo(...points) { this.points.push(points.slice(-2)); }
     closePath() { this.points.push('closed'); }
   }
-  let path;
+  let path, savedAlpha;
   const ctx = {
+    globalAlpha: 1,
     setTransform() {}, clearRect() { paths.length = areas.length = 0; }, beginPath() { path = []; },
     createLinearGradient() { return { addColorStop(...stop) { stops.push(stop); } }; },
-    save() {}, restore() {},
+    save() { savedAlpha = this.globalAlpha; },
+    restore() { this.globalAlpha = savedAlpha; },
     stroke(line) { paths.push(line.points); },
     arc(...point) { path.push(point.slice(0, 3)); },
     fill(area) {
-      if (area) areas.push({ points: area.points, opacity: this.globalAlpha });
+      if (area) areas.push({ points: area.points, opacity: this.globalAlpha, style: this.fillStyle });
       else paths.push(path);
     }
   };
@@ -143,11 +145,13 @@ test('today usage connects pulses at real timestamps and animates new points onc
     { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
   frames.shift()(1000);
   assert.deepEqual([chart.width, chart.height], [616, 60]);
-  assert.deepEqual(stops, [[0, 'transparent'], [0.72, '#60a589'], [0, '#60a589'], [0.58, '#60a589'], [1, '#ff6b72']]);
+  assert.deepEqual(stops, [[0, '#60a589'], [0.58, '#60a589'], [1, '#ff6b72']]);
   assert.deepEqual(paths[0].slice(2, 7), [[24, 15], [27.25, 26], [44, 26], [93.75, 26], [97, 26]]);
   assert.deepEqual(paths[1][0], [44, 26, 1.4]);
   assert.deepEqual(areas[0].points, [...paths[0], [100.25, 26], [20.75, 26], 'closed']);
-  assert.ok(areas[0].opacity > 0 && areas[0].opacity < 1);
+  assert.equal(areas[0].opacity, 0.5);
+  assert.equal(areas[0].style, ctx.strokeStyle);
+  assert.equal(ctx.globalAlpha, 1);
   frames.shift()(1200);
   assert.deepEqual(paths[0][6], [97, 4]);
   assert.deepEqual(areas[0].points[6], [97, 4]);

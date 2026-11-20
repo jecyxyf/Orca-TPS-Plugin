@@ -1564,20 +1564,16 @@
         area.lineTo(lastX, baseline);
         area.lineTo(firstX, baseline);
         area.closePath();
-        const shade = ctx.createLinearGradient(0, baseline, 0, chartPadding);
-        shade.addColorStop(0, 'transparent');
-        shade.addColorStop(0.72, low);
-        ctx.save();
-        ctx.globalAlpha = 0.34;
-        ctx.fillStyle = shade;
-        ctx.fill(area);
-        ctx.restore();
 
         const gradient = ctx.createLinearGradient(0, baseline, 0, chartPadding);
         gradient.addColorStop(0, low);
         gradient.addColorStop(0.58, low);
         gradient.addColorStop(1, high);
         ctx.strokeStyle = ctx.fillStyle = gradient;
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.fill(area);
+        ctx.restore();
         ctx.stroke(line);
       }
 
