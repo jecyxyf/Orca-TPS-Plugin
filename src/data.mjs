@@ -22,7 +22,8 @@ import {
   readJsonlMetadata,
   recentRecords
 } from './parsers.mjs';
-import { BACKFILL_BYTES, HISTORY_DAYS, accumulateRecords, dayKeyAgo, leaderboardDayStart } from './usage-summary.mjs';
+import { BACKFILL_BYTES, HISTORY_DAYS, accumulateRecords, dayKeyAgo, leaderboardDayStart, trimRecentRequests } from './usage-summary.mjs';
+import { RECENT_STATS_MS } from './leaderboard-stats.mjs';
 import { hermesSources, readHermesRecords, readHermesSessions } from './hermes.mjs';
 
 const MAX_FILES = 1500, MAX_DIRECTORIES = 500, MAX_DEPTH = 8, MAX_SUBAGENT_FILES = 200;
@@ -1086,11 +1087,17 @@ export async function readCodexUsageFile(file, minDay) {
 }
 
 function rankedUsage(window) {
-  return window ? { ...window, totals: {} } : undefined;
+  if (!window) return undefined;
+  const result = { ...window, totals: {} };
+  if (window.includeRecent) Object.assign(result, { recent: [], recentFrom: Date.now() - RECENT_STATS_MS });
+  return result;
 }
 
 function usageResult(days, rank) {
-  return rank ? { days, leaderboardDays: rank.totals, leaderboardFrom: rank.from } : days;
+  if (!rank) return days;
+  const result = { days, leaderboardDays: rank.totals, leaderboardFrom: rank.from };
+  if (rank.recent) result.recent = trimRecentRequests(rank.recent);
+  return result;
 }
 
 async function addCodexStreamRecords(days, file, minDay, leaderboardDays, pace = readPacer()) {
@@ -1231,8 +1238,9 @@ async function readAntigravityUsage(transcript, conversationId, rankWindow) {
 /** Descriptors for the usage index: Codex, Claude and Pi session files, OpenCode sessions, and Antigravity conversations. */
 export async function discoverUsageUnits(cutoffMs, options = {}) {
   const roots = await configuredRoots(options.roots, options.includeDefaults !== false);
-  const { rankDay, rankFrom = rankDay } = options;
-  const rankWindow = rankDay ? { from: rankFrom, start: leaderboardDayStart(rankFrom), end: leaderboardDayStart(rankDay) + 86_400_000 } : undefined;
+  const { rankDay, rankFrom = rankDay, includeRecent = false } = options;
+  const rankWindow = rankDay ? { from: rankFrom, start: leaderboardDayStart(rankFrom),
+    end: leaderboardDayStart(rankDay) + 86_400_000, includeRecent } : undefined;
   // Mirrors are append-only transcripts. Keep the largest copy; use its modification time to break ties.
   // A sync can give a stale copy a newer mtime, so root order and mtime alone cannot identify the fullest log.
   const units = [];

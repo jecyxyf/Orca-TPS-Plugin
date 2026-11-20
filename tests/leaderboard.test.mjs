@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createLeaderboardServer } from '../server/app.mjs';
 import { openLeaderboardStore } from '../server/store.mjs';
 import { startLeaderboard } from '../src/leaderboard.mjs';
+import { createSubmissionStats } from '../src/submission-stats.mjs';
 import { createAvatarCache } from '../src/leaderboard-avatars.mjs';
 import { discoverUsageUnits } from '../src/data.mjs';
 import { createUsageIndex, leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
@@ -73,8 +74,8 @@ async function fixture(t, names = ['alice', 'bob']) {
     assert.equal(response.status, 200);
     return (await response.json()).token;
   }
-  const submit = (token, tokens, requestId = randomUUID(), day = leaderboardDay(clock), installationId) => post(
-    '/api/today/submit', { day, tokens, installationId }, { ...bearer(token), 'Idempotency-Key': requestId }
+  const submit = (token, tokens, requestId = randomUUID(), day = leaderboardDay(clock), installationId, stats) => post(
+    '/api/today/submit', { day, tokens, installationId, stats }, { ...bearer(token), 'Idempotency-Key': requestId }
   );
 
   async function websiteLogin(githubName) {
@@ -109,8 +110,185 @@ async function fixture(t, names = ['alice', 'bob']) {
   const form = (route, cookie, fields, origin = ORIGIN) => call(route, {
     method: 'POST', headers: { cookie, origin }, body: new URLSearchParams(fields)
   });
-  return { call, advance, login, get, submit, websiteLogin, authorizePlugin, form, endpoint, clock: () => clock };
+  return { call, advance, login, get, submit, websiteLogin, authorizePlugin, form, endpoint, store, clock: () => clock };
 }
+
+test('five-minute points are recorded once per accepted score and expire from cached rankings', async t => {
+  const api = await fixture(t);
+  const alice = await api.login(), bob = await api.login();
+  const stats = { deltaTokens: 123, avgTps: 42.6, topModel: 'gpt-test', topCli: 'codex' };
+  const requestId = randomUUID(), firstDevice = randomUUID(), secondDevice = randomUUID();
+  assert.equal((await api.submit(alice, 7000, requestId, TODAY, firstDevice, stats)).status, 201);
+  assert.equal((await api.submit(alice, 7000, requestId, TODAY, firstDevice, stats)).status, 201);
+  const submittedAt = api.clock();
+  const route = '/api/today?days=1&stats=1';
+  const first = await api.call(route);
+  const initialTag = first.headers.get('etag');
+  const [initial] = (await first.json()).rows;
+  assert.deepEqual(initial.recent, { points: [{ submittedAt, deltaTokens: 123, avgTps: 42.6 }], topModel: 'gpt-test', topCli: 'codex' });
+  assert.equal((await api.call(route, { headers: { 'If-None-Match': initialTag } })).status, 304);
+  assert.equal((await (await api.call('/api/today')).json()).rows[0].recent, undefined);
+  assert.equal((await api.submit(bob, 100, undefined, TODAY, undefined, { ...stats, deltaTokens: -1 })).status, 400);
+  assert.equal((await api.submit(alice, 10, undefined, TODAY, secondDevice, stats)).status, 429);
+  api.advance(10_000);
+  assert.equal((await api.submit(alice, 10, undefined, TODAY, secondDevice,
+    { deltaTokens: 0, avgTps: null, topModel: null, topCli: null })).status, 201);
+  const next = await api.call(route, { headers: { 'If-None-Match': initialTag } });
+  assert.equal(next.status, 200);
+  const nextTag = next.headers.get('etag');
+  const [combined] = (await next.json()).rows;
+  assert.equal(combined.tokens, 7010);
+  assert.deepEqual(combined.recent.points.map(point => point.deltaTokens), [123, 0]);
+  assert.equal(combined.recent.topModel, null);
+  api.advance(290_000);
+  const aged = await api.call(route, { headers: { 'If-None-Match': nextTag } });
+  assert.equal(aged.status, 200);
+  assert.deepEqual((await aged.json()).rows[0].recent.points, [{ submittedAt: submittedAt + 10_000, deltaTokens: 0, avgTps: null }]);
+  api.advance(10_000);
+  assert.deepEqual((await (await api.call(route)).json()).rows[0].recent.points, []);
+});
+
+test('all ranking periods return current five-minute statistics for exactly their top 100', async t => {
+  const api = await fixture(t);
+  const stats = { deltaTokens: 1, avgTps: null, topModel: null, topCli: 'pi' };
+  const submit = (id, tokens) => {
+    const requestId = randomUUID();
+    return api.store.submit(id, { day: TODAY, requestId, fingerprint: requestId, tokens, stats }, api.clock(), 1_000_000);
+  };
+  for (let id = 1; id <= 101; id++) {
+    api.store.upsertAccount({ id, login: 'sample-' + id });
+    assert.equal(submit(id, 102 - id), 'accepted');
+  }
+  for (const days of [1, 7, 30]) {
+    const rows = (await (await api.call(`/api/today?days=${days}&stats=1`)).json()).rows;
+    assert.equal(rows.length, 100);
+    assert.equal(rows.at(-1).username, 'sample-100');
+    assert.ok(rows.every(row => row.recent.points.length === 1));
+  }
+  api.advance(10_000);
+  assert.equal(submit(101, 200), 'accepted');
+  const updated = (await (await api.call('/api/today?days=7&stats=1')).json()).rows;
+  assert.equal(updated[0].username, 'sample-101');
+  assert.equal(updated[0].recent.points.length, 2);
+  assert.ok(!updated.some(row => row.username === 'sample-100'));
+});
+
+test('daily ranking charts cover the selected Beijing dates and use the saved account total for each date', async t => {
+  const api = await fixture(t);
+  api.store.upsertAccount({ id: 1, login: 'alice' });
+  api.store.upsertAccount({ id: 99, login: 'admin' });
+  const stats = { deltaTokens: 1, avgTps: 9.5, topModel: 'sample', topCli: 'pi' };
+  const dayAgo = days => leaderboardDay(api.clock() - days * 86_400_000);
+  const submit = (offset, tokens, installationId) => {
+    const requestId = randomUUID();
+    const time = api.clock() - offset * 86_400_000;
+    return api.store.submit(1, { day: leaderboardDay(time), tokens, installationId, stats, requestId, fingerprint: requestId }, time, 1000);
+  };
+  for (const [ago, tokens] of [[30, 2], [29, 3], [7, 4], [6, 5], [2, 7]]) assert.equal(submit(ago, tokens), 'accepted');
+  assert.equal(submit(0, 11, randomUUID()), 'accepted');
+  api.advance(10_000);
+  assert.equal(submit(0, 13, randomUUID()), 'accepted');
+
+  const legacy = (await (await api.call('/api/today?days=7&stats=1')).json()).rows[0];
+  assert.equal(legacy.daily, undefined);
+  assert.equal(legacy.recent.points.length, 2);
+  const today = (await (await api.call('/api/today?stats=1&daily=1')).json()).rows[0];
+  assert.equal(today.daily, undefined);
+  assert.equal(today.recent.points.length, 2);
+
+  const weekRoute = '/api/today?days=7&stats=1&daily=1';
+  const week = await api.call(weekRoute);
+  const weekTag = week.headers.get('etag');
+  const [weekly] = (await week.json()).rows;
+  assert.deepEqual(weekly.daily, [{ day: dayAgo(6), tokens: 5 }, { day: dayAgo(2), tokens: 7 }, { day: TODAY, tokens: 24 }]);
+  assert.equal(weekly.daily.reduce((total, point) => total + point.tokens, 0), weekly.tokens);
+  assert.equal(weekly.recent.points.length, 1);
+  assert.equal(weekly.recent.topModel, 'sample');
+  assert.equal((await api.call(weekRoute, { headers: { 'If-None-Match': weekTag } })).status, 304);
+
+  const month = (await (await api.call('/api/today?days=30&stats=1&daily=1')).json()).rows[0];
+  assert.deepEqual(month.daily.slice(0, 2), [{ day: dayAgo(29), tokens: 3 }, { day: dayAgo(7), tokens: 4 }]);
+  assert.equal(month.daily.reduce((total, point) => total + point.tokens, 0), month.tokens);
+  api.store.removeScores(99, { day: dayAgo(2), account: 1 }, api.clock());
+  const changed = await api.call(weekRoute, { headers: { 'If-None-Match': weekTag } });
+  assert.equal(changed.status, 200);
+  assert.deepEqual((await changed.json()).rows[0].daily.map(point => point.day), [dayAgo(6), TODAY]);
+
+  api.advance(START + 86_400_000 - api.clock());
+  const rolled = (await (await api.call(weekRoute)).json()).rows[0];
+  assert.deepEqual(rolled.daily, [{ day: TODAY, tokens: 24 }]);
+});
+
+test('the client freezes its four statistics across restarts and credits only the confirmed batch', async () => {
+  const values = new Map(), storage = { get: key => values.get(key), set: (key, value) => values.set(key, structuredClone(value)) };
+  let time = START + 60_000;
+  const now = () => time;
+  let tracker = await createSubmissionStats(storage, now);
+  const score = { day: TODAY, tokens: 8000, installationId: randomUUID() };
+  const old = ['a'.repeat(24), time - 1, 10000, 90, 'old', 'pi'];
+  time += 1000;
+  const first = ['b'.repeat(24), time, 100, 20, 'alpha', 'pi'];
+  const second = ['c'.repeat(24), time + 1000, 300, 60, 'beta', 'codex'];
+  tracker.observe('local', [old, first, first]);
+  const batch = await tracker.prepare('session-A', score);
+  assert.deepEqual(batch.body.stats, { deltaTokens: 100, avgTps: 20, topModel: 'alpha', topCli: 'pi' });
+  await tracker.settle(batch, 'unavailable');
+  time += 1000;
+  tracker = await createSubmissionStats(storage, now);
+  tracker.observe('local', [old, first]);
+  tracker.observe('ssh:host', [second]);
+  assert.deepEqual(await tracker.prepare('session-A', { ...score, tokens: 8300 }), batch);
+  await tracker.settle(batch, 'accepted');
+  const next = await tracker.prepare('session-A', { ...score, tokens: 8300 });
+  assert.deepEqual(next.body.stats, { deltaTokens: 300, avgTps: 40, topModel: 'beta', topCli: 'codex' });
+});
+
+test('a submission packs only four statistics and two viewers read the same current snapshot after a disconnect', async t => {
+  const api = await fixture(t);
+  const token = await api.login();
+  const connect = async (credential = null) => {
+    const values = new Map(), handlers = new Map(), traffic = [];
+    let online = true;
+    const orca = {
+      storage: { get: async key => values.get(key), set: async (key, value) => values.set(key, structuredClone(value)) },
+      host: { has: () => true, call: async () => ({ value: credential }) },
+      grantedCapabilities: credential ? ['secrets:own'] : [],
+      panels: { handle: (name, run) => { handlers.set(name, run); return { dispose() {} }; } }
+    };
+    const stats = await createSubmissionStats(orca.storage, api.clock);
+    const stop = startLeaderboard(orca, {
+      endpoint: api.endpoint, stats, now: () => new Date(api.clock()), readUsage: async () => ({ day: TODAY, tokens: 2500 }),
+      fetcher(url, options) {
+        traffic.push({ url, ...options });
+        if (!online) throw new Error('offline');
+        return fetch(url, options);
+      }
+    });
+    t.after(stop);
+    return { stats, traffic, online: value => { online = value; },
+      run: (action, fields = {}) => handlers.get('tps.leaderboard')({ action, ...fields }) };
+  };
+  const sender = await connect(token), first = await connect(), second = await connect();
+  api.advance(1000);
+  sender.stats.observe('local', [['d'.repeat(24), api.clock(), 150, 30, 'model-A', 'pi']]);
+  assert.equal((await sender.run('submit')).code, 'accepted');
+  const upload = sender.traffic.filter(entry => entry.url.pathname === '/api/today/submit');
+  assert.equal(upload.length, 1);
+  assert.deepEqual(JSON.parse(upload[0].body).stats, { deltaTokens: 150, avgTps: 30, topModel: 'model-A', topCli: 'pi' });
+  const opening = await first.run('state', { days: 7, force: true });
+  assert.equal(opening.board.rows[0].recent.points[0].deltaTokens, 150);
+  assert.deepEqual(opening.board.rows[0].daily, [{ day: TODAY, tokens: 2500 }]);
+  assert.deepEqual((await second.run('state', { days: 7 })).board.rows, opening.board.rows);
+  assert.deepEqual((await first.run('state', { days: 7 })).board.rows, opening.board.rows);
+  assert.ok(first.traffic.at(-1).headers['If-None-Match']);
+  first.online(false);
+  assert.equal((await first.run('state', { days: 7 })).board.code, 'unavailable');
+  api.advance(300_000);
+  first.online(true);
+  const resumed = await first.run('state', { days: 7 });
+  assert.equal(first.traffic.at(-1).headers['If-None-Match'], undefined);
+  assert.deepEqual(resumed.board.rows[0].recent.points, []);
+});
 
 test('everyone can view today’s ranking, while submissions require login and exclude banned accounts', async t => {
   const api = await fixture(t, ['alice', 'alice', 'bob']);
@@ -1001,6 +1179,24 @@ test('usage discovery separates requests on either side of Beijing midnight from
   const history = index.leaderboardHistory();
   assert.equal(history.ready, true);
   assert.deepEqual(history.scores, [{ day: leaderboardDay(start - 1), tokens: 15 }, { day, tokens: 50 }]);
+});
+
+test('usage discovery passes only completed recent requests from the same local and remote parser path', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'tps-recent-usage-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const now = Date.now(), day = leaderboardDay(now);
+  const row = (id, at, output) => ({ id, type: 'message', timestamp: new Date(at).toISOString(),
+    message: { role: 'assistant', model: 'sample', timestamp: at - 2000, usage: { input: 50, output, cacheRead: 10, cacheWrite: 5 } } });
+  await writeFile(path.join(dir, 'sample.jsonl'), [
+    { type: 'session', id: 'sample', cwd: dir }, row('old', now - 310_000, 500), row('new', now - 1000, 400)
+  ].map(message => JSON.stringify(message)).join('\n') + '\n');
+  const [unit] = await discoverUsageUnits(now - 600_000, {
+    roots: { pi: [dir] }, includeDefaults: false, rankDay: day, includeRecent: true
+  });
+  const { recent } = await unit.read();
+  assert.equal(recent.length, 1);
+  assert.match(recent[0][0], /^[a-f0-9]{24}$/);
+  assert.deepEqual(recent[0].slice(1), [now - 1000, 465, 200, 'sample', 'pi']);
 });
 
 test("today's usage uploads whatever has been read so far, even before every file is up to date", async t => {

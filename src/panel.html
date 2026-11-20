@@ -16,6 +16,7 @@
       --blue: #0066e6;
       --orange: #b45300;
       --green: #007f48;
+      --usage-wave-low: #267456;
       --cache: #9c6500;
       --speed: #c72e3a;
       --speed-bg: #f0f0f3;
@@ -39,6 +40,7 @@
       --blue: #64b0ff;
       --orange: #ffb340;
       --green: #4ade80;
+      --usage-wave-low: #60a589;
       --cache: #e8b65b;
       --speed: #ff6b72;
       --speed-bg: #303034;
@@ -263,8 +265,8 @@
     .ladder-rows:empty { margin: 0; }
     .ladder-rows li {
       display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
-      grid-template-areas: "rank name total" "rank time total";
-      column-gap: 8px; align-items: center; padding: 8px 0;
+      grid-template-areas: "rank name total" ". recent recent" ". time time";
+      gap: 5px 8px; align-items: center; padding: 9px 0;
       border-top: 1px solid var(--line); font-variant-numeric: tabular-nums;
     }
     .ladder-rank {
@@ -280,6 +282,16 @@
       font-size: 14px; font-weight: 750; text-align: end; overflow-wrap: anywhere; max-width: 15ch;
     }
     .ladder-time { grid-area: time; color: var(--muted); font-size: 11px; }
+    .ladder-recent-caption { margin: 7px 0 0; color: var(--muted); font-size: 11px; }
+    .ladder-recent { grid-area: recent; min-width: 0; }
+    .ladder-chart {
+      display: block; width: 100%; height: 30px; border-radius: 6px;
+      background: transparent; color: var(--blue);
+    }
+    .ladder-chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin-top: 3px; }
+    .ladder-recent-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 4px; font-size: 11px; }
+    .ladder-recent-tools { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .ladder-recent-speed { flex: none; color: var(--blue); white-space: nowrap; }
     .refresh.is-busy svg { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .messages:empty { display: none; }
@@ -490,6 +502,7 @@
           <button class="war-tab" type="button" data-rank-days="30" aria-pressed="false"><span data-i18n="last-thirty-days"></span></button>
         </div>
         <p class="ladder-note" id="ladder-freshness" role="status" data-localized-text hidden></p>
+        <p class="ladder-recent-caption" id="ladder-recent-caption" data-i18n="leaderboard-five-minute-usage" hidden></p>
         <ol class="ladder-rows" id="ladder-rows" data-i18n-aria-label="daily-usage-rankings"></ol>
         <p class="ladder-note" id="ladder-empty" data-localized-text hidden><span data-i18n="empty-today"></span></p>
       </section>
@@ -760,6 +773,7 @@
       };
     })();
     const t = locale.t;
+    const AGENT_LABELS = { codex: 'Codex CLI', claude: 'Claude Code', opencode: 'OpenCode', opencode2: 'OpenCode', pi: 'Pi Agent', antigravity: 'Antigravity CLI', hermes: 'Hermes Agent' };
     function updateList(container, items, previous, keyOf, create) {
       const next = new Map();
       let position = container.firstChild;
@@ -966,7 +980,6 @@
       }
       // 用量战况: totals per window from the background index (tps.summary); counts only, never message text.
       const USAGE_REFRESH_MS = 30_000;
-      const AGENT_LABELS = { codex: 'Codex CLI', claude: 'Claude Code', opencode: 'OpenCode', opencode2: 'OpenCode', pi: 'Pi Agent', antigravity: 'Antigravity CLI', hermes: 'Hermes Agent' };
       function agentLabel(provider) {
         return AGENT_LABELS[provider || current?.activeSession?.provider] ?? '';
       }
@@ -1354,12 +1367,14 @@
       const messageFor = code => Object.hasOwn(messages, code) ? t(messages[code]) : undefined;
       let model, session, pendingLogin, retryLogin, rankDays = 1;
       const cachedRankings = new Map(), summaryQueue = new Set(), rankRequests = new Map();
-      const RANK_REFRESH_MS = 5000;
+      const RANK_REFRESH_MS = 10_000, RECENT_STATS_MS = 5 * 60_000, DAY_MS = 86_400_000;
       let rankingPending, sessionPushVersion = 0, rankingSubscription;
       let busy = false, restoringSession = false, manualSyncPending = false;
       let revision = 0, drawnRows = '', renderedDay = '', loginProblem = '', messageCode = '';
       let summaryAccount = '', summaryUpload = null;
-      let rankingNodes = new Map(), leaderboardFrame;
+      let rankingNodes = new Map(), leaderboardFrame, nextRecentExpiry = Infinity;
+      let animateToday = false, pulseDay = '', latestPulses = new Map();
+      const usagePainters = new WeakMap();
 
       async function request(action, payload = {}) {
         try {
@@ -1503,12 +1518,227 @@
         return badge;
       }
 
+      const usageChartLabel = () => t(rankDays === 1 ? 'leaderboard-five-minute-usage' : 'leaderboard-daily-usage');
+      const chartPadding = 4;
+
+      function dailyUsagePoints(daily, left, days) {
+        if (!Array.isArray(daily)) return [];
+        const totals = new Map(daily.map(({ day, tokens }) => [day, tokens]));
+        return Array.from({ length: days }, (_, offset) => {
+          const day = new Date(left + offset * DAY_MS).toISOString().slice(0, 10);
+          return { day, tokens: totals.get(day) ?? 0 };
+        });
+      }
+
+      function dailyUsagePath(points, x, y) {
+        const levels = points.map(y);
+        const changes = levels.slice(1).map((level, index) => level - levels[index]);
+        const tangents = levels.map((_, index) => {
+          const before = changes[index - 1] ?? changes[index];
+          const after = changes[index] ?? before;
+          // Keep peaks, valleys, and flat stretches within the recorded range.
+          return before * after > 0 ? 2 * before * after / (before + after) : 0;
+        });
+        const line = new Path2D();
+        let startX = x(points[0]);
+        line.moveTo(startX, levels[0]);
+        for (let index = 1; index < points.length; index++) {
+          const endX = x(points[index]);
+          const third = (endX - startX) / 3;
+          line.bezierCurveTo(
+            startX + third, levels[index - 1] + tangents[index - 1] / 3,
+            endX - third, levels[index] - tangents[index] / 3,
+            endX, levels[index]
+          );
+          startX = endX;
+        }
+        return line;
+      }
+
+      function paintUsagePath(ctx, line, baseline, firstX, lastX) {
+        const colors = window.getComputedStyle(document.documentElement);
+        const low = colors.getPropertyValue('--usage-wave-low').trim();
+        const high = colors.getPropertyValue('--speed').trim();
+
+        const area = new Path2D(line);
+        area.lineTo(lastX, baseline);
+        area.lineTo(firstX, baseline);
+        area.closePath();
+
+        const gradient = ctx.createLinearGradient(0, baseline, 0, chartPadding);
+        gradient.addColorStop(0, low);
+        gradient.addColorStop(0.58, low);
+        gradient.addColorStop(1, high);
+        ctx.strokeStyle = ctx.fillStyle = gradient;
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.fill(area);
+        ctx.restore();
+        ctx.stroke(line);
+      }
+
+      function pulseX(point, left, width) {
+        const offset = Math.max(0, Math.min(1, (point.submittedAt - left) / RECENT_STATS_MS));
+        return chartPadding + Math.max(0, width - 2 * chartPadding) * offset;
+      }
+
+      function drawSubmissionPulses(chart, points, left, animateAfter) {
+        const maximum = Math.max(1, ...points.map(point => point.deltaTokens));
+        const animate = points.some(point => point.submittedAt > animateAfter) &&
+          !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        let frame, startedAt;
+
+        function schedule() {
+          if (frame === undefined) frame = requestAnimationFrame(draw);
+        }
+
+        function draw(time) {
+          frame = undefined;
+          if (!chart.isConnected || lifetime.signal.aborted) return;
+          const { width, height } = chart.getBoundingClientRect(), density = window.devicePixelRatio || 1;
+          if (width <= 2 * chartPadding || height <= 2 * chartPadding) return;
+          const pixelWidth = Math.round(width * density), pixelHeight = Math.round(height * density);
+          if (chart.width !== pixelWidth) chart.width = pixelWidth;
+          if (chart.height !== pixelHeight) chart.height = pixelHeight;
+          const ctx = chart.getContext('2d');
+          if (!ctx) return;
+          ctx.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
+          ctx.clearRect(0, 0, width, height);
+          const baseline = height - chartPadding;
+          ctx.lineWidth = 1.4;
+          ctx.lineCap = ctx.lineJoin = 'round';
+          const halfWidth = Math.min(chartPadding - 0.75, (width - 2 * chartPadding) / 70);
+          startedAt ??= time;
+          const progress = animate ? Math.min(1, (time - startedAt) / 200) : 1;
+          const riseAt = point => point.submittedAt > animateAfter ? 1 - (1 - progress) ** 2 : 1;
+          const [first] = points;
+          const last = points.at(-1);
+          const start = pulseX(first, left, width) - (first.deltaTokens > 0 ? halfWidth : 0);
+          const end = pulseX(last, left, width) + (last.deltaTokens > 0 ? halfWidth : 0);
+          const line = new Path2D();
+          line.moveTo(start, baseline);
+          for (const point of points) {
+            const x = pulseX(point, left, width);
+            if (point.deltaTokens > 0) {
+              const peak = baseline - Math.max(1.5, (baseline - chartPadding) * point.deltaTokens / maximum) * riseAt(point);
+              line.lineTo(x - halfWidth, baseline);
+              line.bezierCurveTo(x - halfWidth * 0.54, baseline, x - halfWidth * 0.38, peak, x, peak);
+              line.bezierCurveTo(x + halfWidth * 0.38, peak, x + halfWidth * 0.54, baseline, x + halfWidth, baseline);
+            } else line.lineTo(x, baseline);
+          }
+          paintUsagePath(ctx, line, baseline, start, end);
+          for (const point of points) {
+            if (point.deltaTokens > 0) continue;
+            ctx.beginPath();
+            ctx.arc(pulseX(point, left, width), baseline, 1.4 * riseAt(point), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          if (progress < 1) schedule();
+        }
+
+        usagePainters.set(chart, schedule);
+        schedule();
+      }
+
+      function usageCard({ recent, daily }, now, animateAfter) {
+        const container = document.createElement('div'), chart = document.createElement('canvas');
+        const meta = document.createElement('div'), tools = document.createElement('span'), speed = document.createElement('strong');
+        container.className = 'ladder-recent';
+        chart.className = 'ladder-chart';
+        chart.width = 320;
+        chart.height = 60;
+        chart.setAttribute('role', 'img');
+        chart.setAttribute('aria-label', usageChartLabel());
+        meta.className = 'ladder-recent-meta';
+        tools.className = 'ladder-recent-tools';
+        speed.className = 'ladder-recent-speed';
+        const byDay = rankDays > 1, latest = recent?.points.at(-1);
+        const dayStart = day => Date.parse(day + 'T00:00:00Z');
+        const dateLabel = time => locale.date(time, { timeZone: 'UTC', month: 'numeric', day: 'numeric' });
+        const timeOf = point => byDay ? dayStart(point.day) : point.submittedAt;
+        const tokensOf = point => byDay ? point.tokens : point.deltaTokens;
+        const span = byDay ? (rankDays - 1) * DAY_MS : RECENT_STATS_MS;
+        const left = (byDay ? dayStart(renderedDay) : now) - span;
+        const points = byDay ? dailyUsagePoints(daily, left, rankDays) : recent?.points ?? [];
+        const speedText = value => Number.isFinite(value) ? `${locale.number(value, { maximumFractionDigits: 1 })} tokens/s` : '—';
+        const cli = recent?.topCli;
+        const cliLabel = Object.hasOwn(AGENT_LABELS, cli) ? AGENT_LABELS[cli] : cli;
+        tools.textContent = latest ? `${recent.topModel ?? '—'} · ${cliLabel ?? '—'}` : '— · —';
+        tools.title = tools.textContent;
+        speed.textContent = speedText(latest?.avgTps);
+        speed.title = t('leaderboard-average-speed');
+        const pointTitle = point => byDay ? `${point.day} · ${point.tokens === 0 ? `${locale.number(0)} MB` : formatTokenMB(point.tokens)}`
+          : `${shortClock(point.submittedAt)} · ${locale.number(point.deltaTokens)} Token · ${speedText(point.avgTps)}`;
+        const latestPoint = points.at(-1);
+        chart.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : usageChartLabel();
+        meta.append(tools, speed);
+        container.append(chart);
+        if (byDay) {
+          const axis = document.createElement('div');
+          axis.className = 'ladder-chart-axis';
+          for (const offset of [0, Math.round((rankDays - 1) / 2), rankDays - 1]) {
+            const label = document.createElement('span');
+            label.textContent = dateLabel(left + offset * DAY_MS);
+            axis.append(label);
+          }
+          container.append(axis);
+        }
+        container.append(meta);
+        if (!latestPoint) return container;
+        if (byDay) {
+          const width = chart.width - chartPadding * 2, height = chart.height - chartPadding * 2;
+          const maximum = Math.max(1, ...points.map(tokensOf));
+          const x = point => chartPadding + width * Math.min(1, (timeOf(point) - left) / span);
+          const y = point => chartPadding + height * (1 - tokensOf(point) / maximum);
+          const paint = () => {
+            const ctx = chart.getContext('2d');
+            if (!ctx) return;
+            ctx.clearRect(0, 0, chart.width, chart.height);
+            ctx.lineWidth = 2;
+            paintUsagePath(ctx, dailyUsagePath(points, x, y), chart.height - chartPadding, x(points[0]), x(latestPoint));
+            for (const point of points) {
+              ctx.beginPath();
+              ctx.arc(x(point), y(point), 3, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          };
+          usagePainters.set(chart, paint);
+          paint();
+          chart.addEventListener('pointermove', event => {
+            const rect = chart.getBoundingClientRect();
+            const position = (event.clientX - rect.left) * chart.width / rect.width;
+            const nearest = points.reduce((a, b) => Math.abs(x(a) - position) <= Math.abs(x(b) - position) ? a : b);
+            chart.title = Math.abs(x(nearest) - position) > width * DAY_MS / span / 2 ? usageChartLabel() : pointTitle(nearest);
+          });
+        } else {
+          drawSubmissionPulses(chart, points, left, animateAfter);
+          chart.addEventListener('pointermove', event => {
+            const { left: edge, width } = chart.getBoundingClientRect();
+            const distance = point => Math.abs(pulseX(point, left, width) - (event.clientX - edge));
+            const nearest = points.reduce((a, b) => distance(a) <= distance(b) ? a : b);
+            chart.title = distance(nearest) <= 6 ? pointTitle(nearest) : usageChartLabel();
+          });
+        }
+        return container;
+      }
+
       function renderRows(rows, username) {
-        const signature = JSON.stringify([rankDays, username, rows]);
+        const now = Date.now();
+        nextRecentExpiry = Infinity;
+        rows = rows.map(row => {
+          if (!row.recent) return row;
+          const points = row.recent.points.filter(point => point.submittedAt > now - RECENT_STATS_MS);
+          if (points.length) nextRecentExpiry = Math.min(nextRecentExpiry, points[0].submittedAt + RECENT_STATS_MS);
+          return { ...row, recent: { ...row.recent, points } };
+        });
+        const previousPulses = animateToday && pulseDay === renderedDay ? latestPulses : null;
+        pulseDay = rankDays === 1 ? renderedDay : '';
+        latestPulses = new Map(rankDays === 1 ? rows.map(row => [row.username, row.recent?.points.at(-1)?.submittedAt ?? -Infinity]) : []);
+        const signature = JSON.stringify([rankDays, renderedDay, username, rows]);
         if (signature === drawnRows) return;
         const period = periods.find(entry => entry.days === rankDays);
         drawnRows = signature;
-        const keyOf = row => JSON.stringify([rankDays, username === row.username, row]);
+        const keyOf = row => JSON.stringify([rankDays, renderedDay, username === row.username, row]);
         rankingNodes = updateList(element('rows'), rows, rankingNodes, keyOf, row => {
           const item = document.createElement('li');
           if (username && row.username === username) item.classList.add('ladder-self');
@@ -1532,10 +1762,10 @@
           if (badge) user.append(badge);
           total.textContent = formatTokenMB(row.tokens);
           const uploaded = clock(row.submittedAt);
-          if (rankDays !== 1) time.setAttribute('data-localized-text', '');
-          time.textContent = rankDays === 1 ? uploaded : t('last-upload-at', uploaded);
+          time.setAttribute('data-localized-text', '');
+          time.textContent = t('last-upload-at', uploaded);
           time.dateTime = new Date(row.submittedAt).toISOString();
-          item.append(rank, user, total, time);
+          item.append(rank, user, total, usageCard(row, now, previousPulses?.get(row.username) ?? Infinity), time);
           return item;
         });
         // Rows changed after a sync: give a still-default account avatar another chance too.
@@ -1659,6 +1889,8 @@
         element('rows').setAttribute('aria-label', t(rankDays === 1 ? 'daily-usage-rankings' : 'period-rankings'));
         element('empty').textContent = rankDays === 1 ? t('empty-today') : t('empty-rankings');
         element('empty').hidden = !ranking || ranking.rows.length > 0;
+        element('recent-caption').textContent = usageChartLabel();
+        element('recent-caption').hidden = !ranking?.rows.length;
         const username = signedIn ? account.username : '';
         renderRows(ranking?.rows ?? [], username);
         if (signedIn) renderAccount(username, account);
@@ -1698,7 +1930,7 @@
       function cacheRanking(result, days) {
         const { board, updatedAt } = result;
         if (!Number.isSafeInteger(updatedAt) || board?.day !== boardDay() || !Array.isArray(board.rows)) return false;
-        const rows = board.rows.map(({ rank, username, tokens, submittedAt }) => ({ rank, username, tokens, submittedAt }));
+        const rows = board.rows.map(({ rank, username, tokens, submittedAt, recent, daily }) => ({ rank, username, tokens, submittedAt, recent, daily }));
         cachedRankings.set(days, { day: board.day, rows, updatedAt });
         return true;
       }
@@ -1708,6 +1940,7 @@
         if (typeof result.signedIn === 'boolean' && (updateSession || !session)) session = result;
         cacheRanking(result, days);
         render(result.code ?? '');
+        if (days === 1 && Array.isArray(result.board?.rows)) animateToday = true;
         showSummaries();
       }
 
@@ -1748,7 +1981,7 @@
         summaryQueue.delete(days);
         rankingPending = pending;
         pending.promise = (async () => {
-          const result = await request('state', { days });
+          const result = await request('state', { days, force });
           if (lifetime.signal.aborted) return;
           pending.succeeded = Array.isArray(result.board?.rows);
           const retry = pending.succeeded ? 0 : Math.min((previous?.retry || 500) * 2, 30_000);
@@ -1762,8 +1995,9 @@
       }
 
       function showCachedRanking() {
+        animateToday = false;
         render('');
-        void showCache().then(() => refresh());
+        void showCache().then(() => refresh(rankDays, true));
         if (!session) void refreshSession();
         showSummaries();
       }
@@ -1817,6 +2051,17 @@
         showCachedRanking();
       });
       group.addEventListener('tps-view-opened', showCachedRanking);
+      window.addEventListener('online', () => {
+        animateToday = false;
+        void refresh(rankDays, true);
+      }, { signal: lifetime.signal });
+      function redrawUsageCharts() {
+        for (const chart of element('rows').querySelectorAll('.ladder-chart')) usagePainters.get(chart)?.();
+      }
+      const usageResize = new ResizeObserver(redrawUsageCharts);
+      const usageTheme = new MutationObserver(redrawUsageCharts);
+      usageResize.observe(element('rows'));
+      usageTheme.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
       document.addEventListener('tps-language-changed', () => {
         drawnRows = '';
         rankingNodes.clear();
@@ -1899,6 +2144,7 @@
       for (const { days } of periods) void showCache(days);
       const interval = setInterval(() => {
         if (group.hidden) return;
+        if (Date.now() >= nextRecentExpiry) render();
         const snapshot = session ?? model;
         renderSyncCountdown(snapshot, snapshot?.signedIn ?? snapshot?.board?.authenticated, Date.now());
         void refresh();
@@ -1912,6 +2158,8 @@
       window.addEventListener('pagehide', () => {
         lifetime.abort();
         avatarView.dispose();
+        usageResize.disconnect();
+        usageTheme.disconnect();
         rankingSubscription?.dispose();
         cancelAnimationFrame(leaderboardFrame);
         clearTimeout(retryLogin);

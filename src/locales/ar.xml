@@ -231,6 +231,9 @@
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">المركز {0}</message>
   <message id="last-upload-at">آخر رفع {0}</message>
+  <message id="leaderboard-five-minute-usage">الاستخدام في آخر 5 دقائق</message>
+  <message id="leaderboard-daily-usage">الاستخدام اليومي</message>
+  <message id="leaderboard-average-speed">متوسط سرعة التوليد</message>
   <message id="leaderboard-refreshed-at">حُدّث عند {0}</message>
   <message id="notice.remote-read-failed">تعذّرت قراءة الإحصاءات البعيدة ({0}: {1}).</message>
   <message id="current-read-failed">تعذّرت قراءة البيانات الحالية. حاول لاحقًا.</message>

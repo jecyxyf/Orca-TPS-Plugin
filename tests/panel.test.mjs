@@ -103,6 +103,109 @@ test('panel resolves per-record agent label from record.provider and shows chann
   assert.match(html, /activeSession\?\.provider\s*===\s*['"]channel['"]/, 'summary must display channel title when in channel mode');
 });
 
+test('today usage connects pulses at real timestamps and animates new points once', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /const chartPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];
+  assert.ok(source);
+  assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart').background, 'transparent');
+  const frames = [], painters = new WeakMap(), paths = [], areas = [], stops = [];
+  class TestPath {
+    constructor(path) { this.points = path ? [...path.points] : []; }
+    moveTo(...point) { this.points.push(point); }
+    lineTo(...point) { this.points.push(point); }
+    bezierCurveTo(...points) { this.points.push(points.slice(-2)); }
+    closePath() { this.points.push('closed'); }
+  }
+  let path, savedAlpha;
+  const ctx = {
+    globalAlpha: 1,
+    setTransform() {}, clearRect() { paths.length = areas.length = 0; }, beginPath() { path = []; },
+    createLinearGradient() { return { addColorStop(...stop) { stops.push(stop); } }; },
+    save() { savedAlpha = this.globalAlpha; },
+    restore() { this.globalAlpha = savedAlpha; },
+    stroke(line) { paths.push(line.points); },
+    arc(...point) { path.push(point.slice(0, 3)); },
+    fill(area) {
+      if (area) areas.push({ points: area.points, opacity: this.globalAlpha, style: this.fillStyle });
+      else paths.push(path);
+    }
+  };
+  let width = 308;
+  const chart = { width: 320, height: 60, isConnected: true,
+    getBoundingClientRect: () => ({ width, height: 30 }), getContext: () => ctx };
+  const draw = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
+    const RECENT_STATS_MS = 300000;
+    ${source.replace(/\n      function usageCard$/, '')}
+    return drawSubmissionPulses;
+  `)(painters, callback => frames.push(callback), { signal: { aborted: false } }, {
+    devicePixelRatio: 2, matchMedia: () => ({ matches: false }),
+    getComputedStyle: () => ({ getPropertyValue: name => name === '--usage-wave-low' ? '#60a589' : '#ff6b72' })
+  }, { documentElement: {} }, TestPath);
+  draw(chart, [{ submittedAt: 20_000, deltaTokens: 100 }, { submittedAt: 40_000, deltaTokens: 0 },
+    { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
+  frames.shift()(1000);
+  assert.deepEqual([chart.width, chart.height], [616, 60]);
+  assert.deepEqual(stops, [[0, '#60a589'], [0.58, '#60a589'], [1, '#ff6b72']]);
+  assert.deepEqual(paths[0].slice(2, 7), [[24, 15], [27.25, 26], [44, 26], [93.75, 26], [97, 26]]);
+  assert.deepEqual(paths[1][0], [44, 26, 1.4]);
+  assert.deepEqual(areas[0].points, [...paths[0], [100.25, 26], [20.75, 26], 'closed']);
+  assert.equal(areas[0].opacity, 0.5);
+  assert.equal(areas[0].style, ctx.strokeStyle);
+  assert.equal(ctx.globalAlpha, 1);
+  frames.shift()(1200);
+  assert.deepEqual(paths[0][6], [97, 4]);
+  assert.deepEqual(areas[0].points[6], [97, 4]);
+  assert.equal(frames.length, 0);
+  width = 158;
+  painters.get(chart)();
+  frames.shift()(1400);
+  assert.deepEqual([chart.width, chart.height], [316, 60]);
+  assert.deepEqual(paths[0][6], [50.5, 4]);
+  assert.equal(frames.length, 0);
+});
+
+test('daily usage fills missing dates with zero across the entire selected window', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function dailyUsagePoints\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(source);
+  const dailyUsagePoints = new Function(`const DAY_MS = 86400000; ${source}; return dailyUsagePoints;`)();
+  const week = dailyUsagePoints([{ day: '2026-11-15', tokens: 7 }, { day: '2026-11-19', tokens: 20 }], Date.UTC(2026, 10, 14), 7);
+  assert.deepEqual(week.map(point => point.tokens), [0, 7, 0, 0, 0, 20, 0]);
+  assert.deepEqual([week[0].day, week.at(-1).day], ['2026-11-14', '2026-11-20']);
+  const month = dailyUsagePoints([{ day: '2024-02-29', tokens: 11 }], Date.UTC(2024, 1, 1), 30);
+  assert.equal(month.length, 30);
+  assert.deepEqual(month.slice(-3), [{ day: '2024-02-28', tokens: 0 }, { day: '2024-02-29', tokens: 11 }, { day: '2024-03-01', tokens: 0 }]);
+  assert.equal(dailyUsagePoints([], Date.UTC(2026, 10, 14), 7).filter(point => point.tokens === 0).length, 7);
+  assert.deepEqual(dailyUsagePoints(undefined, Date.UTC(2026, 10, 14), 7), []);
+});
+
+test('daily usage curves pass through every point and stay within each pair of values', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function dailyUsagePath\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(source);
+  class TestPath {
+    segments = [];
+    moveTo(...point) { this.start = point; }
+    bezierCurveTo(...segment) { this.segments.push(segment); }
+  }
+  const dailyUsagePath = new Function('Path2D', `${source}; return dailyUsagePath;`)(TestPath);
+  const points = [56, 56, 40, 30, 4, 56, 56].map((y, index) => ({ x: 4 + 52 * index, y }));
+  const line = dailyUsagePath(points, point => point.x, point => point.y);
+  assert.deepEqual(line.start, [4, 56]);
+  assert.deepEqual(line.segments.map(segment => segment.slice(4)), points.slice(1).map(({ x, y }) => [x, y]));
+  for (const [index, segment] of line.segments.entries()) {
+    const [firstX, firstY, secondX, secondY, endX, endY] = segment;
+    const { x: startX, y: startY } = points[index];
+    assert.ok(startX < firstX && firstX < secondX && secondX < endX);
+    const low = Math.min(startY, endY), high = Math.max(startY, endY);
+    assert.ok([firstY, secondY].every(controlY => controlY >= low && controlY <= high));
+    const next = line.segments[index + 1];
+    if (next) assert.ok(Math.abs((endY - secondY) - (next[1] - endY)) < 1e-10);
+  }
+  assert.notEqual(line.segments[2][1], points[2].y);
+  assert.equal(line.segments[3][3], 4);
+});
+
 async function loadAvatarView() {
   const html = await readFile(panelPath, 'utf8');
   const source = /\/\/ avatar-view:start([\s\S]*?)\/\/ avatar-view:end/.exec(html)?.[1];

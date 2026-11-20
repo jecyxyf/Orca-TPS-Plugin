@@ -1,6 +1,8 @@
 import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 import { gzip, gunzip } from 'node:zlib';
 import { sourceMessage } from './locales.mjs';
+import { MAX_RECENT_REQUESTS, RECENT_STATS_MS, validStatsLabel } from './leaderboard-stats.mjs';
 // Usage totals for the 当日/近一周/近一月 cards. Pure aggregation plus an incremental index: each source unit
 // (one session file, or one OpenCode session) is parsed once, its per-day counts are stored, and it is only
 // re-read when its stamp changes. Stored values are counts keyed by day, agent and model; no message text.
@@ -53,9 +55,18 @@ export function accumulateRecords(days, provider, records, { minDay = '', leader
     if (!Number.isFinite(record?.completedAt)) continue;
     const day = localDayKey(record.completedAt);
     if (day < minDay) continue;
+    if (leaderboardDays?.recent && record.completedAt >= leaderboardDays.recentFrom && typeof record.id === 'string') {
+      const tokens = requestTokens(record);
+      if (Number.isSafeInteger(tokens)) {
+        const id = createHash('sha256').update(record.id).digest('hex').slice(0, 24);
+        const model = typeof record.model === 'string' ? record.model.slice(0, 128) : null;
+        leaderboardDays.recent.push([id, record.completedAt, tokens, numberOr0(record.tokensPerSecond) || null,
+          validStatsLabel(model) ? model : null, provider === 'opencode2' ? 'opencode' : provider]);
+        if (leaderboardDays.recent.length >= 2 * MAX_RECENT_REQUESTS) trimRecentRequests(leaderboardDays.recent);
+      }
+    }
     if (leaderboardDays && record.completedAt >= leaderboardDays.start && record.completedAt < leaderboardDays.end) {
-      const tokens = [record.freshInputTokens, record.outputTokens, record.cacheReadTokens, record.cacheCreationTokens]
-        .reduce((total, value) => total + numberOr0(value), 0);
+      const tokens = requestTokens(record);
       const day = leaderboardDay(record.completedAt), { totals } = leaderboardDays;
       totals[day] = (totals[day] ?? 0) + tokens;
     }
@@ -78,6 +89,17 @@ export function accumulateRecords(days, provider, records, { minDay = '', leader
 }
 
 const numberOr0 = value => Number.isFinite(value) && value > 0 ? value : 0;
+
+function requestTokens(record) {
+  return numberOr0(record.freshInputTokens) + numberOr0(record.outputTokens) +
+    numberOr0(record.cacheReadTokens) + numberOr0(record.cacheCreationTokens);
+}
+
+export function trimRecentRequests(requests) {
+  requests.sort((a, b) => b[1] - a[1]);
+  if (requests.length > MAX_RECENT_REQUESTS) requests.length = MAX_RECENT_REQUESTS;
+  return requests;
+}
 
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 export const leaderboardDay = ms => new Date(ms + BEIJING_OFFSET_MS).toISOString().slice(0, 10);
@@ -314,7 +336,7 @@ const RETRY_MIN_MS = 15_000, RETRY_MAX_MS = 10 * 60_000;
 
 export function createUsageIndex({
   storage, discover, now = () => Date.now(), budgetBytes = 2 * 1024 * 1024 * 1024, maxUnits = Infinity,
-  leaderboard = false, rankDays = 1, log = () => {}
+  leaderboard = false, rankDays = 1, onRecentRequests, log = () => {}
 }) {
   const units = new Map();
   const combined = Object.create(null), scores = new Map();
@@ -322,6 +344,7 @@ export function createUsageIndex({
   let loaded = null, progress = { done: 0, total: 0 }, updatedAt = null, summaryCache, summaryDay;
   let refreshQueue = Promise.resolve();
   let readyLeaderboardDay = '', readyHistoryDay = '', moreBackfill = false;
+  const recentReads = new Set();
 
   function adjust(unit, direction) {
     if (!unit) return;
@@ -400,6 +423,7 @@ export function createUsageIndex({
       const remote = key.startsWith(REMOTE_USAGE_PREFIX);
       if (remote ? !coveredRemoteScopes.has(key.slice(0, key.lastIndexOf(':') + 1)) : !localComplete) continue;
       setUnit(key, units.get(key));
+      recentReads.delete(key);
       usageStorage.update(key);
     }
     const missingToday = (descriptor, current) => descriptor.mtimeMs >= rankStart &&
@@ -417,6 +441,7 @@ export function createUsageIndex({
     const needsRead = descriptor => {
       const current = units.get(descriptor.key);
       return !current || current.failed || current.stamp !== descriptor.stamp || current.schema !== USAGE_SCHEMA ||
+        (onRecentRequests && descriptor.mtimeMs >= refreshAt - RECENT_STATS_MS && !recentReads.has(descriptor.key)) ||
         (leaderboard && missingHistory(descriptor, current));
     };
     const waitingRetry = descriptor => {
@@ -467,9 +492,14 @@ export function createUsageIndex({
       let unit;
       try {
         const result = await readDays(descriptor);
-        const { days, leaderboardDays, leaderboardFrom } = leaderboard ? result : { days: result };
+        const { days, leaderboardDays, leaderboardFrom, recent } = leaderboard ? result : { days: result };
         unit = { stamp: descriptor.stamp, days, readAt: now(), schema: USAGE_SCHEMA };
         if (leaderboard) Object.assign(unit, { leaderboardDays, leaderboardFrom, leaderboardThrough: rankDay });
+        signal?.throwIfAborted();
+        if (onRecentRequests) {
+          recentReads.add(descriptor.key);
+          if (recent?.length) onRecentRequests(descriptor.key, recent);
+        }
       } catch (error) {
         signal?.throwIfAborted();
         // Keep the last successful counts and retry even when a transient failure leaves the file unchanged.

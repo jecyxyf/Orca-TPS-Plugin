@@ -231,6 +231,9 @@
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">Rank {0}</message>
   <message id="last-upload-at">Last upload {0}</message>
+  <message id="leaderboard-five-minute-usage">Usage over the last 5 minutes</message>
+  <message id="leaderboard-daily-usage">Daily usage</message>
+  <message id="leaderboard-average-speed">Average generation speed</message>
   <message id="leaderboard-refreshed-at">Refreshed {0}</message>
   <message id="notice.remote-read-failed">Could not read remote stats ({0}: {1}).</message>
   <message id="current-read-failed">Could not read the current data. Try again later.</message>
