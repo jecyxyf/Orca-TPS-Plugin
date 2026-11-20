@@ -45,8 +45,8 @@
   <message id="model-speed-list">モデル別の平均出力速度（速い順）</message>
   <message id="empty-model-speeds">この期間にリクエスト数が十分なモデルはありません</message>
   <message id="usage-heatmap">使用量ヒートマップ</message>
-  <message id="heatmap-description">過去 1 年間の日別使用量（MB、キャッシュを含む）</message>
-  <message id="heatmap-label">過去 1 年間の日別使用量ヒートマップ（MB）</message>
+  <message id="heatmap-description">過去 1 年間の日別使用量（M、キャッシュを含む）</message>
+  <message id="heatmap-label">過去 1 年間の日別使用量ヒートマップ（M）</message>
   <message id="heatmap-less">少ない</message>
   <message id="heatmap-more">多い</message>
   <message id="initial-recent-requests">現在のチャンネル · 最近のリクエスト 0 件</message>
@@ -54,7 +54,7 @@
   <message id="refresh">更新</message>
   <message id="reading-conversation">現在の会話を読み込み中…</message>
   <message id="per-request-speeds">リクエストごとの速度</message>
-  <message id="request-speed-note">リクエスト速度にはツールの実行時間を含みません。ログからの推定値（≈）には 0.2 KB 以上の出力と 1 秒以上のリクエスト時間が必要です。プロキシの実測値は最初のトークンまでの待ち時間を除き、0.1 KB 以上の出力が必要です。</message>
+  <message id="request-speed-note">リクエスト速度にはツールの実行時間を含みません。ログからの推定値（≈）には 200 Tokens 以上の出力と 1 秒以上のリクエスト時間が必要です。プロキシの実測値は最初のトークンまでの待ち時間を除き、100 Tokens 以上の出力が必要です。</message>
   <message id="subagent">サブエージェント</message>
   <message id="proxy">プロキシ</message>
   <message id="output">出力</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">ログからの推定値 · ≈{0} tokens/s（リクエスト ≈{1} 秒 · 最初のトークン ≈{2} 秒）</message>
   <message id="estimated-speed-duration">ログからの推定値 · ≈{0} tokens/s（リクエスト ≈{1} 秒、最初のトークンまでの待ち時間を含む）</message>
   <message id="missing-first-token-speed">実測速度にはストリーミングと最初のトークンまでの時間が必要です</message>
-  <message id="proxy-output-threshold">出力 {0} KB は、プロキシの実測速度に必要な最小値 0.1 KB を下回っています</message>
+  <message id="proxy-output-threshold">出力 {0} Tokens は、プロキシの実測速度に必要な最小値 100 Tokens を下回っています</message>
   <message id="proxy-duration-threshold">生成時間が 100 ms 未満のため、速度を表示できません。</message>
   <message id="missing-request-duration">リクエストの所要時間を取得できません</message>
   <message id="hermes-output-threshold">Hermes の速度推定には 20 トークン以上の出力が必要です</message>
   <message id="hermes-duration-threshold">Hermes の速度推定には 300 ms 以上のリクエスト時間が必要です</message>
   <message id="unknown-speed">速度を取得できません</message>
-  <message id="log-output-threshold">出力 {0} KB は、CC Switch のログからの推定に必要な最小値 0.2 KB を下回っています</message>
+  <message id="log-output-threshold">出力 {0} Tokens は、CC Switch のログからの推定に必要な最小値 200 Tokens を下回っています</message>
   <message id="log-duration-threshold">リクエスト時間 {0} ms は、CC Switch のログからの推定に必要な最小値 1 秒を下回っています</message>
   <message id="unnamed-model">モデル —</message>
   <message id="unknown-completion">完了時刻を取得できません</message>

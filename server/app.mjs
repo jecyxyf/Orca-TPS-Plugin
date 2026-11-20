@@ -1,8 +1,9 @@
 import { createServer } from 'node:http';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
-import { RECENT_STATS_MS, RANKING_HOURS } from '../src/leaderboard-stats.mjs';
+import { RECENT_STATS_MS, RANKING_HOURS, USAGE_UPLOAD_BYTES } from '../src/leaderboard-stats.mjs';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
+import { createRankingSnapshot, recentRankingRows, rollingBoard } from './ranking-snapshot.mjs';
 
 const GITHUB = 'https://github.com';
 const GITHUB_API = 'https://api.github.com';
@@ -13,7 +14,9 @@ const digest = value => createHash('sha256').update(value).digest('hex');
 const challengeOf = value => createHash('sha256').update(value).digest('base64url');
 const tokenPattern = /^[\w-]{43}$/;
 const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
-const statuses = { accepted: 201, initialized: 200, invalid: 400, duplicate: 409, removed: 409, upgrade_required: 409, too_soon: 429, locked: 429, banned: 403 };
+const statuses = { accepted: 201, initialized: 200, invalid: 400, duplicate: 409, removed: 409, upgrade_required: 409,
+  too_soon: 429, locked: 429, banned: 403, login_required: 401, stale_version: 409, unavailable: 503 };
+const validRequestId = id => typeof id === 'string' && /^[\w-]{16,128}$/.test(id);
 const feedback = { updated: '已保存。', rejected: '操作未执行，请检查输入。', forbidden: '该 GitHub 账号没有管理权限。', failed: 'GitHub 登录未完成，请重新登录。' };
 
 function cookieValue(req, name) {
@@ -42,6 +45,12 @@ function parseJson(value) {
   try { return JSON.parse(value); } catch { return null; }
 }
 
+function isUpload(upload, limit) {
+  const body = upload?.body;
+  return validRequestId(upload?.requestId) && body && typeof body === 'object' && !Array.isArray(body) &&
+    Buffer.byteLength(JSON.stringify(body)) <= limit;
+}
+
 function validDay(day) {
   if (!dayPattern.test(day ?? '')) return false;
   const start = leaderboardDayStart(day);
@@ -60,7 +69,7 @@ function redirect(res, location) {
 
 export function createLeaderboardServer({
   store, baseUrl, clientId, clientSecret, adminEmail = '', maxTokens = Number.MAX_SAFE_INTEGER,
-  fetcher = fetch, now = Date.now, log = () => {}
+  fetcher = fetch, now = Date.now, log = () => {}, jobs
 }) {
   const base = new URL(baseUrl);
   const secure = base.protocol === 'https:';
@@ -77,6 +86,7 @@ export function createLeaderboardServer({
   const publicRankings = new Map();
   const hourlyRankings = new Map();
   let minute, prunedDay, publicSpeeds;
+  const recordUploads = entries => jobs ? jobs.submit(entries) : store.uploadBatch(entries, maxTokens);
 
   function cachedJson(value) {
     const body = JSON.stringify(value);
@@ -103,10 +113,22 @@ export function createLeaderboardServer({
     return sendCached(req, res, publicSpeeds);
   }
 
-  function sendHourlyRanking(req, res, url, time, recent) {
+  function rankingPeriod(url) {
     const text = url.searchParams.get('hours');
     const hours = Number(text);
-    if (!RANKING_HOURS.includes(hours) || String(hours) !== text) return send(res, 400, { code: 'invalid' });
+    return RANKING_HOURS.includes(hours) && String(hours) === text ? hours : null;
+  }
+
+  function sendRollingRanking(res, url, time) {
+    const hours = rankingPeriod(url);
+    if (!hours) return send(res, 400, { code: 'invalid' });
+    res.setHeader('Date', new Date(time).toUTCString());
+    return send(res, 200, rollingBoard(store, hours, time));
+  }
+
+  function sendHourlyRanking(req, res, url, time, recent) {
+    const hours = rankingPeriod(url);
+    if (!hours) return send(res, 400, { code: 'invalid' });
     res.setHeader('Date', new Date(time).toUTCString());
     const settled = store.hourly.settle(time);
     const snapshotId = `${settled.cutoff}-${settled.revision}`;
@@ -123,15 +145,7 @@ export function createLeaderboardServer({
     if (!recent) return sendCached(req, res, snapshot.response);
     const revision = store.rankingRevision();
     if (!snapshot.recent || snapshot.recent.revision !== revision || time >= snapshot.recent.expiresAt) {
-      const accounts = snapshot.members.map(row => row.account);
-      const entries = store.recentRows(accounts, time, hours !== 24), uploads = store.latestUploads(accounts);
-      let expiresAt = Infinity;
-      const rows = snapshot.members.map(({ account, username }) => {
-        const entry = entries.get(account);
-        if (entry) expiresAt = Math.min(expiresAt, entry.points[0].submittedAt + RECENT_STATS_MS);
-        return { username, submittedAt: uploads.get(account) ?? null, topModel: entry?.topModel ?? null,
-          topCli: entry?.topCli ?? null, ...(hours === 24 ? { points: entry?.points ?? [] } : {}) };
-      });
+      const { rows, expiresAt } = recentRankingRows(store, hours, snapshot.members, time);
       snapshot.recent = { ...cachedJson({ snapshotId, rows }), revision, expiresAt };
     }
     return sendCached(req, res, snapshot.recent);
@@ -439,13 +453,22 @@ export function createLeaderboardServer({
       return githubConfigured ? pluginPoll(req, res, time) : send(res, 503, { code: 'github_unavailable' });
     }
     if (!route.startsWith('/api/')) return send(res, 404, { code: 'not_found' });
+    if (method === 'GET' && route === '/api/leaderboard/snapshot') {
+      const body = jobs ? jobs.snapshot() : JSON.stringify(createRankingSnapshot(store, () => time));
+      res.setHeader('Cache-Control', 'no-store');
+      if (!body) return send(res, 503, { code: 'unavailable' });
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(body);
+    }
     if (method === 'GET' && route === '/api/leaderboard/speeds') return sendSpeedRanking(req, res, time);
+    if (method === 'GET' && route === '/api/leaderboard/rolling') return sendRollingRanking(res, url, time);
     if (method === 'GET' && (route === '/api/leaderboard/usage' || route === '/api/leaderboard/recent')) {
       return sendHourlyRanking(req, res, url, time, route.endsWith('/recent'));
     }
 
     const token = /^Bearer ([\w-]{43})$/.exec(req.headers.authorization ?? '')?.[1];
-    const account = token ? store.session(digest(token), 'plugin', time) : null;
+    const sessionDigest = token ? digest(token) : null;
+    const account = sessionDigest ? store.session(sessionDigest, 'plugin', time) : null;
     if (method === 'GET' && route === '/api/today') {
       const days = url.searchParams.get('days') ?? '1';
       if (!['1', '7', '30'].includes(days)) return send(res, 400, { code: 'invalid' });
@@ -462,19 +485,31 @@ export function createLeaderboardServer({
       return send(res, 200, { ok: true });
     }
     if (account.banned) return send(res, 403, { code: 'banned', username: account.username });
-    if (method === 'POST' && route === '/api/leaderboard/window-data') {
-      const raw = await readBody(req), requestId = req.headers['idempotency-key'];
-      if (typeof requestId !== 'string' || !/^[\w-]{16,128}$/.test(requestId) ||
+    if (method === 'POST' && route === '/api/leaderboard/uploads') {
+      const body = parseJson(await readBody(req, USAGE_UPLOAD_BYTES + 4608));
+      const receivedAt = now();
+      if (!body || !isUpload(body.daily, 4096) || !isUpload(body.rolling, USAGE_UPLOAD_BYTES) ||
+          req.headers['content-type']?.split(';')[0] !== 'application/json') return send(res, 400, { code: 'invalid' });
+      const entries = ['daily', 'rolling'].map(kind => {
+        const { requestId, body: data } = body[kind];
+        return { kind, sessionDigest, receivedAt, input: { ...data, requestId, fingerprint: digest(JSON.stringify(data)) } };
+      });
+      const [daily, rolling] = await recordUploads(entries);
+      if (daily.code === 'login_required') return send(res, 401, daily);
+      if (daily.code === 'unavailable' && rolling.code === 'unavailable') return send(res, 503, daily);
+      return send(res, 200, { daily, rolling });
+    }
+    const rollingUpload = route === '/api/leaderboard/rolling-data';
+    if (method === 'POST' && (rollingUpload || route === '/api/leaderboard/window-data')) {
+      const raw = await readBody(req, rollingUpload ? USAGE_UPLOAD_BYTES : undefined);
+      const requestId = req.headers['idempotency-key'];
+      if (!validRequestId(requestId) ||
           req.headers['content-type']?.split(';')[0] !== 'application/json') return send(res, 400, { code: 'invalid' });
       const body = parseJson(raw);
       if (!body || typeof body !== 'object' || Array.isArray(body)) return send(res, 400, { code: 'invalid' });
-      const receivedAt = now();
-      const current = store.session(digest(token), 'plugin', receivedAt);
-      if (!current) return send(res, 401, { code: 'login_required' });
-      if (current.banned) return send(res, 403, { code: 'banned' });
-      store.hourly.settle(receivedAt);
-      const result = store.hourly.submit(current.id, { ...body, requestId, fingerprint: digest(raw) }, receivedAt, maxTokens);
-      return send(res, result.code === 'stale_version' ? 409 : statuses[result.code], result);
+      const [result] = await recordUploads([{ kind: rollingUpload ? 'rolling' : 'hourly', sessionDigest, receivedAt: now(),
+        input: { ...body, requestId, fingerprint: digest(raw) } }]);
+      return send(res, statuses[result.code], result);
     }
     if (method === 'GET' && route === '/api/today/status') return send(res, 200, store.status(account.id, time));
     if (method === 'GET' && route === '/api/history/status') {
@@ -484,18 +519,16 @@ export function createLeaderboardServer({
       const history = route === '/api/history/init';
       const raw = await readBody(req), requestId = req.headers['idempotency-key'];
       const receivedAt = now();
-      const validRequestId = typeof requestId === 'string' && /^[\w-]{16,128}$/.test(requestId);
-      const body = validRequestId && req.headers['content-type']?.split(';')[0] === 'application/json' ? parseJson(raw) : null;
+      const identified = validRequestId(requestId);
+      const body = identified && req.headers['content-type']?.split(';')[0] === 'application/json' ? parseJson(raw) : null;
       const input = {
         day: body?.day, installationId: body?.installationId, tokens: body?.tokens, scores: body?.scores,
         stats: body?.stats,
-        requestId: (history ? 'history:' : '') + (validRequestId ? requestId : randomUUID()),
+        requestId: (history ? 'history:' : '') + (identified ? requestId : randomUUID()),
         fingerprint: digest(raw ?? 'oversized request')
       };
-      const code = history ? store.initializeHistory(account.id, input, receivedAt, maxTokens) :
-        store.submit(account.id, input, receivedAt, maxTokens);
-      return send(res, statuses[code], { code, username: account.username,
-        ...(code === 'banned' ? {} : store.status(account.id, receivedAt)) });
+      const [result] = await recordUploads([{ kind: history ? 'history' : 'daily', sessionDigest, receivedAt, input }]);
+      return send(res, statuses[result.code], result);
     }
     return send(res, 404, { code: 'not_found' });
   }

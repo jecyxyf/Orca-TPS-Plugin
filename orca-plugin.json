@@ -4,7 +4,7 @@
   "id": "tps-stats",
   "name": "TPS Plugin",
   "version": "1.6.5",
-  "description": "Track request speed and token usage in Orca, compare models, and explore hourly usage rankings and the fastest uploads from the past 24 hours.",
+  "description": "Track request speed and token usage in Orca, compare models, and explore rolling usage rankings and the fastest uploads from the past 24 hours.",
   "author": {
     "name": "jecyxyf",
     "url": "https://github.com/jecyxyf"
@@ -14,24 +14,24 @@
   "homepage": "https://github.com/jecyxyf/Orca-TPS-Plugin#readme",
   "icon": "assets/1.6.3/icon.png",
   "cover": {
-    "path": "assets/five-minute-stats/cover.png",
+    "path": "assets/1.6.5/cover.png",
     "alt": "TPS Plugin overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar"
   },
   "screenshots": [
     {
-      "path": "assets/1.6.3/current-data.png",
+      "path": "assets/1.6.5/current-data.png",
       "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
       "caption": "Current Data · Check how each AI request ran",
       "theme": "dark"
     },
     {
-      "path": "assets/1.6.3/personal-stats.png",
+      "path": "assets/1.6.5/personal-stats.png",
       "alt": "Personal Stats shows usage by model, average generation speeds, and an annual heatmap",
       "caption": "Personal Stats · Compare model usage and explore daily trends",
       "theme": "dark"
     },
     {
-      "path": "assets/five-minute-stats/leaderboard.png",
+      "path": "assets/1.6.5/leaderboard.png",
       "alt": "Orca sidebar showing the 30-day usage ranking and the 24-hour speed ranking",
       "caption": "Leaderboard · Compare usage trends and the fastest uploads",
       "theme": "dark"

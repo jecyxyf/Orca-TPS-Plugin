@@ -45,8 +45,8 @@
   <message id="model-speed-list">औसत आउटपुट गति के अनुसार मॉडल, सबसे तेज़ पहले</message>
   <message id="empty-model-speeds">इस अवधि में किसी मॉडल के पर्याप्त अनुरोध नहीं हैं</message>
   <message id="usage-heatmap">उपयोग का हीटमैप</message>
-  <message id="heatmap-description">पिछले साल का दैनिक उपयोग (MB, कैश सहित)</message>
-  <message id="heatmap-label">पिछले साल का दैनिक उपयोग हीटमैप (MB)</message>
+  <message id="heatmap-description">पिछले साल का दैनिक उपयोग (M, कैश सहित)</message>
+  <message id="heatmap-label">पिछले साल का दैनिक उपयोग हीटमैप (M)</message>
   <message id="heatmap-less">कम</message>
   <message id="heatmap-more">ज़्यादा</message>
   <message id="initial-recent-requests">मौजूदा चैनल · हाल के अनुरोध: 0</message>
@@ -54,7 +54,7 @@
   <message id="refresh">रीफ़्रेश करें</message>
   <message id="reading-conversation">मौजूदा बातचीत पढ़ रहे हैं…</message>
   <message id="per-request-speeds">हर अनुरोध की गति के रिकॉर्ड</message>
-  <message id="request-speed-note">गति में टूल का समय शामिल नहीं है। लॉग अनुमान (≈) के लिए कम से कम 0.2 KB आउटपुट और 1 सेकंड चाहिए। सटीक प्रॉक्सी गति में पहले टोकन की देरी नहीं जुड़ती और कम से कम 0.1 KB आउटपुट चाहिए।</message>
+  <message id="request-speed-note">गति में टूल का समय शामिल नहीं है। लॉग अनुमान (≈) के लिए कम से कम 200 Tokens आउटपुट और 1 सेकंड चाहिए। सटीक प्रॉक्सी गति में पहले टोकन की देरी नहीं जुड़ती और कम से कम 100 Tokens आउटपुट चाहिए।</message>
   <message id="subagent">सब-एजेंट</message>
   <message id="proxy">प्रॉक्सी</message>
   <message id="output">आउटपुट</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">लॉग का अनुमान: ≈{0} tokens/s (अनुरोध ≈{1}s · पहला टोकन ≈{2}s)</message>
   <message id="estimated-speed-duration">लॉग का अनुमान: ≈{0} tokens/s (अनुरोध ≈{1}s, पहले टोकन की देरी सहित)</message>
   <message id="missing-first-token-speed">सटीक गति के लिए स्ट्रीमिंग और पहले टोकन का समय चाहिए</message>
-  <message id="proxy-output-threshold">आउटपुट {0} KB है, जो सटीक प्रॉक्सी गति के लिए 0.1 KB से कम है</message>
+  <message id="proxy-output-threshold">आउटपुट {0} Tokens है, जो सटीक प्रॉक्सी गति के लिए 100 Tokens से कम है</message>
   <message id="proxy-duration-threshold">जनरेशन 100 ms से कम चला। गति उपलब्ध नहीं है।</message>
   <message id="missing-request-duration">अनुरोध की अवधि उपलब्ध नहीं है</message>
   <message id="hermes-output-threshold">Hermes की गति के अनुमान के लिए कम से कम 20 आउटपुट टोकन चाहिए</message>
   <message id="hermes-duration-threshold">Hermes की गति के अनुमान के लिए अनुरोध कम से कम 300 ms का होना चाहिए</message>
   <message id="unknown-speed">गति उपलब्ध नहीं है</message>
-  <message id="log-output-threshold">आउटपुट {0} KB है, जो CC Switch लॉग अनुमान की 0.2 KB सीमा से कम है</message>
+  <message id="log-output-threshold">आउटपुट {0} Tokens है, जो CC Switch लॉग अनुमान की 200 Tokens सीमा से कम है</message>
   <message id="log-duration-threshold">अनुरोध का समय {0} ms है, जो CC Switch अनुमान की 1 सेकंड की सीमा से कम है</message>
   <message id="unnamed-model">मॉडल —</message>
   <message id="unknown-completion">पूरा होने का समय उपलब्ध नहीं है</message>

@@ -36,13 +36,10 @@
 
 | 接口 | 用途 |
 | --- | --- |
-| `POST /api/today/submit` | 原有 10 秒上传。带有有效速度且新增用量超过 500 Token 的成功上传可进入速度榜。 |
-| `POST /api/leaderboard/window-data` | 登录后，按设备提交变化的小时总量和已扫描的范围。请求体上限为 4096 字节。 |
-| `GET /api/leaderboard/usage?hours=24` | 读取整点榜单，也支持 `168` 和 `720`。 |
-| `GET /api/leaderboard/recent?hours=24&snapshotId=…` | 读取当前榜单用户的近期信息。 |
-| `GET /api/leaderboard/speeds` | 读取过去 24 小时最快的 100 笔合格上传。 |
+| `POST /api/leaderboard/uploads` | 登录后每 10 秒提交用量和速度。写入线程每 2 秒批量提交，提交后确认。 |
+| `GET /api/leaderboard/snapshot` | 下载完整榜单。榜单线程每 10 秒读取共享截止时刻的 24 小时、7 天、30 天和速度榜。 |
 
-先部署兼容旧插件的服务端，再更新插件。首次启动时 SQLite 自动增加小时榜所需的表。旧每日榜继续使用现有数据，小时榜历史由新版插件按可读日志逐步上报。
+先部署服务端，再更新插件。SQLite 自动增加滚动榜所需的表，新版插件按可读日志逐步补传用量。已有上传和榜单接口继续支持旧客户端。
 
 ## 正式版（Docker Compose）
 

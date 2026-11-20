@@ -46,7 +46,7 @@ export default async function activate(orca) {
   });
   await controller.start({ background: true });
   const stats = await createSubmissionStats(orca.storage);
-  const history = remoteUsage = createRemoteUsageReader(orca, { ...remoteOptions, includeRecent: true, includeHours: true });
+  const history = remoteUsage = createRemoteUsageReader(orca, { ...remoteOptions, includeRecent: true, includeUsageTimes: true });
   usageAbort = new AbortController();
   let discovery, discoveryKey, discoveryAt = 0;
   const index = usage = createUsageIndex({
@@ -54,7 +54,7 @@ export default async function activate(orca) {
     budgetBytes: BACKFILL_BYTES,
     maxUnits: BACKFILL_UNITS,
     leaderboard: true,
-    includeHours: true,
+    includeUsageTimes: true,
     rankDays: MAX_WINDOW_DAYS,
     onRecentRequests: stats.observe,
     async discover(cutoffMs, rankDay, rankFrom) {
@@ -62,7 +62,7 @@ export default async function activate(orca) {
       const interval = Date.now() < recentCollectionUntil ? RECENT_REFRESH_MS : DISCOVERY_MS;
       if (!discovery || discoveryKey !== key || Date.now() - discoveryAt >= interval) {
         await history.finish();
-        const localUnits = await compute.call('discover', cutoffMs, { rankDay, rankFrom, includeRecent: true, includeHours: true });
+        const localUnits = await compute.call('discover', cutoffMs, { rankDay, rankFrom, includeRecent: true, includeUsageTimes: true });
         const remoteUnits = await history.discover(cutoffMs, rankDay, rankFrom);
         const descriptors = localUnits.descriptors.map(unit => ({ ...unit, read: () => compute.call('usage', unit.key, unit.stamp) }));
         discovery = { ...remoteUnits, localComplete: localUnits.complete, descriptors: descriptors.concat(remoteUnits.descriptors) };
@@ -103,9 +103,9 @@ export default async function activate(orca) {
         await index.ready();
         return index.leaderboardHistory();
       },
-      async readHours() {
+      async readUsageTimes() {
         if (!await index.ready()) return null;
-        return index.leaderboardHourly();
+        return index.leaderboardUsageTimes();
       }
     });
   } catch { orca.log(language.t('notice.leaderboard-url-invalid')); }

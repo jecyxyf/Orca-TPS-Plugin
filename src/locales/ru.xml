@@ -45,8 +45,8 @@
   <message id="model-speed-list">Средняя скорость вывода по моделям, сначала самые быстрые</message>
   <message id="empty-model-speeds">За этот период ни у одной модели нет достаточного числа запросов</message>
   <message id="usage-heatmap">Тепловая карта расхода</message>
-  <message id="heatmap-description">Ежедневный расход за последний год (МБ, включая кэш)</message>
-  <message id="heatmap-label">Тепловая карта ежедневного расхода за последний год (МБ)</message>
+  <message id="heatmap-description">Ежедневный расход за последний год (M, включая кэш)</message>
+  <message id="heatmap-label">Тепловая карта ежедневного расхода за последний год (M)</message>
   <message id="heatmap-less">Меньше</message>
   <message id="heatmap-more">Больше</message>
   <message id="initial-recent-requests">Текущий канал · 0 недавних запросов</message>
@@ -54,7 +54,7 @@
   <message id="refresh">Обновить</message>
   <message id="reading-conversation">Читаем текущий диалог…</message>
   <message id="per-request-speeds">Скорость по запросам</message>
-  <message id="request-speed-note">При расчёте скорости не учитывается время работы инструментов. Для оценки по журналам (≈) нужно не менее 0,2 КБ вывода и 1 секунды на запрос. Точная скорость по данным прокси учитывает время после первого токена и требует не менее 0,1 КБ вывода.</message>
+  <message id="request-speed-note">При расчёте скорости не учитывается время работы инструментов. Для оценки по журналам (≈) нужно не менее 200 токенов вывода и 1 секунды на запрос. Точная скорость по данным прокси учитывает время после первого токена и требует не менее 100 токенов вывода.</message>
   <message id="subagent">Субагент</message>
   <message id="proxy">Прокси</message>
   <message id="output">Вывод</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">Оценка по журналам · ≈{0} токенов/с (запрос ≈{1} с · первый токен ≈{2} с)</message>
   <message id="estimated-speed-duration">Оценка по журналам · ≈{0} токенов/с (запрос ≈{1} с, включая ожидание первого токена)</message>
   <message id="missing-first-token-speed">Для точной скорости нужны потоковая передача и время до первого токена</message>
-  <message id="proxy-output-threshold">Объём вывода {0} КБ меньше 0,1 КБ, необходимых для расчёта точной скорости по данным прокси</message>
+  <message id="proxy-output-threshold">Объём вывода {0} Tokens меньше 100 токенов, необходимых для расчёта точной скорости по данным прокси</message>
   <message id="proxy-duration-threshold">Генерация заняла меньше 100 мс. Скорость недоступна.</message>
   <message id="missing-request-duration">Длительность запроса недоступна</message>
   <message id="hermes-output-threshold">Для оценки скорости Hermes требуется не менее 20 выходных токенов</message>
   <message id="hermes-duration-threshold">Для оценки скорости Hermes запрос должен длиться не менее 300 мс</message>
   <message id="unknown-speed">Скорость недоступна</message>
-  <message id="log-output-threshold">Объём вывода {0} КБ меньше 0,2 КБ, необходимых для оценки по журналам CC Switch</message>
+  <message id="log-output-threshold">Объём вывода {0} Tokens меньше 200 токенов, необходимых для оценки по журналам CC Switch</message>
   <message id="log-duration-threshold">Длительность запроса {0} мс меньше 1 секунды, необходимой для оценки по журналам CC Switch</message>
   <message id="unnamed-model">Модель —</message>
   <message id="unknown-completion">Время завершения недоступно</message>

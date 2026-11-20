@@ -6,6 +6,20 @@ import { fileURLToPath } from 'node:url';
 
 const panelPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'panel.html');
 
+test('per-request output uses Tokens and aggregate usage uses millions without rounding small counts to zero', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /const formatMillionTokens = tokens => \{[\s\S]*?\n    \};/.exec(html)?.[0];
+  assert.ok(source);
+  assert.match(html, /data-testid="output-value"><\/span><span class="metric-unit">Tokens<\/span>/);
+  const format = new Function('locale', `${source}\nreturn formatMillionTokens;`)({
+    number: (value, options) => new Intl.NumberFormat('en', options).format(value)
+  });
+  assert.equal(format(501), '0.000501 M');
+  assert.equal(format(1_250_000), '1.25 M');
+  assert.equal(format(0), '0 M');
+  assert.equal(format(null), '—');
+});
+
 /** Parse top-level (non-@media) CSS rules in cascade order so later duplicate selectors override earlier ones. */
 function cascadeTopLevelCss(cssText) {
   const withoutComments = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -166,13 +180,13 @@ test('today usage connects pulses at real timestamps and animates new points onc
   assert.equal(frames.length, 0);
 });
 
-test('leaderboard countdown follows the selected period refresh and retry deadlines', async () => {
+test('leaderboard countdown is shared across all periods of the snapshot', async () => {
   const html = await readFile(panelPath, 'utf8');
   const countdown = /function countdownText\([\s\S]*?\n      \}/.exec(html)?.[0];
   const render = /function renderRankCountdown\([\s\S]*?\n      \}/.exec(html)?.[0];
   assert.ok(countdown && render);
   const showCountdown = new Function('state', 'time', `
-    const { rankDays, renderedDay, rankRequests, rankingPending } = state;
+    const { nextRankRefresh, rankingPending } = state;
     const note = { textContent: '' };
     const element = () => note;
     const locale = { number: (value, options) => new Intl.NumberFormat('en', options).format(value) };
@@ -182,18 +196,12 @@ test('leaderboard countdown follows the selected period refresh and retry deadli
     renderRankCountdown(time);
     return note.textContent;
   `);
-  const day = '2026-11-20';
-  const state = {
-    rankDays: 7,
-    renderedDay: day,
-    rankRequests: new Map([[1, { day, next: 5_000 }], [7, { day, next: 12_000 }]])
-  };
+  const state = { nextRankRefresh: 12_000 };
   assert.equal(showCountdown(state, 2_100), '00:10');
-  assert.equal(showCountdown({ ...state, rankDays: 1 }, 2_100), '00:03');
-  assert.equal(showCountdown({ ...state, rankingPending: { days: 1 } }, 6_000), '00:06');
-  assert.equal(showCountdown({ ...state, rankingPending: { days: 7 } }, 6_000), 'sync-in-progress');
+  assert.equal(showCountdown(state, 6_000), '00:06');
+  assert.equal(showCountdown({ ...state, rankingPending: true }, 6_000), 'sync-in-progress');
   assert.equal(showCountdown(state, 12_000), 'sync-waiting');
-  assert.equal(showCountdown({ ...state, renderedDay: '2026-11-21' }, 2_100), '—');
+  assert.equal(showCountdown({}, 2_100), '—');
 });
 
 test('daily usage fills missing dates with zero across the entire selected window', async () => {

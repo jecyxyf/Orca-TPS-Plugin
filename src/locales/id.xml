@@ -45,8 +45,8 @@
   <message id="model-speed-list">Kecepatan keluaran rata-rata per model, tercepat dahulu</message>
   <message id="empty-model-speeds">Tidak ada model dengan cukup permintaan dalam periode ini</message>
   <message id="usage-heatmap">Peta panas penggunaan</message>
-  <message id="heatmap-description">Penggunaan harian dalam setahun terakhir (MB, termasuk cache)</message>
-  <message id="heatmap-label">Peta panas penggunaan harian selama setahun terakhir (MB)</message>
+  <message id="heatmap-description">Penggunaan harian dalam setahun terakhir (M, termasuk cache)</message>
+  <message id="heatmap-label">Peta panas penggunaan harian selama setahun terakhir (M)</message>
   <message id="heatmap-less">Lebih sedikit</message>
   <message id="heatmap-more">Lebih banyak</message>
   <message id="initial-recent-requests">Kanal saat ini · Permintaan terbaru: 0</message>
@@ -54,7 +54,7 @@
   <message id="refresh">Muat ulang</message>
   <message id="reading-conversation">Membaca percakapan saat ini…</message>
   <message id="per-request-speeds">Catatan kecepatan per permintaan</message>
-  <message id="request-speed-note">Kecepatan tidak mencakup waktu alat. Perkiraan log (≈) perlu keluaran minimal 0,2 KB dan durasi 1 detik. Kecepatan proksi yang tepat mengecualikan waktu tunggu token pertama dan perlu keluaran minimal 0,1 KB.</message>
+  <message id="request-speed-note">Kecepatan tidak mencakup waktu alat. Perkiraan log (≈) perlu keluaran minimal 200 Tokens dan durasi 1 detik. Kecepatan proksi yang tepat mengecualikan waktu tunggu token pertama dan perlu keluaran minimal 100 Tokens.</message>
   <message id="subagent">Subagen</message>
   <message id="proxy">Proksi</message>
   <message id="output">Keluaran</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">Perkiraan log: ≈{0} tokens/s (permintaan ≈{1} dtk · token pertama ≈{2} dtk)</message>
   <message id="estimated-speed-duration">Perkiraan log: ≈{0} tokens/s (permintaan ≈{1} dtk, termasuk waktu tunggu token pertama)</message>
   <message id="missing-first-token-speed">Kecepatan yang tepat memerlukan streaming dan waktu token pertama</message>
-  <message id="proxy-output-threshold">Keluaran {0} KB di bawah minimum 0,1 KB untuk kecepatan proksi</message>
+  <message id="proxy-output-threshold">Keluaran {0} Tokens di bawah minimum 100 Tokens untuk kecepatan proksi</message>
   <message id="proxy-duration-threshold">Pembuatan berlangsung kurang dari 100 ms. Kecepatan tidak tersedia.</message>
   <message id="missing-request-duration">Durasi permintaan tidak tersedia</message>
   <message id="hermes-output-threshold">Perkiraan kecepatan Hermes perlu minimal 20 token keluaran</message>
   <message id="hermes-duration-threshold">Perkiraan kecepatan Hermes perlu durasi permintaan minimal 300 ms</message>
   <message id="unknown-speed">Kecepatan tidak tersedia</message>
-  <message id="log-output-threshold">Keluaran {0} KB di bawah minimum 0,2 KB untuk perkiraan log CC Switch</message>
+  <message id="log-output-threshold">Keluaran {0} Tokens di bawah minimum 200 Tokens untuk perkiraan log CC Switch</message>
   <message id="log-duration-threshold">Waktu permintaan {0} ms di bawah minimum 1 detik untuk perkiraan CC Switch</message>
   <message id="unnamed-model">Model —</message>
   <message id="unknown-completion">Waktu selesai tidak tersedia</message>

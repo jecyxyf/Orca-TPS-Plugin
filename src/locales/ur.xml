@@ -45,8 +45,8 @@
   <message id="model-speed-list">ماڈل کے لحاظ سے اوسط آؤٹ پٹ رفتار، سب سے تیز پہلے</message>
   <message id="empty-model-speeds">اس مدت میں کسی ماڈل کی کافی درخواستیں نہیں ہیں</message>
   <message id="usage-heatmap">استعمال کا ہیٹ میپ</message>
-  <message id="heatmap-description">گزشتہ سال کا یومیہ استعمال (MB، کیش سمیت)</message>
-  <message id="heatmap-label">گزشتہ سال کے یومیہ استعمال کا ہیٹ میپ (MB)</message>
+  <message id="heatmap-description">گزشتہ سال کا یومیہ استعمال (M، کیش سمیت)</message>
+  <message id="heatmap-label">گزشتہ سال کے یومیہ استعمال کا ہیٹ میپ (M)</message>
   <message id="heatmap-less">کم</message>
   <message id="heatmap-more">زیادہ</message>
   <message id="initial-recent-requests">موجودہ چینل · حالیہ درخواستیں: ۰</message>
@@ -54,7 +54,7 @@
   <message id="refresh">تازہ کریں</message>
   <message id="reading-conversation">موجودہ گفتگو پڑھی جا رہی ہے…</message>
   <message id="per-request-speeds">ہر درخواست کی رفتار کا ریکارڈ</message>
-  <message id="request-speed-note">رفتار میں ٹولز کا وقت شامل نہیں۔ لاگ کے تخمینے (≈) کے لیے کم از کم ۰٫۲ KB آؤٹ پٹ اور ۱ سیکنڈ درکار ہے۔ پراکسی کی درست رفتار سے پہلے ٹوکن کا انتظار خارج ہے اور کم از کم ۰٫۱ KB آؤٹ پٹ درکار ہے۔</message>
+  <message id="request-speed-note">رفتار میں ٹولز کا وقت شامل نہیں۔ لاگ کے تخمینے (≈) کے لیے کم از کم ۲۰۰ Tokens آؤٹ پٹ اور ۱ سیکنڈ درکار ہے۔ پراکسی کی درست رفتار سے پہلے ٹوکن کا انتظار خارج ہے اور کم از کم ۱۰۰ Tokens آؤٹ پٹ درکار ہے۔</message>
   <message id="subagent">ذیلی ایجنٹ</message>
   <message id="proxy">پراکسی</message>
   <message id="output">آؤٹ پٹ</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">لاگ کا تخمینہ: ≈{0} tokens/s (درخواست ≈{1} سیکنڈ · پہلا ٹوکن ≈{2} سیکنڈ)</message>
   <message id="estimated-speed-duration">لاگ کا تخمینہ: ≈{0} tokens/s (درخواست ≈{1} سیکنڈ، پہلے ٹوکن کے انتظار سمیت)</message>
   <message id="missing-first-token-speed">درست رفتار کے لیے اسٹریمنگ اور پہلے ٹوکن کا وقت درکار ہے</message>
-  <message id="proxy-output-threshold">آؤٹ پٹ {0} KB ہے، جو پراکسی کی درست رفتار کے لیے ۰٫۱ KB سے کم ہے</message>
+  <message id="proxy-output-threshold">آؤٹ پٹ {0} Tokens ہے، جو پراکسی کی درست رفتار کے لیے ۱۰۰ Tokens سے کم ہے</message>
   <message id="proxy-duration-threshold">جنریشن میں ۱۰۰ ms سے کم لگے۔ رفتار دستیاب نہیں۔</message>
   <message id="missing-request-duration">درخواست کا دورانیہ دستیاب نہیں</message>
   <message id="hermes-output-threshold">Hermes کی رفتار کے تخمینے کے لیے کم از کم ۲۰ آؤٹ پٹ ٹوکن درکار ہیں</message>
   <message id="hermes-duration-threshold">Hermes کی رفتار کے تخمینے کے لیے درخواست کم از کم ۳۰۰ ms کی ہونی چاہیے</message>
   <message id="unknown-speed">رفتار دستیاب نہیں</message>
-  <message id="log-output-threshold">آؤٹ پٹ {0} KB ہے، جو CC Switch تخمینے کے لیے ۰٫۲ KB سے کم ہے</message>
+  <message id="log-output-threshold">آؤٹ پٹ {0} Tokens ہے، جو CC Switch تخمینے کے لیے ۲۰۰ Tokens سے کم ہے</message>
   <message id="log-duration-threshold">درخواست کے {0} ms، CC Switch تخمینے کے لیے ۱ سیکنڈ سے کم ہیں</message>
   <message id="unnamed-model">ماڈل —</message>
   <message id="unknown-completion">مکمل ہونے کا وقت دستیاب نہیں</message>

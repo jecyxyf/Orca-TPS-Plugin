@@ -45,8 +45,8 @@
   <message id="model-speed-list">Velocidade média de saída por modelo, do mais rápido ao mais lento</message>
   <message id="empty-model-speeds">Nenhum modelo tem pedidos suficientes neste período</message>
   <message id="usage-heatmap">Mapa de calor de utilização</message>
-  <message id="heatmap-description">Utilização diária no último ano (MB, inclui a cache)</message>
-  <message id="heatmap-label">Mapa de calor da utilização diária no último ano (MB)</message>
+  <message id="heatmap-description">Utilização diária no último ano (M, inclui a cache)</message>
+  <message id="heatmap-label">Mapa de calor da utilização diária no último ano (M)</message>
   <message id="heatmap-less">Menos</message>
   <message id="heatmap-more">Mais</message>
   <message id="initial-recent-requests">Canal atual · Pedidos recentes: 0</message>
@@ -54,7 +54,7 @@
   <message id="refresh">Atualizar</message>
   <message id="reading-conversation">A ler a conversa atual…</message>
   <message id="per-request-speeds">Registos de velocidade por pedido</message>
-  <message id="request-speed-note">A velocidade exclui o tempo das ferramentas. As estimativas dos registos (≈) exigem pelo menos 0,2 KB de saída e 1 segundo de duração do pedido. A velocidade exata do proxy exclui a espera pelo primeiro token e exige pelo menos 0,1 KB de saída.</message>
+  <message id="request-speed-note">A velocidade exclui o tempo das ferramentas. As estimativas dos registos (≈) exigem pelo menos 200 Tokens de saída e 1 segundo de duração do pedido. A velocidade exata do proxy exclui a espera pelo primeiro token e exige pelo menos 100 Tokens de saída.</message>
   <message id="subagent">Subagente</message>
   <message id="proxy">Proxy</message>
   <message id="output">Saída</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">Estimativa do registo: ≈{0} tokens/s (pedido ≈{1}s · primeiro token ≈{2}s)</message>
   <message id="estimated-speed-duration">Estimativa do registo: ≈{0} tokens/s (pedido ≈{1}s, incluindo a espera pelo primeiro token)</message>
   <message id="missing-first-token-speed">A velocidade exata exige transmissão contínua e o tempo até ao primeiro token</message>
-  <message id="proxy-output-threshold">A saída de {0} KB está abaixo do mínimo de 0,1 KB do proxy</message>
+  <message id="proxy-output-threshold">A saída de {0} Tokens está abaixo do mínimo de 100 Tokens do proxy</message>
   <message id="proxy-duration-threshold">A geração levou menos de 100 ms. Velocidade indisponível.</message>
   <message id="missing-request-duration">Duração do pedido indisponível</message>
   <message id="hermes-output-threshold">A estimativa de velocidade do Hermes exige pelo menos 20 tokens de saída</message>
   <message id="hermes-duration-threshold">A estimativa de velocidade do Hermes exige um pedido com pelo menos 300 ms</message>
   <message id="unknown-speed">Velocidade indisponível</message>
-  <message id="log-output-threshold">A saída de {0} KB está abaixo de 0,2 KB, o mínimo para estimativas do CC Switch</message>
+  <message id="log-output-threshold">A saída de {0} Tokens está abaixo de 200 Tokens, o mínimo para estimativas do CC Switch</message>
   <message id="log-duration-threshold">O pedido de {0} ms não atinge o mínimo de 1 segundo para estimativas do CC Switch</message>
   <message id="unnamed-model">Modelo —</message>
   <message id="unknown-completion">Hora de conclusão indisponível</message>

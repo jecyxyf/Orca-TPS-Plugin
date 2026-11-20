@@ -86,7 +86,7 @@ export function createRemoteUsageScan(discover = discoverUsageUnits) {
         process.env.TZ = timeZone;
         let complete = true;
         const discovered = await discover(cutoffMs, { rankDay, rankFrom, includeRecent: request.includeRecent === true,
-          ...(request.includeHours === true ? { includeHours: true } : {}),
+          ...(request.includeUsageTimes === true ? { includeUsageTimes: true } : {}),
           onUnavailable: () => { complete = false; } });
         if (!complete) throw new Error('usage_source_unavailable');
         units = new Map(discovered.map(unit => [unit.key, unit]));

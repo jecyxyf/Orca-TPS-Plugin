@@ -4,7 +4,7 @@ import { leaderboardDay, leaderboardDayStart } from './usage-summary.mjs';
 import { validInstallationId } from './leaderboard-installation.mjs';
 import { createAvatarCache, githubLoginKey } from './leaderboard-avatars.mjs';
 import { validStatsLabel, validStatsPoint } from './leaderboard-stats.mjs';
-import { uploadHourChanges } from './hourly-upload.mjs';
+import { uploadUsageChanges } from './usage-upload.mjs';
 import { createWindowViews } from './leaderboard-windows.mjs';
 
 const METHOD = 'tps.leaderboard';
@@ -50,7 +50,7 @@ function publicRows(rows, days, day) {
 }
 
 export function startLeaderboard(orca, {
-  readUsage, readHistory, readHours, stats, endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
+  readUsage, readHistory, readUsageTimes, stats, endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
   fetcher = fetch, avatarFetcher = fetch, now = () => new Date()
 }) {
   const base = new URL(endpoint);
@@ -80,7 +80,7 @@ export function startLeaderboard(orca, {
     });
   let lastUpload = null, lastSyncAt = null, manualQueued = false, localUploadAt = 0;
   let installationReady;
-  let hourUploadRunning = false, nextHourUploadAt = 0, uploadWake;
+  let uploadWake;
   const secretAvailable = method => orca.grantedCapabilities?.includes('secrets:own') && host?.has(method);
   const today = () => leaderboardDay(now().getTime());
 
@@ -445,6 +445,32 @@ export function startLeaderboard(orca, {
     return submitting;
   }
 
+  async function sendRollingUsage(credential, id, active, send) {
+    const identity = githubLoginKey(username);
+    if (!readUsageTimes || !identity || !active()) return;
+    return uploadUsageChanges({ storage: orca.storage, identity: `${base.origin}/${identity}/${id}`,
+      installationId: id, now: now().getTime(), readUsageTimes, active, send });
+  }
+
+  async function sendScore(options, credential, active) {
+    const daily = { requestId: options.requestId, body: options.body };
+    const legacy = () => request('/api/today/submit', { ...options, credential });
+    let result;
+    try {
+      await sendRollingUsage(credential, daily.body.installationId, active, async rolling => {
+        const reply = await request('/api/leaderboard/uploads', { credential, body: { daily, rolling } });
+        if (reply.code === 'not_found') {
+          result = await legacy();
+          return request('/api/leaderboard/rolling-data', { ...rolling, credential });
+        }
+        result = reply.daily ?? reply;
+        return reply.rolling ?? reply;
+      });
+    } catch { /* The daily score can still be sent if the local rolling upload could not be prepared. */ }
+    if (result) return result;
+    return active() ? legacy() : { code: 'upload_disabled' };
+  }
+
   async function performSubmission(preview, kind, stillEnabled) {
     if (!token) return { code: 'login_required' };
     const credential = token;
@@ -465,9 +491,9 @@ export function startLeaderboard(orca, {
     const options = stats ? await stats.prepare(sessionKey(credential), score) : { requestId: randomUUID(), body: score };
     if (!stillEnabled() || token !== credential || lifetime.signal.aborted) return { code: 'upload_disabled' };
     const requestedAt = now().getTime();
-    let result = await request('/api/today/submit', { ...options, credential });
+    let result = await sendScore(options, credential, stillEnabled);
     if (kind === 'automatic' && result.code === 'unavailable' && token === credential && stillEnabled()) {
-      result = await request('/api/today/submit', { ...options, credential });
+      result = await sendScore(options, credential, stillEnabled);
     }
     if (stats) await stats.settle(options, result.code);
     if (token === credential) {
@@ -507,7 +533,16 @@ export function startLeaderboard(orca, {
     scheduling = true;
     try {
       const preview = await readUsage();
-      if (!stillSignedIn() || !(preview?.tokens >= 1)) return;
+      if (!stillSignedIn()) return;
+      if (!(preview?.tokens >= 1)) {
+        if (readUsageTimes) {
+          nextAttempt = now().getTime() + UPLOAD_INTERVAL;
+          const id = await installationId();
+          if (id) await sendRollingUsage(credential, id, stillSignedIn,
+            options => request('/api/leaderboard/rolling-data', { ...options, credential }));
+        }
+        return;
+      }
       const kind = manualQueued ? 'manual' : 'automatic';
       manualQueued = false;
       const result = await submit(preview, kind, stillSignedIn);
@@ -564,24 +599,6 @@ export function startLeaderboard(orca, {
     } finally { job.running = false; }
   }
 
-  async function runHourUpload() {
-    const time = now().getTime();
-    if (!readHours || !token || !username || banned || hourUploadRunning || time < nextHourUploadAt || lifetime.signal.aborted) return;
-    const credential = token, identity = githubLoginKey(username);
-    const active = () => token === credential && githubLoginKey(username) === identity && !banned && !lifetime.signal.aborted;
-    if (!identity) return;
-    hourUploadRunning = true;
-    nextHourUploadAt = time + UPLOAD_INTERVAL;
-    try {
-      const id = await installationId();
-      if (!id || !active()) return;
-      const outcome = await uploadHourChanges({ storage: orca.storage, identity: `${base.origin}/${identity}/${id}`,
-        installationId: id, now: time, readHours, active,
-        send: options => request('/api/leaderboard/window-data', { ...options, credential }) });
-      if (outcome === 'not_found') nextHourUploadAt = time + 5 * 60_000;
-    } finally { hourUploadRunning = false; }
-  }
-
   async function manualSync(payload, days) {
     const reply = code => ({ code, ...panelState(days) });
     if (!token) return reply('login_required');
@@ -627,11 +644,14 @@ export function startLeaderboard(orca, {
       const signal = rankingAccess?.signal;
       if (!signal) return {};
       const hours = payload.days === 0 ? 0 : days * 24;
-      if (payload.action === 'window-cache') return { ranking: await windows.load(hours, signal) };
+      if (payload.action === 'window-cache') {
+        const cached = await windows.load(hours, signal);
+        return { ranking: cached ? { boards: cached.boards, updatedAt: cached.updatedAt } : null };
+      }
       const result = await windows.fetch(hours, payload.force === true, signal);
       if (signal.aborted) return {};
-      const { updatedAt, ...board } = result;
-      return { board, updatedAt: updatedAt ?? null };
+      const { updatedAt, boards, code } = result;
+      return boards ? { boards, updatedAt } : { updatedAt: null, code: code ?? 'unavailable' };
     }
     if (payload?.action === 'cache') {
       await rankingPreferenceReady;
@@ -689,7 +709,6 @@ export function startLeaderboard(orca, {
 
   function tick() {
     void ready.then(() => { revokeSessions(); publishSession(); });
-    if (readHours) void ready.then(runHourUpload).catch(() => {});
     void runHistoryInitialization().catch(() => {}).then(runScheduled).catch(() => {}).finally(() => {
       publishSession();
       wakeForUpload();

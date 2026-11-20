@@ -45,8 +45,8 @@
   <message id="model-speed-list">按模型的平均输出速度，从高到低</message>
   <message id="empty-model-speeds">这段时间还没有样本充足的模型</message>
   <message id="usage-heatmap">用量热力图</message>
-  <message id="heatmap-description">近一年每日用量（MB，含缓存）</message>
-  <message id="heatmap-label">近一年每日用量热力图（MB）</message>
+  <message id="heatmap-description">近一年每日用量（M，含缓存）</message>
+  <message id="heatmap-label">近一年每日用量热力图（M）</message>
   <message id="heatmap-less">少</message>
   <message id="heatmap-more">多</message>
   <message id="initial-recent-requests">当前频道 · 最近 0 次请求</message>
@@ -54,7 +54,7 @@
   <message id="refresh">刷新</message>
   <message id="reading-conversation">正在读取当前对话…</message>
   <message id="per-request-speeds">单次请求速度记录</message>
-  <message id="request-speed-note">单次请求速度剔除工具耗时。日志估算需输出 ≥0.2 KB 且耗时 ≥1s（≈），代理精确速度扣首字需输出 ≥0.1 KB。</message>
+  <message id="request-speed-note">单次请求速度剔除工具耗时。日志估算需输出 ≥200 Tokens 且耗时 ≥1s（≈），代理精确速度扣首字需输出 ≥100 Tokens。</message>
   <message id="subagent">子代理</message>
   <message id="proxy">代理</message>
   <message id="output">输出</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">日志估算速度 ≈{0} tokens/s（请求耗时 ≈{1}s · 估算首字 ≈{2}s）</message>
   <message id="estimated-speed-duration">日志估算速度 ≈{0} tokens/s（请求耗时 ≈{1}s，含首字等待）</message>
   <message id="missing-first-token-speed">非流式或缺少首字时间，不计精确速度</message>
-  <message id="proxy-output-threshold">输出 {0} KB &lt; 0.1 KB（代理精确速度门槛）</message>
+  <message id="proxy-output-threshold">输出 {0} Tokens &lt; 100 Tokens（代理精确速度门槛）</message>
   <message id="proxy-duration-threshold">纯生成耗时不足 100 毫秒，不计速度</message>
   <message id="missing-request-duration">缺少有效请求耗时</message>
   <message id="hermes-output-threshold">输出不足 20 Token，不估算 Hermes 速度</message>
   <message id="hermes-duration-threshold">请求耗时不足 300 毫秒，不估算 Hermes 速度</message>
   <message id="unknown-speed">速度未知</message>
-  <message id="log-output-threshold">输出 {0} KB &lt; 0.2 KB（CC Switch 日志估算门槛）</message>
+  <message id="log-output-threshold">输出 {0} Tokens &lt; 200 Tokens（CC Switch 日志估算门槛）</message>
   <message id="log-duration-threshold">请求耗时 {0}ms &lt; 1s（CC Switch 日志估算门槛）</message>
   <message id="unnamed-model">模型 —</message>
   <message id="unknown-completion">完成时间未知</message>

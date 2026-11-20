@@ -1,10 +1,13 @@
 export const RECENT_STATS_MS = 5 * 60_000;
 export const HOUR_MS = 3_600_000;
 export const RANKING_HOURS = [24, 168, 720];
+export const RANKING_REFRESH_MS = 10_000;
+export const USAGE_UPLOAD_BYTES = 64 * 1024;
 export const SPEED_WINDOW_MS = 24 * HOUR_MS;
 export const SPEED_MIN_DELTA = 500;
 export const hourStart = time => Math.floor(time / HOUR_MS) * HOUR_MS;
 export const isHourStart = time => Number.isSafeInteger(time) && time >= 0 && time % HOUR_MS === 0;
+export const isUsageTime = time => Number.isSafeInteger(time) && time >= 0 && time < 8_640_000_000_000_000;
 export const MAX_RECENT_REQUESTS = 4096;
 
 export function qualifyingSpeed({ deltaTokens, avgTps } = {}) {

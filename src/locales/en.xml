@@ -45,8 +45,8 @@
   <message id="model-speed-list">Average output speed by model, fastest first</message>
   <message id="empty-model-speeds">No models have enough requests in this period</message>
   <message id="usage-heatmap">Usage heatmap</message>
-  <message id="heatmap-description">Daily usage over the past year (MB, including cache)</message>
-  <message id="heatmap-label">Daily usage heatmap for the past year (MB)</message>
+  <message id="heatmap-description">Daily usage over the past year (M, including cache)</message>
+  <message id="heatmap-label">Daily usage heatmap for the past year (M)</message>
   <message id="heatmap-less">Less</message>
   <message id="heatmap-more">More</message>
   <message id="initial-recent-requests">Current channel · 0 recent requests</message>
@@ -54,7 +54,7 @@
   <message id="refresh">Refresh</message>
   <message id="reading-conversation">Reading the current conversation…</message>
   <message id="per-request-speeds">Per-request speed records</message>
-  <message id="request-speed-note">Request speed excludes tool time. Log estimates (≈) require at least 0.2 KB of output and 1 second of request time. Exact proxy speed excludes time to first token and requires at least 0.1 KB of output.</message>
+  <message id="request-speed-note">Request speed excludes tool time. Log estimates (≈) require at least 200 Tokens of output and 1 second of request time. Exact proxy speed excludes time to first token and requires at least 100 Tokens of output.</message>
   <message id="subagent">Subagent</message>
   <message id="proxy">Proxy</message>
   <message id="output">Output</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">Estimated from logs: ≈{0} tokens/s (request ≈{1}s · first token ≈{2}s)</message>
   <message id="estimated-speed-duration">Estimated from logs: ≈{0} tokens/s (request ≈{1}s, including time to first token)</message>
   <message id="missing-first-token-speed">Exact speed requires streaming and time to first token</message>
-  <message id="proxy-output-threshold">Output {0} KB is below the 0.1 KB minimum for exact proxy speed</message>
+  <message id="proxy-output-threshold">Output {0} Tokens is below the 100 Tokens minimum for exact proxy speed</message>
   <message id="proxy-duration-threshold">Generation took less than 100 ms. Speed is unavailable.</message>
   <message id="missing-request-duration">Request duration is unavailable</message>
   <message id="hermes-output-threshold">Hermes speed estimates require at least 20 output tokens</message>
   <message id="hermes-duration-threshold">Hermes speed estimates require a request of at least 300 ms</message>
   <message id="unknown-speed">Speed unavailable</message>
-  <message id="log-output-threshold">Output {0} KB is below the 0.2 KB minimum for a CC Switch log estimate</message>
+  <message id="log-output-threshold">Output {0} Tokens is below the 200 Tokens minimum for a CC Switch log estimate</message>
   <message id="log-duration-threshold">Request time {0} ms is below the 1 second minimum for a CC Switch log estimate</message>
   <message id="unnamed-model">Model —</message>
   <message id="unknown-completion">Completion time unavailable</message>

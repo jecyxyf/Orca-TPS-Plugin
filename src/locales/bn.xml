@@ -45,8 +45,8 @@
   <message id="model-speed-list">মডেল অনুযায়ী গড় আউটপুট গতি, দ্রুততম আগে</message>
   <message id="empty-model-speeds">এই সময়ে কোনো মডেলের যথেষ্ট অনুরোধ নেই</message>
   <message id="usage-heatmap">ব্যবহারের হিটম্যাপ</message>
-  <message id="heatmap-description">গত এক বছরের দৈনিক ব্যবহার (MB, ক্যাশ সহ)</message>
-  <message id="heatmap-label">গত এক বছরের দৈনিক ব্যবহারের হিটম্যাপ (MB)</message>
+  <message id="heatmap-description">গত এক বছরের দৈনিক ব্যবহার (M, ক্যাশ সহ)</message>
+  <message id="heatmap-label">গত এক বছরের দৈনিক ব্যবহারের হিটম্যাপ (M)</message>
   <message id="heatmap-less">কম</message>
   <message id="heatmap-more">বেশি</message>
   <message id="initial-recent-requests">বর্তমান চ্যানেল · সাম্প্রতিক অনুরোধ: ০</message>
@@ -54,7 +54,7 @@
   <message id="refresh">রিফ্রেশ করুন</message>
   <message id="reading-conversation">বর্তমান কথোপকথন পড়া হচ্ছে…</message>
   <message id="per-request-speeds">প্রতিটি অনুরোধের গতির রেকর্ড</message>
-  <message id="request-speed-note">গতির হিসাবে টুলের সময় ধরা হয় না। লগের অনুমানে (≈) অন্তত ০.২ KB আউটপুট ও ১ সেকেন্ড প্রয়োজন। প্রক্সির নির্ভুল গতিতে প্রথম টোকেনের অপেক্ষা বাদ যায় এবং অন্তত ০.১ KB আউটপুট লাগে।</message>
+  <message id="request-speed-note">গতির হিসাবে টুলের সময় ধরা হয় না। লগের অনুমানে (≈) অন্তত ২০০ Tokens আউটপুট ও ১ সেকেন্ড প্রয়োজন। প্রক্সির নির্ভুল গতিতে প্রথম টোকেনের অপেক্ষা বাদ যায় এবং অন্তত ১০০ Tokens আউটপুট লাগে।</message>
   <message id="subagent">সাব-এজেন্ট</message>
   <message id="proxy">প্রক্সি</message>
   <message id="output">আউটপুট</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">লগের অনুমান: ≈{0} tokens/s (অনুরোধ ≈{1} সে · প্রথম টোকেন ≈{2} সে)</message>
   <message id="estimated-speed-duration">লগের অনুমান: ≈{0} tokens/s (অনুরোধ ≈{1} সে, প্রথম টোকেনের অপেক্ষাসহ)</message>
   <message id="missing-first-token-speed">নির্ভুল গতির জন্য স্ট্রিমিং ও প্রথম টোকেনের সময় প্রয়োজন</message>
-  <message id="proxy-output-threshold">আউটপুট {0} KB, প্রক্সির নির্ভুল গতির ন্যূনতম ০.১ KB-এর কম</message>
+  <message id="proxy-output-threshold">আউটপুট {0} Tokens, প্রক্সির নির্ভুল গতির ন্যূনতম ১০০ Tokens-এর কম</message>
   <message id="proxy-duration-threshold">জেনারেশনে ১০০ ms-এর কম লেগেছে। গতি পাওয়া যায়নি।</message>
   <message id="missing-request-duration">অনুরোধের সময়কাল পাওয়া যায়নি</message>
   <message id="hermes-output-threshold">Hermes-এর গতির অনুমানে অন্তত ২০টি আউটপুট টোকেন প্রয়োজন</message>
   <message id="hermes-duration-threshold">Hermes-এর গতির অনুমানে অনুরোধ অন্তত ৩০০ ms হতে হবে</message>
   <message id="unknown-speed">গতি পাওয়া যায়নি</message>
-  <message id="log-output-threshold">আউটপুট {0} KB, CC Switch লগের অনুমানের ন্যূনতম ০.২ KB-এর কম</message>
+  <message id="log-output-threshold">আউটপুট {0} Tokens, CC Switch লগের অনুমানের ন্যূনতম ২০০ Tokens-এর কম</message>
   <message id="log-duration-threshold">অনুরোধের {0} ms সময় CC Switch অনুমানের ন্যূনতম ১ সেকেন্ডের কম</message>
   <message id="unnamed-model">মডেল —</message>
   <message id="unknown-completion">শেষ হওয়ার সময় পাওয়া যায়নি</message>

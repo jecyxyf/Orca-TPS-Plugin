@@ -45,8 +45,8 @@
   <message id="model-speed-list">Velocidad media de salida por modelo, del más rápido al más lento</message>
   <message id="empty-model-speeds">Ningún modelo tiene suficientes solicitudes en este período</message>
   <message id="usage-heatmap">Mapa de calor de uso</message>
-  <message id="heatmap-description">Uso diario del último año (MB, caché incluida)</message>
-  <message id="heatmap-label">Mapa de calor del uso diario del último año (MB)</message>
+  <message id="heatmap-description">Uso diario del último año (M, caché incluida)</message>
+  <message id="heatmap-label">Mapa de calor del uso diario del último año (M)</message>
   <message id="heatmap-less">Menos</message>
   <message id="heatmap-more">Más</message>
   <message id="initial-recent-requests">Canal actual · Solicitudes recientes: 0</message>
@@ -54,7 +54,7 @@
   <message id="refresh">Actualizar</message>
   <message id="reading-conversation">Leyendo la conversación actual…</message>
   <message id="per-request-speeds">Registros de velocidad por solicitud</message>
-  <message id="request-speed-note">La velocidad excluye el tiempo de las herramientas. Las estimaciones (≈) requieren al menos 0,2 KB de salida y 1 segundo. La velocidad exacta del proxy excluye la espera del primer token y requiere al menos 0,1 KB de salida.</message>
+  <message id="request-speed-note">La velocidad excluye el tiempo de las herramientas. Las estimaciones (≈) requieren al menos 200 Tokens de salida y 1 segundo. La velocidad exacta del proxy excluye la espera del primer token y requiere al menos 100 Tokens de salida.</message>
   <message id="subagent">Subagente</message>
   <message id="proxy">Proxy</message>
   <message id="output">Salida</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">Estimación del registro: ≈{0} tokens/s (solicitud ≈{1}s · primer token ≈{2}s)</message>
   <message id="estimated-speed-duration">Estimación del registro: ≈{0} tokens/s (solicitud ≈{1}s, incluida la espera del primer token)</message>
   <message id="missing-first-token-speed">La velocidad exacta requiere transmisión y el tiempo hasta el primer token</message>
-  <message id="proxy-output-threshold">La salida de {0} KB no alcanza el mínimo de 0,1 KB del proxy</message>
+  <message id="proxy-output-threshold">La salida de {0} Tokens no alcanza el mínimo de 100 Tokens del proxy</message>
   <message id="proxy-duration-threshold">La generación duró menos de 100 ms. No hay velocidad disponible.</message>
   <message id="missing-request-duration">Duración de la solicitud no disponible</message>
   <message id="hermes-output-threshold">La estimación de Hermes requiere al menos 20 tokens de salida</message>
   <message id="hermes-duration-threshold">La estimación de Hermes requiere una solicitud de al menos 300 ms</message>
   <message id="unknown-speed">Velocidad no disponible</message>
-  <message id="log-output-threshold">La salida de {0} KB no alcanza el mínimo de 0,2 KB para estimaciones de CC Switch</message>
+  <message id="log-output-threshold">La salida de {0} Tokens no alcanza el mínimo de 200 Tokens para estimaciones de CC Switch</message>
   <message id="log-duration-threshold">Los {0} ms de la solicitud no alcanzan el mínimo de 1 segundo de CC Switch</message>
   <message id="unnamed-model">Modelo —</message>
   <message id="unknown-completion">Hora de finalización no disponible</message>

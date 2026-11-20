@@ -45,8 +45,8 @@
   <message id="model-speed-list">متوسط سرعة الإخراج حسب النموذج، من الأسرع إلى الأبطأ</message>
   <message id="empty-model-speeds">لا توجد نماذج لها طلبات كافية في هذه الفترة</message>
   <message id="usage-heatmap">خريطة الاستخدام الحرارية</message>
-  <message id="heatmap-description">الاستخدام اليومي خلال السنة الماضية (MB، يشمل الذاكرة المؤقتة)</message>
-  <message id="heatmap-label">خريطة حرارية للاستخدام اليومي خلال السنة الماضية (MB)</message>
+  <message id="heatmap-description">الاستخدام اليومي خلال السنة الماضية (M، يشمل الذاكرة المؤقتة)</message>
+  <message id="heatmap-label">خريطة حرارية للاستخدام اليومي خلال السنة الماضية (M)</message>
   <message id="heatmap-less">أقل</message>
   <message id="heatmap-more">أكثر</message>
   <message id="initial-recent-requests">القناة الحالية · الطلبات الأخيرة: 0</message>
@@ -54,7 +54,7 @@
   <message id="refresh">تحديث</message>
   <message id="reading-conversation">جارٍ قراءة المحادثة الحالية…</message>
   <message id="per-request-speeds">سجلات السرعة لكل طلب</message>
-  <message id="request-speed-note">تستبعد السرعة وقت الأدوات. يتطلب تقدير السجل (≈) إخراج 0.2 KB على الأقل ومدة طلب لا تقل عن ثانية. تستبعد سرعة الوكيل الدقيقة انتظار أول رمز وتتطلب إخراج 0.1 KB على الأقل.</message>
+  <message id="request-speed-note">تستبعد السرعة وقت الأدوات. يتطلب تقدير السجل (≈) إخراج 200 Tokens على الأقل ومدة طلب لا تقل عن ثانية. تستبعد سرعة الوكيل الدقيقة انتظار أول رمز وتتطلب إخراج 100 Tokens على الأقل.</message>
   <message id="subagent">وكيل فرعي</message>
   <message id="proxy">الخادم الوكيل</message>
   <message id="output">المخرجات</message>
@@ -64,13 +64,13 @@
   <message id="estimated-speed-first-token">تقدير السجل: ≈{0} tokens/s (الطلب ≈{1} ث · أول رمز ≈{2} ث)</message>
   <message id="estimated-speed-duration">تقدير السجل: ≈{0} tokens/s (الطلب ≈{1} ث، يشمل انتظار أول رمز)</message>
   <message id="missing-first-token-speed">تتطلب السرعة الدقيقة البث وقياس وقت أول رمز</message>
-  <message id="proxy-output-threshold">الإخراج {0} KB أقل من 0.1 KB المطلوبة لسرعة الوكيل الدقيقة</message>
+  <message id="proxy-output-threshold">الإخراج {0} Tokens أقل من 100 Tokens المطلوبة لسرعة الوكيل الدقيقة</message>
   <message id="proxy-duration-threshold">استغرق التوليد أقل من 100 مللي ثانية. السرعة غير متاحة.</message>
   <message id="missing-request-duration">مدة الطلب غير متاحة</message>
   <message id="hermes-output-threshold">يتطلب تقدير سرعة Hermes 20 رمز إخراج على الأقل</message>
   <message id="hermes-duration-threshold">يتطلب تقدير سرعة Hermes طلبًا مدته 300 مللي ثانية على الأقل</message>
   <message id="unknown-speed">السرعة غير متاحة</message>
-  <message id="log-output-threshold">الإخراج {0} KB أقل من 0.2 KB المطلوبة لتقدير CC Switch</message>
+  <message id="log-output-threshold">الإخراج {0} Tokens أقل من 200 Tokens المطلوبة لتقدير CC Switch</message>
   <message id="log-duration-threshold">مدة الطلب {0} مللي ثانية، وهي أقل من ثانية واحدة مطلوبة لتقدير CC Switch</message>
   <message id="unnamed-model">النموذج —</message>
   <message id="unknown-completion">وقت الاكتمال غير متاح</message>

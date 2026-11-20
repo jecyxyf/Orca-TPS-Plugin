@@ -7,12 +7,13 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createLeaderboardServer } from '../server/app.mjs';
+import { createLeaderboardJobs } from '../server/leaderboard-jobs.mjs';
 import { openLeaderboardStore } from '../server/store.mjs';
 import { startLeaderboard } from '../src/leaderboard.mjs';
 import { createSubmissionStats } from '../src/submission-stats.mjs';
-import { uploadHourChanges } from '../src/hourly-upload.mjs';
+import { uploadUsageChanges } from '../src/usage-upload.mjs';
 import { createWindowViews } from '../src/leaderboard-windows.mjs';
-import { HOUR_MS, SPEED_WINDOW_MS, hourStart } from '../src/leaderboard-stats.mjs';
+import { HOUR_MS, RANKING_REFRESH_MS, SPEED_WINDOW_MS, USAGE_UPLOAD_BYTES, hourStart } from '../src/leaderboard-stats.mjs';
 import { createAvatarCache } from '../src/leaderboard-avatars.mjs';
 import { discoverUsageUnits } from '../src/data.mjs';
 import { createUsageIndex, leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
@@ -116,31 +117,42 @@ async function fixture(t, names = ['alice', 'bob']) {
   return { call, advance, login, get, submit, websiteLogin, authorizePlugin, form, endpoint, store, clock: () => clock };
 }
 
-test('speed ranks use accepted uploads over 500 tokens, cap at 100, and refresh at expiry', async t => {
+test('speed ranks cap at 20 and fill the gap when a faster upload expires', async t => {
   const { call, advance, clock, store } = await fixture(t);
   const first = clock();
   for (let i = 1; i <= 108; i++) {
     store.upsertAccount({ id: i, login: `user${i}` });
-    const upload = { day: TODAY, tokens: 1000, requestId: randomUUID(), fingerprint: `body-${i}`,
-      stats: { deltaTokens: i === 104 ? 500 : i === 106 ? 499 : 501,
+    const deltaTokens = ({ 104: 500, 105: 12_345, 106: 499 })[i] ?? 501;
+    const upload = { day: TODAY, tokens: 20_000, requestId: randomUUID(), fingerprint: `body-${i}`,
+      stats: { deltaTokens,
         avgTps: i === 107 ? null : i === 108 ? 0 : i, topModel: 'gpt-test', topCli: 'codex' } };
-    assert.equal(store.submit(i, upload, first, 1_000_000), 'accepted');
-    if (i === 103) assert.equal(store.submit(i, upload, first, 1_000_000), 'accepted');
+    const submittedAt = i === 105 ? first : first + 1000;
+    assert.equal(store.submit(i, upload, submittedAt, 1_000_000), 'accepted');
+    if (i === 103) assert.equal(store.submit(i, upload, submittedAt, 1_000_000), 'accepted');
   }
+  advance(1000);
   const path = '/api/leaderboard/speeds';
   const result = await call(path);
   const { rows } = await result.json();
-  assert.equal(rows.length, 100);
-  assert.deepEqual(rows.slice(0, 2).map(row => [row.username, row.avgTps, row.topCli]),
-    [['user105', 105, 'codex'], ['user103', 103, 'codex']]);
+  assert.equal(rows.length, 20);
+  assert.deepEqual(rows.slice(0, 2).map(row => [row.username, row.avgTps, row.topCli, row.deltaTokens]),
+    [['user105', 105, 'codex', 12_345], ['user103', 103, 'codex', 501]]);
   assert.equal(rows.filter(row => row.username === 'user103').length, 1);
+  assert.equal(rows.at(-1).username, 'user85');
+  const snapshot = await (await call('/api/leaderboard/snapshot')).json();
+  assert.deepEqual(snapshot.boards[0].rows, rows);
   assert.equal((await call(path, { headers: { 'If-None-Match': result.headers.get('etag') } })).status, 304);
   advance(5 * 60_000);
-  assert.equal((await (await call(path)).json()).rows.length, 100);
+  assert.equal((await (await call(path)).json()).rows.length, 20);
   assert.equal((await (await call('/api/today?stats=1')).json()).rows.every(row => row.recent.points.length === 0), true);
-  assert.equal(store.setBan(1, 105, true, clock(), 'test'), true);
-  assert.equal((await (await call(path)).json()).rows[0].username, 'user103');
-  advance(SPEED_WINDOW_MS - 5 * 60_000);
+  advance(SPEED_WINDOW_MS - 5 * 60_000 - 1000);
+  const shifted = (await (await call(path)).json()).rows;
+  assert.equal(shifted.length, 20);
+  assert.equal(shifted[0].username, 'user103');
+  assert.equal(shifted.at(-1).username, 'user84');
+  assert.equal(store.setBan(1, 103, true, clock(), 'test'), true);
+  assert.equal((await (await call(path)).json()).rows[0].username, 'user102');
+  advance(1000);
   assert.deepEqual((await (await call(path)).json()).rows, []);
 });
 
@@ -191,33 +203,96 @@ test('hourly windows freeze all periods at the same cutoff and merge device upda
   assert.equal((await getBoard(720)).rows[0].tokens, 65);
 });
 
-test('hour uploader retries the same bounded payload and marks coverage after the last batch', async () => {
+test('rolling windows move past 01:10 with exact boundaries for 24 hours, 7 days and 30 days', async t => {
+  const { call, advance, clock, login, store } = await fixture(t);
+  const token = await login();
+  const cutoff = START + HOUR_MS + 10 * 60_000;
+  advance(cutoff - clock());
+  const day = cutoff - 24 * HOUR_MS, week = cutoff - 168 * HOUR_MS, month = cutoff - 720 * HOUR_MS;
+  const installationId = randomUUID();
+  const patch = (buckets, version = 1, requestId = randomUUID()) => call('/api/leaderboard/rolling-data', {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': requestId, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ installationId, version, buckets, coverage: [month, cutoff] })
+  });
+  const buckets = [[month - 1, 1], [month, 2], [month + 1, 4], [week - 1, 8], [week, 16], [week + 1, 32],
+    [day - 1, 64], [day, 128], [day + 1, 256], [cutoff - 1, 512], [cutoff, 1024]];
+  const requestId = randomUUID();
+  assert.equal((await patch(buckets, 1, requestId)).status, 201);
+  assert.equal((await patch(buckets, 1, requestId)).status, 201);
+  assert.equal((await patch([[cutoff - 1, 1]], 1)).status, 409);
+  const board = async hours => (await call(`/api/leaderboard/rolling?hours=${hours}`)).json();
+  for (const [hours, from, tokens] of [[24, day, 896], [168, week, 1008], [720, month, 1022]]) {
+    const result = await board(hours);
+    assert.deepEqual([result.windowStart, result.cutoffAt, result.nextAt], [from, cutoff, cutoff + RANKING_REFRESH_MS]);
+    assert.equal(result.rows[0].tokens, tokens);
+    assert.equal(result.rows[0].complete, true);
+    if (hours > 24) {
+      assert.equal(result.rows[0].daily[0].at, from);
+      assert.equal(result.rows[0].daily.length, hours / 24);
+      assert.equal(result.rows[0].daily.reduce((sum, point) => sum + point.tokens, 0), tokens);
+    }
+  }
+  advance(1);
+  for (const [hours, tokens] of [[24, 1792], [168, 2016], [720, 2044]]) {
+    const result = await board(hours);
+    assert.equal(result.cutoffAt, cutoff + 1);
+    assert.equal(result.rows[0].tokens, tokens);
+  }
+  store.removeScores(1, { day: TODAY, account: 1 }, clock());
+  assert.equal((await patch([[cutoff, 90]], 2)).status, 201);
+  assert.equal((await board(24)).rows[0].tokens, 256);
+});
+
+test('rolling uploader retries the same bounded payload and marks coverage after the last batch', async () => {
   const saved = new Map(), sent = [];
   const now = START + 12 * HOUR_MS;
   const coverage = [now - 720 * HOUR_MS, now];
-  const buckets = Array.from({ length: 330 }, (_, i) => [now - i * HOUR_MS, 999_000]);
+  const buckets = Array.from({ length: 4300 }, (_, i) => [now - i * 1000, 999_000]);
   const opts = { storage: { get: async key => saved.get(key), set: async (key, value) => saved.set(key, value) },
-    identity: 'test-account', installationId: randomUUID(), now, readHours: async () => ({ buckets, coverage }),
+    identity: 'test-account', installationId: randomUUID(), now, readUsageTimes: async () => ({ buckets, coverage }),
     send: async packet => {
       sent.push(JSON.parse(JSON.stringify(packet)));
       return sent.length === 1 ? { code: 'unavailable' } : { code: 'accepted', version: packet.body.version };
     }, active: () => true };
-  assert.equal(await uploadHourChanges(opts), 'unavailable');
-  assert.equal(await uploadHourChanges(opts), 'accepted');
+  assert.equal(await uploadUsageChanges(opts), 'unavailable');
+  assert.equal(await uploadUsageChanges(opts), 'accepted');
   assert.deepEqual(sent[0], sent[1]);
-  for (let i = 0; i < 5; i++) await uploadHourChanges(opts);
+  for (let i = 0; i < 5; i++) await uploadUsageChanges(opts);
   assert.equal(sent.slice(1).flatMap(packet => packet.body.buckets).length, buckets.length);
-  assert.ok(sent.every(packet => Buffer.byteLength(JSON.stringify(packet.body)) <= 4096));
+  assert.ok(sent.every(packet => Buffer.byteLength(JSON.stringify(packet.body)) <= USAGE_UPLOAD_BYTES));
   assert.ok(sent.slice(0, -1).every(packet => packet.body.coverage === undefined));
   assert.deepEqual(sent.at(-1).body.coverage, coverage);
 });
 
-test('viewer refreshes live stats between hourly snapshots and requests the next snapshot when required', async t => {
+test('one upload carries the daily score and rolling data, and retrying it counts neither twice', async t => {
+  const { call, login, clock } = await fixture(t);
+  const token = await login();
+  const installationId = randomUUID(), at = clock() - 25;
+  const packet = {
+    daily: { requestId: randomUUID(), body: { day: TODAY, installationId, tokens: 1000 } },
+    rolling: { requestId: randomUUID(), body: { installationId, version: 1, buckets: [[at, 1000]] } }
+  };
+  const send = () => call('/api/leaderboard/uploads', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(packet) });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const reply = await send();
+    assert.equal(reply.status, 200);
+    const { daily, rolling } = await reply.json();
+    assert.equal(daily.code, 'accepted');
+    assert.equal(rolling.code, 'accepted');
+  }
+  const { boards } = await (await call('/api/leaderboard/snapshot')).json();
+  for (const hours of [24, 168, 720]) assert.equal(boards[hours].rows[0].tokens, 1000);
+});
+
+test('viewer receives every rolling window and the speed board in one download and retains it on failure', async t => {
   const { call, advance, clock } = await fixture(t);
   const requests = [];
   const storage = { get: async () => null, set: async () => {} };
+  let offline = false;
   const viewer = createWindowViews({ storage, origin: ORIGIN, now: clock, request: async (route, opts) => {
     requests.push(route);
+    if (offline) return { code: 'unavailable' };
     const response = await call(route, { headers: opts.etag ? { 'If-None-Match': opts.etag } : {} });
     const serverTime = Date.parse(response.headers.get('date'));
     return response.status === 304 ? { notModified: true, serverTime } :
@@ -225,13 +300,54 @@ test('viewer refreshes live stats between hourly snapshots and requests the next
   } });
   const signal = new AbortController().signal;
   const first = await viewer.fetch(24, false, signal);
-  advance(10_000);
-  assert.equal((await viewer.fetch(24, false, signal)).snapshotId, first.snapshotId);
-  assert.equal(requests.filter(route => route.includes('/usage?')).length, 1);
-  advance(HOUR_MS);
+  assert.deepEqual(Object.keys(first.boards).map(Number), [0, 24, 168, 720]);
+  assert.equal((await viewer.fetch(168, false, signal)).cutoffAt, first.cutoffAt);
+  assert.equal((await viewer.fetch(720, false, signal)).cutoffAt, first.cutoffAt);
+  advance(RANKING_REFRESH_MS - 1);
+  assert.equal((await viewer.fetch(24, false, signal)).cutoffAt, first.cutoffAt);
+  assert.equal(requests.length, 1);
+  advance(1);
+  offline = true;
+  assert.equal((await viewer.fetch(24, false, signal)).code, 'unavailable');
+  assert.deepEqual((await viewer.load(24, signal)).boards, first.boards);
+  offline = false;
   const second = await viewer.fetch(24, false, signal);
-  assert.notEqual(second.snapshotId, first.snapshotId);
-  assert.equal(requests.filter(route => route.includes('/usage?')).length, 2);
+  assert.equal(second.cutoffAt, first.cutoffAt + RANKING_REFRESH_MS);
+  assert.equal(second.windowStart, first.windowStart + RANKING_REFRESH_MS);
+  assert.deepEqual(requests, Array(3).fill('/api/leaderboard/snapshot'));
+});
+
+test('a write worker commits simultaneous uploads together and the ranking worker publishes a full snapshot', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'tps-ranking-jobs-'));
+  const filename = path.join(directory, 'leaderboard.sqlite');
+  const store = openLeaderboardStore(filename);
+  const now = Date.now(), first = 'session-first', second = 'session-second';
+  store.upsertAccount({ id: 1, login: 'alice' });
+  store.upsertAccount({ id: 2, login: 'bob' });
+  store.addSession(first, 1, 'plugin', now + HOUR_MS);
+  store.addSession(second, 2, 'plugin', now + HOUR_MS);
+  let writeBatches = 0;
+  const jobs = createLeaderboardJobs({ filename, maxTokens: 1_000_000, onWrite: () => writeBatches++, log: message => t.diagnostic(message) });
+  t.after(async () => { await jobs.close(); store.close(); await rm(directory, { recursive: true, force: true }); });
+  const entry = (sessionDigest, tokens) => ({ kind: 'rolling', sessionDigest, receivedAt: now, input: {
+    installationId: randomUUID(), version: 1, buckets: [[now - 60_000, tokens]], requestId: randomUUID(), fingerprint: 'test'
+  } });
+  const pending = Promise.all([jobs.submit([entry(first, 30)]), jobs.submit([entry(second, 40)])]);
+  assert.deepEqual(store.hourly.rollingRanking(24, now).rows, []);
+  assert.deepEqual((await pending).map(([result]) => result.code), ['accepted', 'accepted']);
+  assert.equal(writeBatches, 1);
+  const end = Date.now() + 12_000;
+  let snapshot;
+  do {
+    await delay(50);
+    snapshot = JSON.parse(jobs.snapshot() || 'null');
+  } while (!snapshot?.boards[24].rows.length && Date.now() < end);
+  assert.ok(snapshot);
+  for (const hours of [24, 168, 720]) {
+    assert.equal(snapshot.boards[hours].cutoffAt, snapshot.cutoffAt);
+    assert.deepEqual(snapshot.boards[hours].rows.map(row => [row.username, row.tokens]), [['bob', 40], ['alice', 30]]);
+  }
+  assert.deepEqual(snapshot.boards[0].rows, []);
 });
 
 test('five-minute points are recorded once per accepted score and expire from cached rankings', async t => {
@@ -1369,11 +1485,11 @@ test('usage discovery separates requests on either side of Beijing midnight from
   ].map(row => JSON.stringify(row)).join('\n') + '\n');
   const values = new Map();
   const index = createUsageIndex({
-    leaderboard: true, now: () => cutoff, rankDays: 30, includeHours: true,
+    leaderboard: true, now: () => cutoff, rankDays: 30, includeUsageTimes: true,
     storage: { keys: async () => [...values.keys()], get: async key => values.get(key),
       set: async (key, value) => values.set(key, value), delete: async key => values.delete(key) },
     discover: (scanCutoff, rankDay, rankFrom) => discoverUsageUnits(scanCutoff, {
-      roots: { pi: [dir] }, includeDefaults: false, rankDay, rankFrom, includeHours: true
+      roots: { pi: [dir] }, includeDefaults: false, rankDay, rankFrom, includeUsageTimes: true
     })
   });
   assert.equal(index.leaderboardUsage().ready, false);
@@ -1384,8 +1500,8 @@ test('usage discovery separates requests on either side of Beijing midnight from
   const history = index.leaderboardHistory();
   assert.equal(history.ready, true);
   assert.deepEqual(history.scores, [{ day: leaderboardDay(start - 1), tokens: 15 }, { day, tokens: 50 }]);
-  assert.deepEqual(index.leaderboardHourly(), {
-    buckets: [[oldest, 33], [start - HOUR_MS, 15], [start, 50]], coverage: [oldest, cutoff]
+  assert.deepEqual(index.leaderboardUsageTimes(), {
+    buckets: [[oldest, 33], [start - 1, 15], [start, 50]], coverage: [oldest, cutoff]
   });
 });
 

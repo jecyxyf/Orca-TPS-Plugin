@@ -353,7 +353,8 @@
     .ladder-time { grid-area: time; color: var(--muted); font-size: 11px; }
     .ladder-rows .ladder-speed-row { --ladder-row-size: 32px; }
     .ladder-speed-row .ladder-total { white-space: nowrap; }
-    .ladder-speed-row .ladder-recent-tools { font-size: 11px; }
+    .ladder-speed-row .ladder-recent-meta { margin-top: 0; }
+    .ladder-speed-tokens { flex: none; color: var(--muted); white-space: nowrap; }
     .ladder-recent-caption { margin: 7px 0 0; color: var(--muted); font-size: 11px; }
     .ladder-recent { grid-area: recent; min-width: 0; }
     .ladder-chart {
@@ -742,7 +743,7 @@
       <dl class="metrics">
         <div class="metric output">
           <dt class="metric-label"><span aria-hidden="true">📦</span><span data-i18n="output"></span></dt>
-          <dd class="metric-value-line"><span class="metric-value" data-testid="output-value"></span><span class="metric-unit">KB</span></dd>
+          <dd class="metric-value-line"><span class="metric-value" data-testid="output-value"></span><span class="metric-unit">Tokens</span></dd>
         </div>
         <div class="metric duration">
           <dt class="metric-label"><span aria-hidden="true">⏳</span><span data-i18n="duration"></span></dt>
@@ -924,12 +925,12 @@
       }
       return next;
     }
-    const formatTokenMB = tokens => {
+    const formatMillionTokens = tokens => {
       if (!Number.isFinite(tokens) || tokens < 0) return '—';
-      const options = tokens > 0 && tokens < 1_000_000
+      const options = tokens < 1_000_000
         ? { maximumFractionDigits: 6 }
         : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
-      return locale.number(tokens / 1_000_000, options) + ' MB';
+      return locale.number(tokens / 1_000_000, options) + ' M';
     };
 
     (() => {
@@ -994,7 +995,7 @@
       }, { once: true });
 
       const numeric = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
-      const outputKB = tokens => numeric(tokens) ? locale.number(tokens / 1_000, { maximumFractionDigits: 3 }) : '—';
+      const outputCount = tokens => numeric(tokens) ? locale.number(tokens) : '—';
       const isSessionLog = record => typeof record?.dataSource === 'string' && record.dataSource.length > 0 && record.dataSource !== 'proxy';
       function number(value, fraction = 0) {
         return numeric(value) ? locale.number(value, { minimumFractionDigits: fraction, maximumFractionDigits: fraction }) : '—';
@@ -1025,7 +1026,7 @@
         }
         if (record?.dataSource === 'proxy') {
           if (!numeric(record.firstTokenMs) || record.firstTokenMs <= 0) return t('missing-first-token-speed');
-          if (numeric(record.outputTokens) && record.outputTokens < 100) return t('proxy-output-threshold', outputKB(record.outputTokens));
+          if (numeric(record.outputTokens) && record.outputTokens < 100) return t('proxy-output-threshold', outputCount(record.outputTokens));
           return t('proxy-duration-threshold');
         }
         if (session) {
@@ -1035,7 +1036,7 @@
             if (record.durationMs < 300) return t('hermes-duration-threshold');
             return t('unknown-speed');
           }
-          if (numeric(record.outputTokens) && record.outputTokens < 200) return t('log-output-threshold', outputKB(record.outputTokens));
+          if (numeric(record.outputTokens) && record.outputTokens < 200) return t('log-output-threshold', outputCount(record.outputTokens));
           if (record.durationMs < 1000) return t('log-duration-threshold', number(record.durationMs));
         }
         return t('unknown-speed');
@@ -1092,7 +1093,8 @@
         }
 
         setValue(find('speed-value'), formatTps(record), speedTooltip(record));
-        setValue(find('output-value'), outputKB(record.outputTokens), numeric(record.outputTokens) ? `${outputKB(record.outputTokens)} KB` : t('output-unknown'));
+        const output = outputCount(record.outputTokens);
+        setValue(find('output-value'), output, numeric(record.outputTokens) ? `${output} Tokens` : t('output-unknown'));
 
         const hasDuration = numeric(record.durationMs) && record.durationMs > 0;
         const seconds = hasDuration ? record.durationMs / 1000 : null;
@@ -1133,7 +1135,7 @@
         model.title = model.textContent;
         const amount = document.createElement('span');
         amount.className = 'war-amount';
-        amount.textContent = formatTokenMB(row.tokens);
+        amount.textContent = formatMillionTokens(row.tokens);
         head.append(agent, model, amount);
         const track = document.createElement('div');
         track.className = 'war-track';
@@ -1143,7 +1145,7 @@
         track.append(fill);
         const meta = document.createElement('div');
         meta.className = 'war-meta';
-        for (const part of [t('requests-counted', formatCount(row.requests)), t('fresh-input-amount', formatTokenMB(row.freshInput)), t('output-amount', formatTokenMB(row.output)), t('cache-read-amount', formatTokenMB(row.cacheRead))]) {
+        for (const part of [t('requests-counted', formatCount(row.requests)), t('fresh-input-amount', formatMillionTokens(row.freshInput)), t('output-amount', formatMillionTokens(row.output)), t('cache-read-amount', formatMillionTokens(row.cacheRead))]) {
           const span = document.createElement('span');
           span.setAttribute('data-localized-text', '');
           span.textContent = part;
@@ -1158,7 +1160,7 @@
         for (const tab of document.querySelectorAll('[data-range]')) {
           tab.setAttribute('aria-selected', String(tab.dataset.range === usageRange));
         }
-        byId('war-tokens').textContent = range ? formatTokenMB(range.tokens) : '—';
+        byId('war-tokens').textContent = range ? formatMillionTokens(range.tokens) : '—';
         byId('war-requests').textContent = range ? formatCount(range.requests) : '—';
         const list = Array.isArray(range?.rows) ? range.rows : [];
         const signature = JSON.stringify([usageRange, list, range?.speeds]);
@@ -1293,7 +1295,7 @@
               cell.dataset.requests = String(requests);
               if (rebuild) cell.dataset.label = dayLabel(date);
               cell.setAttribute('aria-label', tokens > 0
-                ? t('heatmap-day-usage', cell.dataset.label, formatTokenMB(tokens), formatCount(requests))
+                ? t('heatmap-day-usage', cell.dataset.label, formatMillionTokens(tokens), formatCount(requests))
                 : t('heatmap-day-empty', cell.dataset.label));
             }
             cells.push(cell);
@@ -1311,12 +1313,12 @@
           grid.replaceChildren(...cells);
           months.replaceChildren(...labels);
         }
-        byId('heat-total').textContent = usageSummary ? t('yearly-usage-total', formatTokenMB(total), number(activeDays)) : t('calculating-usage');
+        byId('heat-total').textContent = usageSummary ? t('yearly-usage-total', formatMillionTokens(total), number(activeDays)) : t('calculating-usage');
       }
       const heatTip = byId('heat-tip');
       function showHeatTip(cell) {
         heatTip.textContent = Number(cell.dataset.tokens) > 0
-          ? t('heatmap-day-usage', cell.dataset.label, formatTokenMB(Number(cell.dataset.tokens)), formatCount(Number(cell.dataset.requests)))
+          ? t('heatmap-day-usage', cell.dataset.label, formatMillionTokens(Number(cell.dataset.tokens)), formatCount(Number(cell.dataset.requests)))
           : t('heatmap-day-empty', cell.dataset.label);
         heatTip.hidden = false;
         const host = byId('heat').getBoundingClientRect(), rect = cell.getBoundingClientRect();
@@ -1494,14 +1496,13 @@
         rate_limited: 'rate-limited'
       };
       const messageFor = code => Object.hasOwn(messages, code) ? t(messages[code]) : undefined;
-      let model, session, pendingLogin, retryLogin, rankDays = 1;
-      const cachedRankings = new Map(), summaryQueue = new Set(), rankRequests = new Map();
-      const RANK_REFRESH_MS = 10_000, RECENT_STATS_MS = 5 * 60_000, HOUR_MS = 3_600_000, DAY_MS = 86_400_000;
-      let rankingPending, rankWake, sessionPushVersion = 0, rankingSubscription;
+      let session, pendingLogin, retryLogin, rankDays = 1;
+      const cachedRankings = new Map();
+      const RANK_REFRESH_MS = 10_000, RECENT_STATS_MS = 5 * 60_000, DAY_MS = 86_400_000;
+      let rankingPending, rankWake, nextRankRefresh, rankingProblem, sessionPushVersion = 0, rankingSubscription;
       let rankingAccess, rankingPreferenceSubscription, rankingPreferenceVersion = 0, rankingPreferenceFailed = false;
       let busy = false, restoringSession = false, manualSyncPending = false;
       let revision = 0, drawnRows = '', renderedDay = '', loginProblem = '', messageCode = '';
-      let summaryAccount = '';
       let rankingNodes = new Map(), leaderboardFrame, nextRecentExpiry = Infinity;
       let animateToday = false, pulseDay = '', latestPulses = new Map();
       const usagePainters = new WeakMap();
@@ -1804,9 +1805,9 @@
           speed.title = t('leaderboard-average-speed');
           meta.append(speed);
         }
-        const pointTitle = point => byDay ? `${dateLabel(point.at)} – ${dateLabel(point.at + DAY_MS)} · ${point.tokens === 0 ? `${locale.number(0)} MB` : formatTokenMB(point.tokens)}` +
+        const pointTitle = point => byDay ? `${dateLabel(point.at)} – ${dateLabel(point.at + DAY_MS)} · ${formatMillionTokens(point.tokens)}` +
           (point.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '')
-          : `${shortClock(point.submittedAt)} · ${locale.number(point.deltaTokens)} Token · ${speedText(point.avgTps)}`;
+          : `${shortClock(point.submittedAt)} · ${formatMillionTokens(point.deltaTokens)} · ${speedText(point.avgTps)}`;
         const latestPoint = points.at(-1);
         chart.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : usageChartLabel();
         container.append(chart);
@@ -1878,11 +1879,11 @@
         const previousPulses = animateToday && pulseDay === renderedDay ? latestPulses : null;
         pulseDay = rankDays === 1 ? renderedDay : '';
         latestPulses = new Map(rankDays === 1 ? rows.map(row => [row.username, row.recent?.points.at(-1)?.submittedAt ?? -Infinity]) : []);
-        const signature = JSON.stringify([rankDays, ranking?.snapshotId, username, rows]);
+        const signature = JSON.stringify([rankDays, username, rows]);
         if (signature === drawnRows) return;
         const period = periods.find(entry => entry.days === rankDays);
         drawnRows = signature;
-        const keyOf = row => JSON.stringify([rankDays, ranking?.snapshotId, username === row.username, row]);
+        const keyOf = row => JSON.stringify([rankDays, username === row.username, row]);
         rankingNodes = updateList(element('rows'), rows, rankingNodes, keyOf, row => {
           const item = document.createElement('li');
           if (username && row.username === username) item.classList.add('ladder-self');
@@ -1905,7 +1906,7 @@
           const badge = period && medal(row.rank, period);
           if (badge) user.append(badge);
           user.append(avatar, name);
-          total.textContent = speedBoard ? speedText(row.avgTps) : formatTokenMB(row.tokens);
+          total.textContent = speedBoard ? speedText(row.avgTps) : formatMillionTokens(row.tokens);
           if (speedBoard) total.title = t('leaderboard-average-speed');
           const uploadedAt = row.lastUploadAt ?? row.submittedAt;
           const uploaded = speedBoard ? leaderboardTime(uploadedAt) : clock(uploadedAt);
@@ -1915,11 +1916,20 @@
           time.dateTime = new Date(uploadedAt).toISOString();
           item.append(rank, user, total);
           if (speedBoard) {
+            const meta = document.createElement('div');
             const tools = document.createElement('span');
-            tools.className = 'ladder-recent ladder-recent-tools';
+            meta.className = 'ladder-recent ladder-recent-meta';
+            tools.className = 'ladder-recent-tools';
             tools.textContent = toolText(row.topModel, row.topCli);
             tools.title = tools.textContent;
-            item.append(tools);
+            meta.append(tools);
+            if (Number.isSafeInteger(row.deltaTokens)) {
+              const tokens = document.createElement('bdi');
+              tokens.className = 'ladder-speed-tokens';
+              tokens.textContent = `${locale.number(row.deltaTokens)} tokens`;
+              meta.append(tokens);
+            }
+            item.append(meta);
           } else item.append(usageCard(row, now, previousPulses?.get(row.username) ?? Infinity, ranking.windowStart));
           item.append(time);
           return item;
@@ -1938,7 +1948,7 @@
           const ranking = cachedRankings.get(period.days);
           const row = username && ranking?.rows.find(row => row.username === username);
           element('user-rank-' + period.days).textContent = row ? t('rank-position', locale.number(row.rank)) : '—';
-          element('user-tokens-' + period.days).textContent = formatTokenMB(row?.tokens);
+          element('user-tokens-' + period.days).textContent = formatMillionTokens(row?.tokens);
           const place = row?.rank >= 1 && row.rank <= podium.length ? row.rank : 0;
           const slot = element('user-badge-' + period.days);
           if (Number(slot.dataset.place ?? 0) === place) continue;
@@ -1981,9 +1991,8 @@
 
       function renderRankCountdown(time) {
         const note = element('refresh-countdown');
-        const scheduled = rankRequests.get(rankDays);
-        const text = rankingPending?.days === rankDays ? t('sync-in-progress')
-          : scheduled?.day === renderedDay ? countdownText(scheduled.next, time) || t('sync-waiting') : '—';
+        const text = rankingPending ? t('sync-in-progress')
+          : Number.isFinite(nextRankRefresh) ? countdownText(nextRankRefresh, time) || t('sync-waiting') : '—';
         if (note.textContent !== text) note.textContent = text;
         if (note.title !== text) note.title = text;
       }
@@ -2011,21 +2020,14 @@
         if (group.hidden) return;
         renderedDay = boardDay();
         const time = Date.now();
-        const { board = {} } = model ?? {};
         const snapshot = session ?? {};
         const { board: account = {}, sessionProblem, initializing, historyProblem } = snapshot;
-        const selected = model?.days === rankDays;
-        const readyBoard = Array.isArray(board.rows);
-        const live = selected && readyBoard;
-        const cached = cachedRankings.get(rankDays);
-        const cachedRanking = cached ?? null;
-        const ranking = rankingAccess ? (live ? board : cachedRanking) : null;
+        const ranking = rankingAccess ? cachedRankings.get(rankDays) : null;
         const freshness = element('freshness');
-        const notice = !ranking && !(selected && board.code) ? t('loading-leaderboard') : '';
+        const notice = !ranking && !rankingProblem ? t('loading-leaderboard') : '';
         if (freshness.textContent !== notice) freshness.textContent = notice;
         freshness.hidden = !notice;
-        const refreshedAt = rankingAccess ? ((live ? model.updatedAt : null) ?? cachedRanking?.updatedAt ?? null) : null;
-        renderToolbarTime(element('refresh-time'), refreshedAt);
+        renderToolbarTime(element('refresh-time'), ranking?.updatedAt ?? null);
         const signedIn = snapshot.signedIn ?? account.authenticated;
         const checkingLogin = typeof signedIn !== 'boolean';
         element('controls').hidden = false;
@@ -2039,7 +2041,7 @@
           : snapshot.logoutPending ? t('logout-pending') : '';
         if (logoutNote.textContent !== logoutText) logoutNote.textContent = logoutText;
         logoutNote.hidden = !logoutText;
-        const boardProblem = rankingAccess && selected ? messageFor(board.code) : undefined;
+        const boardProblem = rankingAccess ? messageFor(rankingProblem) : undefined;
         const sessionStatus = checkingLogin ? t('checking-login') : '';
         const locked = account.lockedUntil > time;
         const authProblem = pendingLogin ? undefined : messageFor(sessionProblem);
@@ -2070,13 +2072,9 @@
 
       async function showCache(days = rankDays) {
         const signal = rankingAccess?.signal;
-        if (!signal || days === 0 || cachedRankings.has(days)) return;
+        if (!signal || cachedRankings.size) return;
         const { ranking } = await request('window-cache', { days }, signal);
-        if (signal.aborted || !ranking || ranking.hours !== days * 24) return;
-        const cachedRanking = cachedRankings.get(days);
-        if (cachedRanking?.updatedAt >= ranking.updatedAt) return;
-        cachedRankings.set(days, ranking);
-        scheduleRender();
+        if (!signal.aborted && cacheRankings(ranking?.boards, ranking?.updatedAt)) scheduleRender();
       }
 
       async function refreshSession() {
@@ -2093,67 +2091,27 @@
         } finally { restoringSession = false; }
       }
 
-      function cacheRanking(result, days) {
-        const { board, updatedAt } = result;
-        if (!rankingAccess || !Number.isSafeInteger(updatedAt) || !Array.isArray(board?.rows) || (days && board.hours !== days * 24)) return false;
-        cachedRankings.set(days, { ...board, updatedAt });
+      function cacheRankings(boards, updatedAt) {
+        if (!rankingAccess || !boards || !Number.isSafeInteger(updatedAt) || cachedRankings.get(0)?.updatedAt > updatedAt) return false;
+        for (const [hours, board] of Object.entries(boards)) cachedRankings.set(Number(hours) / 24, { ...board, updatedAt });
         return true;
-      }
-
-      function showRankingState(result, days) {
-        model = { days, board: result.board ?? { code: result.code }, updatedAt: result.updatedAt };
-        cacheRanking(result, days);
-        render();
-        if (days === 1 && Array.isArray(model.board.rows)) animateToday = true;
-        showSummaries();
-      }
-
-      function showSummaries() {
-        const signal = rankingAccess?.signal;
-        if (!signal || group.hidden) return;
-        const current = session, name = current?.signedIn && current.board?.username;
-        if (!name) { summaryAccount = ''; summaryQueue.clear(); return; }
-        const cutoff = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
-        const key = cutoff + '/' + name;
-        if (summaryAccount === key) return;
-        summaryAccount = key;
-        for (const { days } of periods) {
-          if (days === rankDays || cachedRankings.get(days)?.cutoffAt === cutoff) continue;
-          void showCache(days);
-          summaryQueue.add(days);
-        }
       }
 
       async function refresh(days = rankDays, force = false) {
         const signal = rankingAccess?.signal;
         if (!signal || group.hidden || lifetime.signal.aborted) return;
         if (renderedDay !== boardDay()) render('');
-        if (rankingPending) {
-          if (!force) return;
-          const running = rankingPending;
-          try { await running.promise; } catch { /* A manual refresh may retry. */ }
-          if (signal.aborted) return;
-          if (running.days !== days || !running.succeeded) return refresh(days, true);
-          return;
-        }
-        const previous = rankRequests.get(days);
-        if (!force && previous?.day === renderedDay && Date.now() < previous.next) return;
+        if (rankingPending) return rankingPending;
+        if (!force && Date.now() < nextRankRefresh) return;
         const startedAt = Date.now();
-        const day = renderedDay;
-        const pending = { days, succeeded: false, promise: undefined };
-        summaryQueue.delete(days);
-        rankingPending = pending;
-        renderRankCountdown(Date.now());
-        pending.promise = (async () => {
+        const pending = (async () => {
           const result = await request('window-state', { days, force }, signal);
           if (signal.aborted) return;
-          pending.succeeded = Array.isArray(result.board?.rows) && !result.board.code;
-          const retry = pending.succeeded ? 0 : Math.min((previous?.retry || 5000) * 2, 30_000);
-          rankRequests.set(days, { day, retry, next: retry ? Date.now() + retry : startedAt + RANK_REFRESH_MS });
-          if (!pending.succeeded && days !== rankDays) summaryQueue.add(days);
-          if (days !== rankDays) {
-            if (cacheRanking(result, days)) scheduleRender();
-          } else showRankingState(result, days);
+          const updated = cacheRankings(result.boards, result.updatedAt);
+          rankingProblem = updated ? undefined : result.code;
+          nextRankRefresh = (updated ? result.updatedAt : startedAt) + RANK_REFRESH_MS;
+          render();
+          if (updated && rankDays === 1) animateToday = true;
         })().finally(() => {
           if (rankingPending !== pending) return;
           rankingPending = undefined;
@@ -2161,11 +2119,12 @@
             const now = Date.now();
             renderRankCountdown(now);
             clearTimeout(rankWake);
-            const next = rankRequests.get(rankDays)?.next;
-            if (rankingAccess && Number.isFinite(next)) rankWake = setTimeout(() => void refresh(), Math.max(0, next - now));
+            if (rankingAccess && Number.isFinite(nextRankRefresh)) rankWake = setTimeout(() => void refresh(), Math.max(0, nextRankRefresh - now));
           }
         });
-        return pending.promise;
+        rankingPending = pending;
+        renderRankCountdown(Date.now());
+        return pending;
       }
 
       function showCachedRanking() {
@@ -2175,7 +2134,6 @@
         if (!rankingAccess) return;
         void showCache();
         void refresh(rankDays, true);
-        showSummaries();
       }
 
       function setRankingEnabled(enabled) {
@@ -2195,11 +2153,8 @@
         } else {
           rankingAccess.abort();
           clearTimeout(rankWake);
-          rankingAccess = rankingPending = model = undefined;
+          rankingAccess = rankingPending = nextRankRefresh = rankingProblem = undefined;
           cachedRankings.clear();
-          rankRequests.clear();
-          summaryQueue.clear();
-          summaryAccount = '';
           nextRecentExpiry = Infinity;
           render('');
         }
@@ -2251,7 +2206,10 @@
         if (days === rankDays) return;
         rankDays = days;
         for (const tab of rankTabs) tab.setAttribute('aria-pressed', String(Number(tab.dataset.rankDays) === days));
-        showCachedRanking();
+        animateToday = false;
+        render('');
+        if (!cachedRankings.size) void showCache(days);
+        void refresh(days);
       });
       group.addEventListener('tps-view-opened', showCachedRanking);
       window.addEventListener('online', () => {
@@ -2377,14 +2335,7 @@
         renderUploadCountdown(snapshot, snapshot?.signedIn ?? snapshot?.board?.authenticated, time);
         if (!rankingAccess) return;
         renderRankCountdown(time);
-        showSummaries();
         void refresh();
-        if (!rankingPending) {
-          for (const days of summaryQueue) {
-            void refresh(days);
-            if (rankingPending) break;
-          }
-        }
       }, 1000);
       window.addEventListener('pagehide', () => {
         lifetime.abort();

@@ -29,7 +29,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 ### 3.1 Current Data
 
 - Follow the active Orca channel and view up to 100 recent requests.
-- See the model, output in KB, generation speed in tokens per second, request duration, time to first token (TTFT) when available, and cache hit rate.
+- See the model, output in Tokens, generation speed in tokens per second, request duration, time to first token (TTFT) when available, and cache hit rate.
 - Check the latest speed and cache hit rate in the Orca status bar. Estimated speeds are marked with ≈.
 
 <p align="center">
@@ -41,7 +41,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 ### 3.2 Personal Stats
 
 - Review usage and request counts for today, the last 7 days, or the last 30 days.
-- Break down usage by tool and model, and compare average model generation speeds. Usage in MB includes new input, output, cache reads, and cache writes.
+- Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
 - Use the annual heatmap to see daily activity over the past year.
 - Usage history is cached locally and restored when Orca restarts.
 
@@ -53,17 +53,17 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ### 3.3 Leaderboard
 
-- Browse usage rankings for the last 24 hours, 7 days, and 30 days. Each ranking updates on the hour using the last 24, 168, or 720 complete hours. The top three get gold, silver, and bronze medals.
+- Browse rolling usage rankings for the last 24 hours, 7 days, and 30 days in M. Each refresh counts usage back from the current time. The top three get gold, silver, and bronze medals.
 - Use the switch next to Rankings to control leaderboard viewing. Turning it off hides the rankings and stops fetching them. The plugin remembers your choice. Guests can view rankings.
-- The 24-hour usage tab shows the latest five-minute waveform and average generation speed. The 7-day and 30-day tabs show one usage point per 24-hour period. All three show the most-used model, Harness, and latest upload time. Recent activity refreshes every 10 seconds while the leaderboard is open and enabled.
-- The Speed tab ranks the 100 fastest uploads from the past 24 hours. An upload qualifies with more than 500 new tokens and a valid speed. Each row shows the user, time, average speed, most-used model, and Harness.
+- The 24-hour usage tab shows the latest five-minute waveform and average generation speed. The 7-day and 30-day tabs show one usage point per 24-hour period. All three show the most-used model, Harness, and latest upload time. The full leaderboard refreshes every 10 seconds while open and enabled.
+- The Speed tab ranks the 20 fastest uploads from the past 24 hours. An upload qualifies with more than 500 new tokens and a valid speed. Each row shows the user, time, average speed, most-used model, Harness, and the full count of new tokens, such as `1,250,000 tokens`.
 - Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
 - Sign in with GitHub to participate. The leaderboard combines usage across installations linked to the same account. The plugin fetches avatars directly from GitHub and shows a built-in black hat avatar until one loads. Missing avatars are retried after the next sync, and a loaded avatar is reused everywhere it appears.
 - While signed in, the plugin attempts to upload every 10 seconds. Manual uploads use the same interval. Each toolbar has a manual button on the left, with an hourglass countdown and a clock for the last successful upload or sync on the right. Upload failures appear below the account toolbar.
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English leaderboard with a 30-day usage curve, the hourly cutoff, and the Speed tab">
+    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English leaderboard with a 30-day usage curve, the cutoff time, and the Speed tab">
   </a>
 </p>
 
