@@ -1530,15 +1530,30 @@
         });
       }
 
-      function setUsageGradient(ctx, baseline) {
+      function paintUsagePath(ctx, line, baseline, firstX, lastX) {
         const colors = window.getComputedStyle(document.documentElement);
         const low = colors.getPropertyValue('--usage-wave-low').trim();
         const high = colors.getPropertyValue('--speed').trim();
+
+        const area = new Path2D(line);
+        area.lineTo(lastX, baseline);
+        area.lineTo(firstX, baseline);
+        area.closePath();
+        const shade = ctx.createLinearGradient(0, baseline, 0, chartPadding);
+        shade.addColorStop(0, 'transparent');
+        shade.addColorStop(1, low);
+        ctx.save();
+        ctx.globalAlpha = 0.24;
+        ctx.fillStyle = shade;
+        ctx.fill(area);
+        ctx.restore();
+
         const gradient = ctx.createLinearGradient(0, baseline, 0, chartPadding);
         gradient.addColorStop(0, low);
         gradient.addColorStop(0.58, low);
         gradient.addColorStop(1, high);
         ctx.strokeStyle = ctx.fillStyle = gradient;
+        ctx.stroke(line);
       }
 
       function pulseX(point, left, width) {
@@ -1569,7 +1584,6 @@
           ctx.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
           ctx.clearRect(0, 0, width, height);
           const baseline = height - chartPadding;
-          setUsageGradient(ctx, baseline);
           ctx.lineWidth = 1.4;
           ctx.lineCap = ctx.lineJoin = 'round';
           const halfWidth = Math.min(chartPadding - 0.75, (width - 2 * chartPadding) / 70);
@@ -1577,18 +1591,21 @@
           const progress = animate ? Math.min(1, (time - startedAt) / 200) : 1;
           const riseAt = point => point.submittedAt > animateAfter ? 1 - (1 - progress) ** 2 : 1;
           const [first] = points;
-          ctx.beginPath();
-          ctx.moveTo(pulseX(first, left, width) - (first.deltaTokens > 0 ? halfWidth : 0), baseline);
+          const last = points.at(-1);
+          const start = pulseX(first, left, width) - (first.deltaTokens > 0 ? halfWidth : 0);
+          const end = pulseX(last, left, width) + (last.deltaTokens > 0 ? halfWidth : 0);
+          const line = new Path2D();
+          line.moveTo(start, baseline);
           for (const point of points) {
             const x = pulseX(point, left, width);
             if (point.deltaTokens > 0) {
               const peak = baseline - Math.max(1.5, (baseline - chartPadding) * point.deltaTokens / maximum) * riseAt(point);
-              ctx.lineTo(x - halfWidth, baseline);
-              ctx.bezierCurveTo(x - halfWidth * 0.54, baseline, x - halfWidth * 0.38, peak, x, peak);
-              ctx.bezierCurveTo(x + halfWidth * 0.38, peak, x + halfWidth * 0.54, baseline, x + halfWidth, baseline);
-            } else ctx.lineTo(x, baseline);
+              line.lineTo(x - halfWidth, baseline);
+              line.bezierCurveTo(x - halfWidth * 0.54, baseline, x - halfWidth * 0.38, peak, x, peak);
+              line.bezierCurveTo(x + halfWidth * 0.38, peak, x + halfWidth * 0.54, baseline, x + halfWidth, baseline);
+            } else line.lineTo(x, baseline);
           }
-          ctx.stroke();
+          paintUsagePath(ctx, line, baseline, start, end);
           for (const point of points) {
             if (point.deltaTokens > 0) continue;
             ctx.beginPath();
@@ -1656,12 +1673,11 @@
             const ctx = chart.getContext('2d');
             if (!ctx) return;
             ctx.clearRect(0, 0, chart.width, chart.height);
-            setUsageGradient(ctx, chart.height - chartPadding);
             ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(x(points[0]), y(points[0]));
-            for (const point of points.slice(1)) ctx.lineTo(x(point), y(point));
-            ctx.stroke();
+            const line = new Path2D();
+            line.moveTo(x(points[0]), y(points[0]));
+            for (const point of points.slice(1)) line.lineTo(x(point), y(point));
+            paintUsagePath(ctx, line, chart.height - chartPadding, x(points[0]), x(latestPoint));
             for (const point of points) {
               ctx.beginPath();
               ctx.arc(x(point), y(point), 3, 0, Math.PI * 2);

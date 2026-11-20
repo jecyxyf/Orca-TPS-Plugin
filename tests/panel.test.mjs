@@ -108,35 +108,49 @@ test('today usage connects pulses at real timestamps and animates new points onc
   const source = /const chartPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];
   assert.ok(source);
   assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart').background, 'transparent');
-  const frames = [], painters = new WeakMap(), paths = [], stops = [];
+  const frames = [], painters = new WeakMap(), paths = [], areas = [], stops = [];
+  class TestPath {
+    constructor(path) { this.points = path ? [...path.points] : []; }
+    moveTo(...point) { this.points.push(point); }
+    lineTo(...point) { this.points.push(point); }
+    bezierCurveTo(...points) { this.points.push(points.slice(-2)); }
+    closePath() { this.points.push('closed'); }
+  }
   let path;
   const ctx = {
-    setTransform() {}, clearRect() { paths.length = 0; }, beginPath() { path = []; },
+    setTransform() {}, clearRect() { paths.length = areas.length = 0; }, beginPath() { path = []; },
     createLinearGradient() { return { addColorStop(...stop) { stops.push(stop); } }; },
-    moveTo(...point) { path.push(point); }, lineTo(...point) { path.push(point); },
-    bezierCurveTo(...points) { path.push(points.slice(-2)); },
-    stroke() { paths.push(path); }, arc(...point) { path.push(point.slice(0, 3)); }, fill() { paths.push(path); }
+    save() {}, restore() {},
+    stroke(line) { paths.push(line.points); },
+    arc(...point) { path.push(point.slice(0, 3)); },
+    fill(area) {
+      if (area) areas.push({ points: area.points, opacity: this.globalAlpha });
+      else paths.push(path);
+    }
   };
   let width = 308;
   const chart = { width: 320, height: 60, isConnected: true,
     getBoundingClientRect: () => ({ width, height: 30 }), getContext: () => ctx };
-  const draw = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', `
+  const draw = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
     const RECENT_STATS_MS = 300000;
     ${source.replace(/\n      function usageCard$/, '')}
     return drawSubmissionPulses;
   `)(painters, callback => frames.push(callback), { signal: { aborted: false } }, {
     devicePixelRatio: 2, matchMedia: () => ({ matches: false }),
     getComputedStyle: () => ({ getPropertyValue: name => name === '--usage-wave-low' ? '#60a589' : '#ff6b72' })
-  }, { documentElement: {} });
+  }, { documentElement: {} }, TestPath);
   draw(chart, [{ submittedAt: 20_000, deltaTokens: 100 }, { submittedAt: 40_000, deltaTokens: 0 },
     { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
   frames.shift()(1000);
   assert.deepEqual([chart.width, chart.height], [616, 60]);
-  assert.deepEqual(stops, [[0, '#60a589'], [0.58, '#60a589'], [1, '#ff6b72']]);
+  assert.deepEqual(stops, [[0, 'transparent'], [1, '#60a589'], [0, '#60a589'], [0.58, '#60a589'], [1, '#ff6b72']]);
   assert.deepEqual(paths[0].slice(2, 7), [[24, 15], [27.25, 26], [44, 26], [93.75, 26], [97, 26]]);
   assert.deepEqual(paths[1][0], [44, 26, 1.4]);
+  assert.deepEqual(areas[0].points, [...paths[0], [100.25, 26], [20.75, 26], 'closed']);
+  assert.ok(areas[0].opacity > 0 && areas[0].opacity < 1);
   frames.shift()(1200);
   assert.deepEqual(paths[0][6], [97, 4]);
+  assert.deepEqual(areas[0].points[6], [97, 4]);
   assert.equal(frames.length, 0);
   width = 158;
   painters.get(chart)();

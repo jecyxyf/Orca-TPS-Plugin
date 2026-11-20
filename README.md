@@ -55,7 +55,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 - Browse today’s, 7-day, and 30-day rankings. Entries show GitHub avatars, and the top three get gold, silver, and bronze medals.
 - The top 100 entries show a five-minute waveform with one peak per upload on Today. The 7-day and 30-day charts connect every Beijing calendar day, with zero usage on days without records. Entries also show the latest average generation speed, most-used model and CLI, and last upload time. The leaderboard refreshes every 10 seconds while open.
-- The charts have transparent backgrounds. Lower usage is green and higher usage transitions to red.
+- A light green fill fades to transparent below each usage line. Lower usage is green and higher usage transitions to red.
 - Sign in with GitHub to participate. The leaderboard combines usage across installations linked to the same account. The plugin fetches avatars directly from GitHub and shows a built-in red hat avatar until one loads. Missing avatars are retried after the next sync, and a loaded avatar is reused everywhere it appears.
 - While signed in, the plugin attempts to sync every 10 seconds. Manual sync shares the same interval. The account card shows the countdown, the last successful sync, and any recent error.
 
