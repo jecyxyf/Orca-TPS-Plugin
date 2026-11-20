@@ -243,4 +243,15 @@
   <message id="sync-waiting">ہم آہنگی کا انتظار…</message>
   <message id="sync-now">ابھی ہم آہنگ کریں</message>
   <message id="sync-queued">اگلی ہم آہنگی کے لیے قطار میں</message>
+  <message id="pulse-title">لائیو نبض</message>
+  <message id="pulse-active-users">اس وقت {0} فعال</message>
+  <message id="pulse-standby">تیار حالت</message>
+  <message id="pulse-idle-marquee">ابھی کوئی براہ راست سرگرمی نہیں — اے آئی چلانے پر یہاں نظر آئے گا</message>
+  <message id="pulse-my-heartbeat">میری براہ راست دھڑکن</message>
+  <message id="pulse-global-heartbeat">مجموعی لائیو نبض</message>
+  <message id="pulse-live-badge">لائیو</message>
+  <message id="pulse-online">آن لائن</message>
+  <message id="pulse-hot">تیز رفتار</message>
+  <message id="pulse-steady">متوازن</message>
+  <message id="pulse-idle">آرام</message>
 </messages>

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
+import { validInstallationId } from '../src/leaderboard-installation.mjs';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
 
 const GITHUB = 'https://github.com';
@@ -59,7 +60,7 @@ function redirect(res, location) {
 
 export function createLeaderboardServer({
   store, baseUrl, clientId, clientSecret, adminEmail = '', maxTokens = Number.MAX_SAFE_INTEGER,
-  fetcher = fetch, now = Date.now, log = () => {}
+  pulse = null, fetcher = fetch, now = Date.now, log = () => {}
 }) {
   const base = new URL(baseUrl);
   const secure = base.protocol === 'https:';
@@ -74,6 +75,93 @@ export function createLeaderboardServer({
   const browserLogins = new Map();
   const requests = new Map();
   let minute, prunedDay;
+  const PULSE_SNAPSHOT_MS = 1000;
+  const PULSE_STREAM_MS = 1000;
+  const PULSE_PING_MS = 15_000;
+  const MAX_PULSE_STREAMS = 500;
+  const MAX_PULSE_STREAMS_PER_IP = 10;
+  const pulseStreams = new Set();
+  const pulseStreamsByIp = new Map();
+  let pulseCache = null, pulsePending = null, pulseTimer = null, pulseBroadcastPending = null;
+  let pulseLastSignature = '', pulsePingAt = 0;
+
+  async function readPulseSnapshot(force = false) {
+    const time = now();
+    if (!pulse) return { available: false, serverTime: time, activeCount: 0, users: [], marquee: [] };
+    if (!force && pulseCache && time - pulseCache.at < PULSE_SNAPSHOT_MS) return pulseCache.data;
+    if (pulsePending) return pulsePending;
+    pulsePending = (async () => {
+      const data = await pulse.readSnapshot();
+      pulseCache = { at: now(), data };
+      return data;
+    })().finally(() => { pulsePending = null; });
+    return pulsePending;
+  }
+
+  function removePulseStream(client) {
+    if (!pulseStreams.delete(client)) return;
+    const count = (pulseStreamsByIp.get(client.ip) ?? 1) - 1;
+    if (count > 0) pulseStreamsByIp.set(client.ip, count);
+    else pulseStreamsByIp.delete(client.ip);
+    if (pulseStreams.size === 0 && pulseTimer) {
+      clearInterval(pulseTimer);
+      pulseTimer = null;
+    }
+  }
+
+  function stopPulseStreams() {
+    if (pulseTimer) {
+      clearInterval(pulseTimer);
+      pulseTimer = null;
+    }
+    if (pulseBroadcastPending) {
+      clearTimeout(pulseBroadcastPending);
+      pulseBroadcastPending = null;
+    }
+    for (const client of [...pulseStreams]) {
+      removePulseStream(client);
+      if (!client.res.writableEnded) client.res.end();
+    }
+  }
+
+  async function broadcastPulse(force = false) {
+    if (pulseStreams.size === 0) return;
+    const data = await readPulseSnapshot(force);
+    if (pulseStreams.size === 0) return;
+    const time = now();
+    const signature = JSON.stringify({ available: data.available, users: data.users, marquee: data.marquee });
+    if (signature !== pulseLastSignature) {
+      pulseLastSignature = signature;
+      pulsePingAt = time;
+      const frame = `event: pulse\ndata: ${JSON.stringify(data)}\n\n`;
+      for (const client of [...pulseStreams]) {
+        if (client.res.destroyed || client.res.writableEnded) {
+          removePulseStream(client);
+          continue;
+        }
+        client.res.write(frame);
+      }
+    } else if (time - pulsePingAt >= PULSE_PING_MS) {
+      pulsePingAt = time;
+      for (const client of [...pulseStreams]) {
+        if (client.res.destroyed || client.res.writableEnded) {
+          removePulseStream(client);
+          continue;
+        }
+        client.res.write(': ping\n\n');
+      }
+    }
+  }
+
+  function schedulePulseBroadcast() {
+    pulseCache = null;
+    if (!pulseStreams.size || pulseBroadcastPending) return;
+    pulseBroadcastPending = setTimeout(() => {
+      pulseBroadcastPending = null;
+      void broadcastPulse(true);
+    }, 150);
+    pulseBroadcastPending.unref?.();
+  }
   const adminCookie = secure ? '__Host-orca_admin' : 'orca_admin';
   const stateCookie = secure ? '__Host-orca_state' : 'orca_state';
   const pluginStateCookie = secure ? '__Host-orca_plugin_state' : 'orca_plugin_state';
@@ -298,7 +386,12 @@ export function createLeaderboardServer({
     const target = Number(form.get('account')), safeTarget = Number.isSafeInteger(target) && target !== 0;
     let result = 'rejected';
     if (url.pathname === '/admin/ban' && safeTarget && target > 0 && ['0', '1'].includes(form.get('ban'))) {
-      if (store.setBan(account.id, target, form.get('ban') === '1', time, form.get('reason') ?? '')) result = 'updated';
+      if (store.setBan(account.id, target, form.get('ban') === '1', time, form.get('reason') ?? '')) {
+        result = 'updated';
+        if (form.get('ban') === '1') {
+          void pulse?.removeAccount?.(target).then(() => schedulePulseBroadcast());
+        }
+      }
     } else if (url.pathname === '/admin/delete' && validDay(day) && safeTarget) {
       store.removeScores(account.id, { day, account: target }, time);
       result = 'updated';
@@ -335,12 +428,18 @@ export function createLeaderboardServer({
     const forwarded = address === '127.0.0.1' || address === '::1' ? req.headers['x-real-ip'] : '';
     const ip = typeof forwarded === 'string' && /^[a-f\d.:]{3,45}$/i.test(forwarded) ? forwarded : address;
     const auth = route.startsWith('/auth/') || route.startsWith('/api/auth/');
-    const requestKey = (auth ? 'auth/' : 'other/') + ip;
+    const isPulse = route === '/api/pulse' || route === '/api/pulse/stream';
+    const requestKey = (auth ? 'auth/' : isPulse ? 'pulse/' : 'other/') + ip;
     const count = (requests.get(requestKey) ?? 0) + 1;
-    if (count > (auth ? 120 : 240)) return send(res, 429, { code: 'rate_limited' });
+    if (count > (auth ? 120 : isPulse ? 180 : 240)) return send(res, 429, { code: 'rate_limited' });
     requests.set(requestKey, count);
 
-    if (method === 'GET' && route === '/healthz') return send(res, 200, { ok: true, githubConfigured });
+    if (method === 'GET' && route === '/healthz') {
+      return send(res, 200, {
+        ok: true, githubConfigured,
+        ...(pulse ? { redisConfigured: true, redisReady: pulse.isReady() } : {})
+      });
+    }
     if (method === 'GET' && route === '/') return redirect(res, '/admin');
     if (method === 'GET' && route === '/auth/github/start') return githubConfigured ? adminStart(res) : redirect(res, '/admin');
     if (method === 'GET' && route === '/auth/plugin/start') return pluginStart(req, res, url, time);
@@ -370,12 +469,65 @@ export function createLeaderboardServer({
       const viewer = account ? { authenticated: true, banned: Boolean(account.banned), username: account.username } : { authenticated: false };
       return send(res, 200, { ...viewer, ...ranking });
     }
+    if (method === 'GET' && route === '/api/pulse') {
+      return send(res, 200, await readPulseSnapshot());
+    }
+    if (method === 'GET' && route === '/api/pulse/stream') {
+      const ipStreams = pulseStreamsByIp.get(ip) ?? 0;
+      if (pulseStreams.size >= MAX_PULSE_STREAMS || ipStreams >= MAX_PULSE_STREAMS_PER_IP) {
+        return send(res, 429, { code: 'rate_limited' });
+      }
+      req.socket.setTimeout(0);
+      res.setTimeout?.(0);
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
+      });
+      const client = { res, ip };
+      pulseStreams.add(client);
+      pulseStreamsByIp.set(ip, ipStreams + 1);
+      if (!pulseTimer) {
+        pulseTimer = setInterval(() => { void broadcastPulse(true); }, PULSE_STREAM_MS);
+        pulseTimer.unref?.();
+      }
+      req.on('close', () => removePulseStream(client));
+      res.on('close', () => removePulseStream(client));
+      const initial = await readPulseSnapshot();
+      if (pulseStreams.has(client) && !res.destroyed && !res.writableEnded) {
+        res.write(`event: pulse\ndata: ${JSON.stringify(initial)}\n\n`);
+      }
+      return;
+    }
     if (!account) return send(res, 401, { code: 'login_required' });
     if (method === 'POST' && route === '/api/auth/logout') {
       store.removeSession(digest(token));
       return send(res, 200, { ok: true });
     }
     if (account.banned) return send(res, 403, { code: 'banned', username: account.username });
+    if (method === 'POST' && route === '/api/pulse') {
+      const raw = await readBody(req, 1024);
+      const body = req.headers['content-type']?.split(';')[0] === 'application/json' ? parseJson(raw) : null;
+      const installationId = body?.installationId;
+      const tps = body?.tps ?? 0;
+      const burstTokens = body?.burstTokens ?? 0;
+      if (!validInstallationId(installationId) ||
+          typeof tps !== 'number' || !Number.isFinite(tps) || tps < 0 || tps > 100_000 ||
+          !Number.isSafeInteger(burstTokens) || burstTokens < 0 || burstTokens > maxTokens) {
+        return send(res, 400, { code: 'invalid' });
+      }
+      if (!pulse) return send(res, 200, { ok: false, available: false });
+      const outcome = await pulse.recordPulse({
+        accountId: account.id,
+        username: account.username,
+        installationId,
+        tps,
+        burstTokens
+      });
+      if (outcome.ok) schedulePulseBroadcast();
+      return send(res, 200, outcome);
+    }
     if (method === 'GET' && route === '/api/today/status') return send(res, 200, store.status(account.id, time));
     if (method === 'GET' && route === '/api/history/status') {
       return send(res, 200, { initialized: store.historyInitialized(account.id), ...store.status(account.id, time) });
@@ -393,17 +545,24 @@ export function createLeaderboardServer({
       };
       const code = history ? store.initializeHistory(account.id, input, receivedAt, maxTokens) :
         store.submit(account.id, input, receivedAt, maxTokens);
+      if (code === 'banned') void pulse?.removeAccount?.(account.id).then(() => schedulePulseBroadcast());
       return send(res, statuses[code], { code, username: account.username,
         ...(code === 'banned' ? {} : store.status(account.id, receivedAt)) });
     }
     return send(res, 404, { code: 'not_found' });
   }
 
-  return createServer({ requestTimeout: 15_000, headersTimeout: 10_000, maxHeaderSize: 8192 }, (req, res) => {
+  const server = createServer({ requestTimeout: 15_000, headersTimeout: 10_000, maxHeaderSize: 8192 }, (req, res) => {
     void handle(req, res).catch(() => {
       log('榜单请求处理失败。');
       if (!res.headersSent) send(res, 500, { code: 'unavailable' });
       else res.destroy();
     });
   });
+  const originalClose = server.close.bind(server);
+  server.close = callback => {
+    stopPulseStreams();
+    return originalClose(callback);
+  };
+  return server;
 }

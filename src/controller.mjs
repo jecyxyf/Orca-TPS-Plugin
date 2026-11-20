@@ -55,7 +55,7 @@ const TRANSIENT_PAGE_PATTERNS = [
 export function createTpsController(orca, {
   readActive, readSession, now = Date.now, pollMs = 5000, focusPollMs = 250,
   livePollMs = focusPollMs, backgroundPollMs = pollMs, backgroundLimit = 2, watchWorkspace = false,
-  holdActivityMs = 120_000, onTargetChange = () => {}, onOpenTargets = () => {}, cache, locales
+  holdActivityMs = 120_000, onTargetChange = () => {}, onOpenTargets = () => {}, onRecords = () => {}, cache, locales
 } = {}) {
   const t = locales?.t ?? sourceMessage;
   const instanceId = randomUUID();
@@ -231,6 +231,7 @@ export function createTpsController(orca, {
       if (stopped) return { session: null, warnings: [] };
       const result = await readSession(requestedTarget, options);
       if (stopped || !matchesTarget(result.session, requestedTarget)) return result;
+      onRecords(result.session.records);
       const saved = cache.set(id, result.session.records);
       return { ...result, cachedAt: saved.updatedAt, session: { ...result.session, records: saved.records } };
     })().finally(() => projectReads.delete(channel));
@@ -272,6 +273,7 @@ export function createTpsController(orca, {
         if (stopped || requestedGeneration !== generation) return state();
         const loaded = matchesTarget(result.session, requestedTarget) ? result.session : null;
         if (loaded) {
+          if (!cache || !isChannelTarget(requestedTarget)) onRecords(loaded.records);
           session = loaded;
           warnings = (result.warnings ?? []).map(text => cleanText(text, 500))
             .filter(text => !HIDDEN_ROUTINE_WARNINGS.has(text)).slice(0, 20);

@@ -243,4 +243,15 @@
   <message id="sync-waiting">في انتظار المزامنة…</message>
   <message id="sync-now">المزامنة الآن</message>
   <message id="sync-queued">في قائمة انتظار المزامنة التالية</message>
+  <message id="pulse-title">النبض الفوري</message>
+  <message id="pulse-active-users">{0} نشطون الآن</message>
+  <message id="pulse-standby">وضع الاستعداد</message>
+  <message id="pulse-idle-marquee">لا يوجد نشاط فوري بعد — شغّل محادثة ذكاء اصطناعي للبث هنا</message>
+  <message id="pulse-my-heartbeat">نبضي الفوري</message>
+  <message id="pulse-global-heartbeat">النبض الفوري للجميع</message>
+  <message id="pulse-live-badge">مباشر</message>
+  <message id="pulse-online">متصل</message>
+  <message id="pulse-hot">نشاط مرتفع</message>
+  <message id="pulse-steady">تدفق منتظم</message>
+  <message id="pulse-idle">خامل</message>
 </messages>

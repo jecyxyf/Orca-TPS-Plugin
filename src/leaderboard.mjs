@@ -16,6 +16,11 @@ const LOGIN_POLL = 2000;
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const LOGOUT_RETRY = 15_000;
 const UPLOAD_INTERVAL = 10_000;
+const PULSE_MIN_INTERVAL = 2_000;
+const PULSE_KEEPALIVE_INTERVAL = 12_000;
+const PULSE_POLL_MS = 2_000;
+const PULSE_SSE_RETRY_MS = 10_000;
+const PULSE_WATCH_LEASE_MS = 25_000;
 const SYNC_SUCCEEDED = new Set(['accepted', 'initialized', 'duplicate']);
 const sessionKey = value => value ? createHash('sha256').update(value).digest('hex') : '';
 const tokenPattern = /^[\w-]{43}$/;
@@ -31,7 +36,7 @@ function publicRows(rows, days) {
 }
 
 export function startLeaderboard(orca, {
-  readUsage, readHistory, endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
+  readUsage, readHistory, subscribePulse, readPulseSeed, endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
   fetcher = fetch, avatarFetcher = fetch, now = () => new Date()
 }) {
   const base = new URL(endpoint);
@@ -55,6 +60,8 @@ export function startLeaderboard(orca, {
   let rankingRequest = 0;
   let lastUpload = null, lastSyncAt = null, manualQueued = false, localUploadAt = 0;
   let installationReady;
+  let pendingPulseTps = 0, pendingPulseBurst = 0, pulseSending = false, lastPulseAt = 0, pulseFlushTimer;
+  let pulseSnapshot = null, pulseWatchUntil = 0, pulseAbort = null, pulseWatching = false, pulseFallbackUntil = 0;
   const secretAvailable = method => orca.grantedCapabilities?.includes('secrets:own') && host?.has(method);
   const today = () => leaderboardDay(now().getTime());
 
@@ -198,6 +205,10 @@ export function startLeaderboard(orca, {
       lastUpload = null;
       if (historyJob) setHistoryJob(undefined);
       historyProblem = '';
+      pendingPulseTps = 0;
+      pendingPulseBurst = 0;
+      clearTimeout(pulseFlushTimer);
+      pulseFlushTimer = undefined;
       publishSession();
     }
     await persistCredentials();
@@ -334,6 +345,7 @@ export function startLeaderboard(orca, {
       if (readHistory) {
         setHistoryJob({ next: nextAttempt });
       }
+      if (pulseWatching) void sendPresencePulse(true);
       return { code: 'signed_in', ...panelState(days) };
     }
     if (['login_expired', 'login_denied', 'github_unavailable'].includes(result.code)) login = undefined;
@@ -523,6 +535,229 @@ export function startLeaderboard(orca, {
     }
   }
 
+  function normalizePulse(data) {
+    if (!data || typeof data !== 'object') return null;
+    const users = Array.isArray(data.users) ? data.users.filter(user =>
+      user && validUsername(user.username) && Number.isFinite(user.tps) && Number.isFinite(user.burstTokens)
+    ).map(user => ({
+      username: user.username,
+      tps: Math.max(0, user.tps),
+      burstTokens: Math.max(0, Math.trunc(user.burstTokens)),
+      updatedAt: Number.isFinite(user.updatedAt) ? user.updatedAt : now().getTime(),
+      wave: Array.isArray(user.wave) ? user.wave.filter(point =>
+        Array.isArray(point) && point.length >= 3 && Number.isFinite(point[0]) && Number.isFinite(point[1]) && Number.isFinite(point[2])
+      ).slice(-20) : []
+    })) : [];
+    const marquee = Array.isArray(data.marquee) ? data.marquee.filter(item =>
+      item && validUsername(item.username) && Number.isFinite(item.tps) && Number.isFinite(item.burstTokens) && Number.isFinite(item.at)
+    ).slice(0, 30) : [];
+    return {
+      available: Boolean(data.available),
+      serverTime: Number.isFinite(data.serverTime) ? data.serverTime : now().getTime(),
+      activeCount: Number.isSafeInteger(data.activeCount) ? data.activeCount : users.length,
+      users,
+      marquee
+    };
+  }
+
+  function publishPulse(next) {
+    const clean = normalizePulse(next);
+    if (!clean || lifetime.signal.aborted) return null;
+    pulseSnapshot = clean;
+    if (orca.panels?.post) {
+      try { orca.panels.post('tps.leaderboard.pulse', clean); } catch {}
+    }
+    return clean;
+  }
+
+  async function fetchPulseOnce(signal) {
+    try {
+      const response = await fetcher(new URL('/api/pulse', base), {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        redirect: 'error',
+        signal: signal
+          ? AbortSignal.any([lifetime.signal, signal, AbortSignal.timeout(5_000)])
+          : AbortSignal.any([lifetime.signal, AbortSignal.timeout(5_000)])
+      });
+      if (!response?.ok) return null;
+      return publishPulse(await response.json());
+    } catch {
+      return null;
+    }
+  }
+
+  async function streamPulse(signal) {
+    const response = await fetcher(new URL('/api/pulse/stream', base), {
+      method: 'GET',
+      headers: { Accept: 'text/event-stream' },
+      redirect: 'error',
+      signal
+    });
+    const contentType = response?.headers?.get?.('content-type') ?? '';
+    if (!response?.ok || !contentType.includes('text/event-stream') || !response.body?.getReader) {
+      await response?.body?.cancel?.().catch(() => {});
+      throw new Error('sse_unavailable');
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (!signal.aborted) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        for (;;) {
+          const match = /\r?\n\r?\n/.exec(buffer);
+          if (!match) break;
+          const block = buffer.slice(0, match.index);
+          buffer = buffer.slice(match.index + match[0].length);
+          let eventName = 'message';
+          const dataLines = [];
+          for (const line of block.split(/\r?\n/)) {
+            if (!line || line.startsWith(':')) continue;
+            if (line.startsWith('event:')) eventName = line.slice(6).trim();
+            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+          }
+          if (dataLines.length && (eventName === 'pulse' || eventName === 'message')) {
+            try { publishPulse(JSON.parse(dataLines.join('\n'))); } catch {}
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  function stopPulseWatch() {
+    pulseWatchUntil = 0;
+    pulseAbort?.abort();
+    pulseAbort = null;
+    pulseWatching = false;
+  }
+
+  async function runPulseWatch() {
+    if (pulseWatching || lifetime.signal.aborted) return;
+    pulseWatching = true;
+    try {
+      while (!lifetime.signal.aborted && now().getTime() < pulseWatchUntil) {
+        const ctrl = new AbortController();
+        pulseAbort = ctrl;
+        const signal = AbortSignal.any([lifetime.signal, ctrl.signal]);
+        const waitAbort = duration => new Promise(resolve => {
+          if (signal.aborted) return resolve();
+          const timer = setTimeout(resolve, duration);
+          timer.unref?.();
+          signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+        });
+        if (now().getTime() >= pulseFallbackUntil) {
+          try {
+            await streamPulse(signal);
+          } catch {
+            pulseFallbackUntil = now().getTime() + PULSE_SSE_RETRY_MS;
+          }
+        }
+        if (signal.aborted || lifetime.signal.aborted || now().getTime() >= pulseWatchUntil) break;
+        await fetchPulseOnce(signal);
+        if (signal.aborted || lifetime.signal.aborted || now().getTime() >= pulseWatchUntil) break;
+        await waitAbort(PULSE_POLL_MS);
+      }
+    } finally {
+      pulseWatching = false;
+      pulseAbort = null;
+    }
+  }
+
+  function schedulePulseFlush() {
+    if (pulseFlushTimer || pulseSending || !token || banned || lifetime.signal.aborted) return;
+    if (pendingPulseTps <= 0 && pendingPulseBurst <= 0) return;
+    const wait = Math.max(0, lastPulseAt + PULSE_MIN_INTERVAL - now().getTime());
+    pulseFlushTimer = setTimeout(() => {
+      pulseFlushTimer = undefined;
+      void flushPulse();
+    }, wait);
+    pulseFlushTimer.unref?.();
+  }
+
+  async function flushPulse() {
+    if (pulseSending || !token || banned || lifetime.signal.aborted) return;
+    if (pendingPulseTps <= 0 && pendingPulseBurst <= 0) return;
+    const time = now().getTime();
+    if (time - lastPulseAt < PULSE_MIN_INTERVAL) {
+      schedulePulseFlush();
+      return;
+    }
+    const credential = token;
+    const tps = pendingPulseTps;
+    const burstTokens = pendingPulseBurst;
+    pendingPulseTps = 0;
+    pendingPulseBurst = 0;
+    pulseSending = true;
+    lastPulseAt = time;
+    try {
+      const id = await installationId();
+      if (!id || token !== credential || banned || lifetime.signal.aborted) return;
+      const result = await request('/api/pulse', {
+        credential,
+        body: { installationId: id, tps, burstTokens }
+      });
+      if (token === credential && result?.code === 'banned') {
+        banned = true;
+        publishSession();
+      }
+    } finally {
+      pulseSending = false;
+      if (pendingPulseTps > 0 || pendingPulseBurst > 0) schedulePulseFlush();
+    }
+  }
+
+  async function sendPresencePulse(includeSeed = false) {
+    if (!token || banned || pulseSending || lifetime.signal.aborted) return;
+    const time = now().getTime();
+    if (!includeSeed && time - lastPulseAt < PULSE_KEEPALIVE_INTERVAL) return;
+    if (includeSeed && time - lastPulseAt < PULSE_MIN_INTERVAL) return;
+    const credential = token;
+    let tps = 0;
+    if (includeSeed && typeof readPulseSeed === 'function') {
+      try {
+        const seed = await readPulseSeed();
+        if (Number.isFinite(seed?.tps) && seed.tps > 0) {
+          tps = Math.min(100_000, Math.round(seed.tps * 10) / 10);
+        }
+      } catch {}
+    }
+    if (token !== credential || banned || pulseSending || lifetime.signal.aborted) return;
+    pulseSending = true;
+    lastPulseAt = now().getTime();
+    try {
+      const id = await installationId();
+      if (!id || token !== credential || banned || lifetime.signal.aborted) return;
+      const result = await request('/api/pulse', {
+        credential,
+        body: { installationId: id, tps, burstTokens: 0 }
+      });
+      if (token === credential && result?.code === 'banned') {
+        banned = true;
+        publishSession();
+      }
+    } finally {
+      pulseSending = false;
+      if (pendingPulseTps > 0 || pendingPulseBurst > 0) schedulePulseFlush();
+    }
+  }
+
+  function reportPulse(sample) {
+    if (!token || banned || lifetime.signal.aborted) return;
+    const tps = Number.isFinite(sample?.tps) && sample.tps > 0 ? Math.min(100_000, Math.round(sample.tps * 10) / 10) : 0;
+    const burstTokens = Number.isSafeInteger(sample?.burstTokens) && sample.burstTokens > 0 ? sample.burstTokens : 0;
+    if (tps === 0 && burstTokens === 0) return;
+    pendingPulseBurst = Math.min(Number.MAX_SAFE_INTEGER, pendingPulseBurst + burstTokens);
+    if (tps > 0) pendingPulseTps = tps;
+    if (now().getTime() - lastPulseAt >= PULSE_MIN_INTERVAL && !pulseSending) void flushPulse();
+    else schedulePulseFlush();
+  }
+  const unsubscribePulse = typeof subscribePulse === 'function' ? subscribePulse(reportPulse) : undefined;
+
   const registration = orca.panels.handle(METHOD, async payload => {
     const days = payload?.days === 7 || payload?.days === 30 ? payload.days : 1;
     if (payload?.action === 'cache') {
@@ -531,6 +766,20 @@ export function startLeaderboard(orca, {
       return { ranking: cache.value?.day === today() ? cache.value : null };
     }
     if (payload?.action === 'usage') return { local: await readUsage() };
+    if (payload?.action === 'pulse') {
+      return { pulse: pulseSnapshot ?? await fetchPulseOnce() };
+    }
+    if (payload?.action === 'pulse-watch') {
+      if (payload.active === false) {
+        stopPulseWatch();
+        return { ok: true };
+      }
+      const firstWatch = !pulseWatching;
+      pulseWatchUntil = now().getTime() + PULSE_WATCH_LEASE_MS;
+      void runPulseWatch();
+      void ready.then(() => sendPresencePulse(firstWatch));
+      return { pulse: pulseSnapshot };
+    }
     await ready;
     switch (payload?.action) {
       case 'avatar': {
@@ -566,6 +815,7 @@ export function startLeaderboard(orca, {
     }
   });
   function tick() {
+    if (pulseWatching && now().getTime() >= pulseWatchUntil) stopPulseWatch();
     void ready.then(() => { revokeSessions(); publishSession(); });
     void runHistoryInitialization().catch(() => {}).then(runScheduled).catch(() => {}).finally(publishSession);
   }
@@ -574,6 +824,9 @@ export function startLeaderboard(orca, {
   tick();
   return () => {
     lifetime.abort();
+    stopPulseWatch();
+    clearTimeout(pulseFlushTimer);
+    unsubscribePulse?.();
     clearInterval(timer);
     registration.dispose?.();
   };

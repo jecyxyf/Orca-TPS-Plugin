@@ -122,7 +122,7 @@
     .panel-tab[aria-selected="true"] { border-bottom-color: var(--blue); color: var(--blue); }
     .panel-tab:focus-visible, .panel-view:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     .panel-view { margin-top: 12px; }
-    #usage, #leaderboard { display: grid; gap: 8px; }
+    #usage, #leaderboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
     .section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; }
     .section-title { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; font-weight: 700; }
     .section-detail { margin: 0; color: var(--muted); font-size: 11px; }
@@ -263,16 +263,199 @@
     .ladder-rows:empty { margin: 0; }
     .ladder-rows li {
       display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
-      grid-template-areas: "rank name total" "rank time total";
+      grid-template-areas: "rank name total" "rank time total" "rank pulse pulse";
       column-gap: 8px; align-items: center; padding: 8px 0;
       border-top: 1px solid var(--line); font-variant-numeric: tabular-nums;
+    }
+    .ladder-avatar-box { position: relative; display: inline-flex; flex: none; }
+    .ladder-avatar-mood {
+      position: absolute; right: -5px; bottom: -4px; display: inline-grid; place-items: center;
+      min-width: 15px; height: 15px; padding: 0 2px; border-radius: 999px;
+      background: var(--surface); border: 1.5px solid var(--line);
+      font-size: 9.5px; line-height: 1; box-shadow: 0 1px 4px rgb(0 0 0 / 18%);
+      pointer-events: auto; user-select: none;
+    }
+    .ladder-account-name .ladder-avatar-mood { right: -5px; bottom: -3px; min-width: 18px; height: 18px; font-size: 11px; }
+    .ladder-avatar-mood[data-tier="hot"] {
+      border-color: #ff6b3d; background: color-mix(in srgb, #ff5a36 22%, var(--surface));
+      box-shadow: 0 0 0 0 rgb(255 90 54 / 55%);
+      animation: mood-hot 1.15s ease-out infinite;
+    }
+    .ladder-avatar-mood[data-tier="steady"] {
+      border-color: #38bdf8; background: color-mix(in srgb, #38bdf8 18%, var(--surface));
+      box-shadow: 0 0 0 0 rgb(56 189 248 / 45%);
+      animation: mood-steady 2s ease-out infinite;
+    }
+    .ladder-avatar-mood[data-tier="idle"] {
+      border-color: color-mix(in srgb, var(--green) 55%, var(--line));
+      background: color-mix(in srgb, #f59e0b 12%, var(--surface));
+      animation: mood-coffee 3.2s ease-in-out infinite;
+    }
+    #ladder-account, #ladder-sign-in { min-width: 0; }
+    .ladder-live {
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);
+      display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0;
+    }
+    .ladder-marquee {
+      display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; overflow: hidden;
+      padding: 5px 8px; border-radius: 11px; background: var(--speed-bg);
+    }
+    .ladder-live-pill {
+      display: inline-flex; align-items: center; gap: 5px; flex: none;
+      padding: 2px 7px; border-radius: 999px; background: var(--surface);
+      border: 1px solid var(--line); font-size: 10.5px; font-weight: 700; color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .ladder-live-pill.is-active { color: var(--green); border-color: color-mix(in srgb, var(--green) 35%, var(--line)); }
+    .ladder-live-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex: none;
+    }
+    .ladder-live-pill.is-active .ladder-live-dot {
+      background: var(--green); animation: pulse-ring 1.6s ease-out infinite;
+    }
+    .ladder-marquee-viewport {
+      flex: 1; min-width: 0; overflow: hidden; direction: ltr;
+      mask-image: linear-gradient(90deg, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+    }
+    .ladder-marquee-track {
+      display: flex; align-items: center; width: max-content;
+      animation: ladder-marquee-scroll 18s linear infinite;
+    }
+    .ladder-marquee:hover .ladder-marquee-track { animation-play-state: paused; }
+    .ladder-marquee-track.is-static { width: 100%; animation: none; }
+    .ladder-marquee-list { display: flex; align-items: center; gap: 8px; padding-inline-end: 12px; }
+    .ladder-marquee-chip {
+      display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+      padding: 2px 8px; border-radius: 999px; background: var(--surface);
+      border: 1px solid var(--line); font-size: 11px; font-variant-numeric: tabular-nums;
+    }
+    .ladder-marquee-chip.is-self { border-color: color-mix(in srgb, var(--purple) 45%, var(--line)); }
+    .ladder-marquee-user { color: var(--purple); font-weight: 700; }
+    .ladder-marquee-tps { color: var(--speed); font-weight: 700; }
+    .ladder-marquee-steady { color: var(--blue); font-weight: 700; }
+    .ladder-marquee-online { color: var(--green); font-weight: 650; }
+    .ladder-marquee-burst { color: var(--blue); font-weight: 650; }
+    .ladder-marquee-empty { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ladder-heartbeat {
+      position: relative; padding: 8px 10px 6px; border-radius: 14px;
+      border: 1px solid var(--line);
+      background-color: var(--speed-bg);
+      background-image:
+        radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--muted) 15%, transparent) 1px, transparent 0),
+        radial-gradient(110% 95% at 88% 15%, color-mix(in srgb, var(--blue) 12%, transparent), transparent 65%),
+        radial-gradient(95% 85% at 12% 90%, color-mix(in srgb, var(--purple) 9%, transparent), transparent 62%);
+      background-size: 12px 12px, 100% 100%, 100% 100%;
+      display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; min-width: 0; overflow: hidden;
+      transition: border-color .35s ease, box-shadow .35s ease;
+    }
+    .ladder-heartbeat[data-tier="hot"] {
+      border-color: color-mix(in srgb, #ff6b3d 45%, var(--line));
+      background-image:
+        radial-gradient(circle at 1px 1px, color-mix(in srgb, #ff6b3d 18%, transparent) 1px, transparent 0),
+        radial-gradient(115% 100% at 86% 14%, rgb(255 90 54 / 19%), transparent 64%),
+        radial-gradient(95% 90% at 15% 88%, rgb(255 159 28 / 13%), transparent 60%);
+      box-shadow: inset 0 0 18px rgb(255 90 54 / 7%);
+    }
+    .ladder-heartbeat[data-tier="steady"] {
+      border-color: color-mix(in srgb, #38bdf8 38%, var(--line));
+      background-image:
+        radial-gradient(circle at 1px 1px, color-mix(in srgb, #38bdf8 16%, transparent) 1px, transparent 0),
+        radial-gradient(115% 100% at 86% 14%, rgb(56 189 248 / 16%), transparent 64%),
+        radial-gradient(95% 90% at 15% 88%, rgb(129 140 248 / 12%), transparent 60%);
+    }
+    .ladder-heartbeat[data-tier="idle"] {
+      border-color: color-mix(in srgb, var(--green) 30%, var(--line));
+      background-image:
+        radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--green) 14%, transparent) 1px, transparent 0),
+        radial-gradient(110% 95% at 85% 20%, rgb(52 211 153 / 13%), transparent 64%),
+        radial-gradient(90% 85% at 15% 88%, rgb(245 158 11 / 8%), transparent 60%);
+    }
+    .ladder-hb-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      font-size: 11px; font-variant-numeric: tabular-nums;
+    }
+    .ladder-hb-label-wrap { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+    .ladder-hb-label { color: var(--muted); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ladder-hb-tier {
+      font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+      background: var(--surface); border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+    }
+    .ladder-heartbeat[data-tier="hot"] .ladder-hb-tier { color: #ff6b3d; border-color: color-mix(in srgb, #ff6b3d 45%, var(--line)); }
+    .ladder-heartbeat[data-tier="steady"] .ladder-hb-tier { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, var(--line)); }
+    .ladder-heartbeat[data-tier="idle"] .ladder-hb-tier { color: var(--green); border-color: color-mix(in srgb, var(--green) 38%, var(--line)); }
+    .ladder-hb-metrics { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    .ladder-hb-speed { color: var(--muted); font-weight: 750; white-space: nowrap; }
+    .ladder-heartbeat[data-tier="hot"] .ladder-hb-speed { color: #ff6b3d; }
+    .ladder-heartbeat[data-tier="steady"] .ladder-hb-speed { color: var(--blue); }
+    .ladder-heartbeat[data-tier="idle"] .ladder-hb-speed { color: var(--green); }
+    .ladder-hb-burst { color: var(--blue); font-weight: 700; white-space: nowrap; }
+    .ladder-hb-svg { display: block; width: 100%; height: 48px; overflow: visible; }
+    .ladder-hb-base { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 3; fill: none; opacity: .7; }
+    .ladder-hb-bars { fill: var(--blue); opacity: .28; }
+    .ladder-heartbeat[data-tier="hot"] .ladder-hb-bars { fill: #ff9f1c; opacity: .34; }
+    .ladder-heartbeat[data-tier="steady"] .ladder-hb-bars { fill: #38bdf8; opacity: .28; }
+    .ladder-hb-glow { fill: none; stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; opacity: .22; }
+    .ladder-hb-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .ladder-hb-dot { fill: var(--green); stroke: var(--surface); stroke-width: 1; }
+    .ladder-heartbeat[data-tier="hot"] .ladder-hb-dot { fill: #ff6b3d; }
+    .ladder-heartbeat[data-tier="steady"] .ladder-hb-dot { fill: #38bdf8; }
+    .ladder-row-pulse {
+      grid-area: pulse; display: flex; align-items: center; gap: 8px;
+      margin-top: 6px; padding: 4px 8px; border-radius: 10px;
+      border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+      background-color: var(--speed-bg);
+      background-image: linear-gradient(90deg, rgb(52 211 153 / 8%), transparent 60%);
+      min-width: 0; overflow: hidden; font-variant-numeric: tabular-nums;
+    }
+    .ladder-row-pulse[data-tier="hot"] {
+      border-color: color-mix(in srgb, #ff6b3d 35%, var(--line));
+      background-image: linear-gradient(90deg, rgb(255 90 54 / 15%), rgb(255 159 28 / 7%) 65%, transparent);
+    }
+    .ladder-row-pulse[data-tier="steady"] {
+      border-color: color-mix(in srgb, #38bdf8 30%, var(--line));
+      background-image: linear-gradient(90deg, rgb(56 189 248 / 12%), rgb(129 140 248 / 6%) 65%, transparent);
+    }
+    .ladder-row-hb { flex: 1; min-width: 60px; height: 22px; display: block; overflow: visible; }
+    .ladder-row-hb .ladder-hb-glow { stroke-width: 4; opacity: .2; }
+    .ladder-row-hb .ladder-hb-line { stroke-width: 1.65; opacity: 1; }
+    .ladder-row-stats {
+      flex: none; display: inline-flex; align-items: baseline; gap: 5px;
+      font-size: 10.5px; white-space: nowrap;
+    }
+    .ladder-row-tps { color: var(--green); font-weight: 700; }
+    .ladder-row-pulse[data-tier="hot"] .ladder-row-tps { color: #ff6b3d; }
+    .ladder-row-pulse[data-tier="steady"] .ladder-row-tps { color: var(--blue); }
+    .ladder-row-burst { color: var(--blue); font-weight: 650; }
+    @keyframes mood-hot {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgb(255 90 54 / 65%); }
+      55% { transform: scale(1.1); box-shadow: 0 0 0 6px rgb(255 90 54 / 0); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgb(255 90 54 / 0); }
+    }
+    @keyframes mood-steady {
+      0% { box-shadow: 0 0 0 0 rgb(56 189 248 / 50%); }
+      70% { box-shadow: 0 0 0 5px rgb(56 189 248 / 0); }
+      100% { box-shadow: 0 0 0 0 rgb(56 189 248 / 0); }
+    }
+    @keyframes mood-coffee {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-1.5px); }
+    }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgb(74 222 128 / 55%); }
+      70% { box-shadow: 0 0 0 5px rgb(74 222 128 / 0); }
+      100% { box-shadow: 0 0 0 0 rgb(74 222 128 / 0); }
+    }
+    @keyframes ladder-marquee-scroll {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
     }
     .ladder-rank {
       grid-area: rank; min-width: 3ch; padding: 4px; border-radius: 9px; text-align: center;
       background: var(--tag-bg); color: var(--muted); font-size: 11px; font-weight: 700;
     }
     .ladder-self .ladder-rank { background: var(--button-bg); color: var(--blue); }
-    .ladder-row-user { grid-area: name; display: flex; gap: 4px; align-items: center; min-width: 0; }
+    .ladder-row-user { grid-area: name; display: flex; gap: 7px; align-items: center; min-width: 0; }
     .ladder-row-user .ladder-medal { zoom: .85; }
     .ladder-name { min-width: 0; color: var(--purple); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ladder-total {
@@ -397,6 +580,9 @@
       .refresh.is-busy svg { animation: none; }
       .refresh:active:not(:disabled) { transform: none; }
       .ladder-medal::before, .ladder-medal::after, .ladder-medal-emblem::before { animation: none; opacity: 0; }
+      .ladder-avatar-mood, .ladder-live-pill.is-active .ladder-live-dot, .ladder-marquee-track { animation: none; }
+      .ladder-marquee-list[aria-hidden="true"] { display: none; }
+      .ladder-marquee-track { width: 100%; overflow-x: auto; }
     }
   </style>
 </head>
@@ -441,7 +627,10 @@
         <div id="ladder-account" hidden>
           <div class="ladder-identity">
             <div class="ladder-account-name">
-              <span class="ladder-avatar" id="ladder-account-avatar" aria-hidden="true"></span>
+              <span class="ladder-avatar-box">
+                <span class="ladder-avatar" id="ladder-account-avatar" aria-hidden="true"></span>
+                <span class="ladder-avatar-mood" id="ladder-account-live" hidden></span>
+              </span>
               <p class="ladder-mine" id="ladder-mine" dir="auto"></p>
             </div>
             <button class="refresh ladder-control" id="ladder-logout" type="button"><span data-i18n="sign-out"></span></button>
@@ -473,6 +662,64 @@
         </div>
         <p class="ladder-status" id="ladder-status" role="status" data-localized-text></p>
         <p class="ladder-note" id="ladder-logout-pending" role="status" data-localized-text hidden></p>
+        <div class="ladder-live" id="ladder-live" hidden>
+          <div class="ladder-marquee" id="ladder-marquee">
+            <span class="ladder-live-pill" id="ladder-live-pill">
+              <i class="ladder-live-dot" aria-hidden="true"></i>
+              <span id="ladder-live-count" data-localized-text></span>
+            </span>
+            <div class="ladder-marquee-viewport" id="ladder-marquee-viewport"></div>
+          </div>
+          <div class="ladder-heartbeat" id="ladder-heartbeat" data-tier="idle">
+            <div class="ladder-hb-head">
+              <span class="ladder-hb-label-wrap">
+                <span class="ladder-hb-label" id="ladder-hb-label" data-localized-text></span>
+                <span class="ladder-hb-tier" id="ladder-hb-tier" data-localized-text></span>
+              </span>
+              <span class="ladder-hb-metrics">
+                <span class="ladder-hb-speed" id="ladder-hb-speed"></span>
+                <span class="ladder-hb-burst" id="ladder-hb-burst"></span>
+              </span>
+            </div>
+            <svg class="ladder-hb-svg" id="ladder-hb-svg" viewBox="0 0 240 48" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="hb-grad-hot" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#ff3d68"/>
+                  <stop offset="55%" stop-color="#ff6b3d"/>
+                  <stop offset="100%" stop-color="#ffbe0b"/>
+                </linearGradient>
+                <linearGradient id="hb-fill-hot" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#ff6b3d" stop-opacity="0.38"/>
+                  <stop offset="100%" stop-color="#ff6b3d" stop-opacity="0.02"/>
+                </linearGradient>
+                <linearGradient id="hb-grad-steady" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#6366f1"/>
+                  <stop offset="55%" stop-color="#38bdf8"/>
+                  <stop offset="100%" stop-color="#2dd4bf"/>
+                </linearGradient>
+                <linearGradient id="hb-fill-steady" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.32"/>
+                  <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.02"/>
+                </linearGradient>
+                <linearGradient id="hb-grad-idle" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#10b981" stop-opacity="0.45"/>
+                  <stop offset="55%" stop-color="#34d399"/>
+                  <stop offset="100%" stop-color="#fbbf24" stop-opacity="0.8"/>
+                </linearGradient>
+                <linearGradient id="hb-fill-idle" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#34d399" stop-opacity="0.20"/>
+                  <stop offset="100%" stop-color="#34d399" stop-opacity="0.01"/>
+                </linearGradient>
+              </defs>
+              <line class="ladder-hb-base" x1="0" y1="36" x2="240" y2="36"></line>
+              <g class="ladder-hb-bars" id="ladder-hb-bars"></g>
+              <path class="ladder-hb-area" id="ladder-hb-area" d="" fill="url(#hb-fill-idle)"></path>
+              <path class="ladder-hb-glow" id="ladder-hb-glow" d="M0 36 L240 36" stroke="url(#hb-grad-idle)"></path>
+              <path class="ladder-hb-line" id="ladder-hb-line" d="M0 36 L240 36" stroke="url(#hb-grad-idle)"></path>
+              <circle class="ladder-hb-dot" id="ladder-hb-dot" cx="236" cy="36" r="3"></circle>
+            </svg>
+          </div>
+        </div>
       </div>
       <section class="ladder-card" aria-labelledby="ladder-rank-title">
         <div class="section-head">
@@ -798,12 +1045,16 @@
       const bridge = window.orca?.plugin;
       let activeTab;
       function openView(tab) {
+        const previous = activeTab;
         activeTab = tab;
         for (const view of views) {
           const selected = view === tab;
           view.setAttribute('aria-selected', String(selected));
           view.tabIndex = selected ? 0 : -1;
           byId(view.getAttribute('aria-controls')).hidden = !selected;
+        }
+        if (previous && previous !== tab) {
+          byId(previous.getAttribute('aria-controls')).dispatchEvent(new Event('tps-view-closed'));
         }
         byId(tab.getAttribute('aria-controls')).dispatchEvent(new Event('tps-view-opened'));
       }
@@ -1326,6 +1577,7 @@
       const element = id => document.getElementById('ladder-' + id);
       const group = document.getElementById('leaderboard');
       const lifetime = new AbortController();
+      const numeric = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
       const clock = time => locale.date(time, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
       const shortClock = time => locale.date(time, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
       const boardDay = () => new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -1355,10 +1607,18 @@
       let model, session, pendingLogin, retryLogin, rankDays = 1;
       const cachedRankings = new Map(), summaryQueue = new Set(), rankRequests = new Map();
       const RANK_REFRESH_MS = 5000;
-      let rankingPending, sessionPushVersion = 0, rankingSubscription;
+      const PULSE_WINDOW_MS = 30_000, PULSE_WATCH_RENEW_MS = 10_000;
+      const PULSE_HOT_TPS = 90, PULSE_HOT_BURST = 5000;
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const reduceMotion = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+      let rankingPending, sessionPushVersion = 0, rankingSubscription, pulseSubscription;
       let busy = false, restoringSession = false, manualSyncPending = false;
-      let revision = 0, drawnRows = '', renderedDay = '', loginProblem = '', messageCode = '';
+      let revision = 0, drawnRows = '', drawnMarquee = '', renderedDay = '', loginProblem = '', messageCode = '';
       let summaryAccount = '', summaryUpload = null;
+      let pulseState = null, pulseWatchRenewAt = 0;
+      let mainPulseContext = { tier: 'idle', wave: [], serverTime: 0, tps: 0, burst: 0, active: false };
+      let rowPulseContexts = [];
+      let pulseAnimFrame = null, pulseLastDraw = 0;
       let rankingNodes = new Map(), leaderboardFrame;
 
       async function request(action, payload = {}) {
@@ -1429,6 +1689,367 @@
         return badge;
       }
 
+      function formatCompactTokens(tokens) {
+        if (!numeric(tokens) || tokens <= 0) return '0';
+        if (tokens >= 1_000_000) return locale.number(tokens / 1_000_000, { maximumFractionDigits: 2 }) + 'M';
+        if (tokens >= 1_000) return locale.number(tokens / 1_000, { maximumFractionDigits: 1 }) + 'K';
+        return locale.number(tokens);
+      }
+
+      function formatLiveTps(tps, short = false) {
+        if (!numeric(tps) || tps <= 0) return '—';
+        const formatted = locale.number(tps, { minimumFractionDigits: tps < 10 ? 1 : 0, maximumFractionDigits: 1 });
+        return formatted + (short ? ' tok/s' : ' tokens/s');
+      }
+
+      const MOOD_ICONS = { hot: '🔥', steady: '⚡', idle: '☕' };
+      const MOOD_KEYS = { hot: 'pulse-hot', steady: 'pulse-steady', idle: 'pulse-idle' };
+
+      function pulseTier(tps, burstTokens) {
+        if ((numeric(tps) && tps >= PULSE_HOT_TPS) || (numeric(burstTokens) && burstTokens >= PULSE_HOT_BURST)) return 'hot';
+        if ((numeric(tps) && tps > 0) || (numeric(burstTokens) && burstTokens > 0)) return 'steady';
+        return 'idle';
+      }
+
+      function applyMoodBadge(el, tier, show = true) {
+        if (!el) return;
+        el.hidden = !show;
+        if (!show) return;
+        const icon = MOOD_ICONS[tier] ?? MOOD_ICONS.idle;
+        const title = t(MOOD_KEYS[tier] ?? MOOD_KEYS.idle);
+        if (el.dataset.tier !== tier) el.dataset.tier = tier;
+        if (el.textContent !== icon) el.textContent = icon;
+        if (el.title !== title) {
+          el.title = title;
+          el.setAttribute('aria-label', title);
+        }
+      }
+
+      function smoothSvgPath(points) {
+        if (!points.length) return '';
+        let path = `M${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+        for (let i = 0; i < points.length - 1; i += 1) {
+          const p0 = points[Math.max(0, i - 1)];
+          const p1 = points[i];
+          const p2 = points[i + 1];
+          const p3 = points[Math.min(points.length - 1, i + 2)];
+          const cp1x = p1.x + (p2.x - p0.x) / 6;
+          const cp1y = p1.y + (p2.y - p0.y) / 6;
+          const cp2x = p2.x - (p3.x - p1.x) / 6;
+          const cp2y = p2.y - (p3.y - p1.y) / 6;
+          path += ` C${cp1x.toFixed(1)} ${cp1y.toFixed(1)},${cp2x.toFixed(1)} ${cp2y.toFixed(1)},${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+        }
+        return path;
+      }
+
+      function buildPulseGeometry(wave, serverTime, width, height, {
+        paddingTop = 6, paddingBottom = 9, windowMs = PULSE_WINDOW_MS,
+        phaseSec = 0, tpsHint = 0, burstHint = 0, tier = 'idle', sampleCount = 46
+      } = {}) {
+        const baseY = height - paddingBottom;
+        const maxAmp = Math.max(4, baseY - paddingTop);
+        const start = serverTime - windowMs;
+        const raw = (Array.isArray(wave) ? wave : [])
+          .filter(point => Array.isArray(point) && point.length >= 3 && Number.isFinite(point[0]) && point[0] >= start && point[0] <= serverTime + 2000)
+          .slice()
+          .sort((a, b) => a[0] - b[0]);
+        const maxTps = Math.max(80, tpsHint, ...raw.map(point => numeric(point[1]) ? point[1] : 0));
+        const maxBurst = Math.max(1500, burstHint, ...raw.map(point => numeric(point[2]) ? point[2] : 0));
+        const spikes = [];
+        for (const [ts, tpsRaw, burstRaw, onlineRaw] of raw) {
+          const tps = numeric(tpsRaw) ? tpsRaw : 0;
+          const burst = numeric(burstRaw) ? burstRaw : 0;
+          const online = onlineRaw === 1;
+          if (tps <= 0 && burst <= 0 && !online) continue;
+          const cx = Math.max(8, Math.min(width - 8, ((ts - start) / windowMs) * (width - 16) + 8));
+          const prev = spikes[spikes.length - 1];
+          if (prev && cx - prev.cx < 10) {
+            prev.cx = cx;
+            prev.tps = Math.max(prev.tps, tps);
+            prev.burst += burst;
+            prev.online = prev.online || online;
+          } else {
+            spikes.push({ cx, tps, burst, online });
+          }
+        }
+        const flowSpeed = tier === 'hot' ? 5.2 : tier === 'steady' ? 3.4 : 2.1;
+        const baseDanceAmp = tier === 'hot' ? maxAmp * 0.24 : tier === 'steady' ? maxAmp * 0.16 : Math.min(4.2, maxAmp * 0.22);
+        const freqScale = tier === 'hot' ? 0.11 : tier === 'steady' ? 0.085 : 0.065;
+        const points = [];
+        const bars = [];
+        for (let i = 0; i <= sampleCount; i += 1) {
+          const x = (i / sampleCount) * width;
+          const norm = x / width;
+          const envelope = 0.72 + 0.28 * Math.sin(norm * Math.PI);
+          let dance = (
+            Math.sin(x * freqScale - phaseSec * flowSpeed) * 0.62 +
+            Math.sin(x * (freqScale * 1.85) + phaseSec * (flowSpeed * 0.72)) * 0.38
+          ) * baseDanceAmp * envelope;
+          if (tier === 'hot') {
+            dance += Math.sin(x * 0.24 - phaseSec * 8.4) * (maxAmp * 0.1);
+          }
+          let lift = 0;
+          for (const spike of spikes) {
+            const dist = Math.abs(x - spike.cx);
+            if (dist > 14) continue;
+            const ratio = spike.tps > 0
+              ? Math.min(1, Math.sqrt(spike.tps / maxTps))
+              : spike.burst > 0
+                ? Math.min(0.55, 0.22 + Math.log10(1 + spike.burst) / 8)
+                : 0.16;
+            const pulseGain = 0.88 + 0.16 * Math.sin(phaseSec * flowSpeed * 1.3 - spike.cx * 0.12);
+            const sigma = spike.tps >= PULSE_HOT_TPS ? 3.8 : 4.6;
+            const gauss = Math.exp(-(dist * dist) / (2 * sigma * sigma));
+            const dip = dist > 3.2 && dist < 8.5 ? -0.18 * ratio * maxAmp * Math.exp(-((dist - 5.2) ** 2) / 5) : 0;
+            lift = Math.max(lift, ratio * maxAmp * pulseGain * gauss + dip);
+          }
+          const y = Math.max(paddingTop, Math.min(height - 2, baseY - lift - dance));
+          points.push({ x, y });
+        }
+        for (const spike of spikes) {
+          if (spike.burst <= 0) continue;
+          const barRatio = Math.min(1, Math.log10(1 + spike.burst) / Math.log10(1 + maxBurst));
+          const barH = Math.max(2.5, Math.round(barRatio * (maxAmp * 0.72) * 10) / 10);
+          bars.push({ x: (spike.cx - 1.5).toFixed(1), y: (baseY - barH).toFixed(1), width: '3', height: barH.toFixed(1) });
+        }
+        const line = smoothSvgPath(points);
+        const area = `${line} L${width} ${height} L0 ${height} Z`;
+        const tail = points[points.length - 1] ?? { x: width, y: baseY };
+        const dot = { cx: Math.max(4, width - 4), cy: tail.y };
+        return { line, area, bars, dot };
+      }
+
+      function renderMarquee(pulse, currentUsername) {
+        const viewport = element('marquee-viewport');
+        const marquee = Array.isArray(pulse?.marquee) ? pulse.marquee : [];
+        const signature = JSON.stringify([currentUsername, marquee, marquee.length ? '' : t('pulse-idle-marquee')]);
+        if (signature === drawnMarquee) return;
+        drawnMarquee = signature;
+        if (!marquee.length) {
+          const empty = document.createElement('span');
+          empty.className = 'ladder-marquee-empty';
+          empty.setAttribute('data-localized-text', '');
+          empty.textContent = t('pulse-idle-marquee');
+          viewport.replaceChildren(empty);
+          return;
+        }
+        const buildList = hidden => {
+          const list = document.createElement('div');
+          list.className = 'ladder-marquee-list';
+          if (hidden) list.setAttribute('aria-hidden', 'true');
+          for (const item of marquee) {
+            const chip = document.createElement('span');
+            chip.className = 'ladder-marquee-chip' + (currentUsername && item.username === currentUsername ? ' is-self' : '');
+            const tier = pulseTier(item.tps, item.burstTokens);
+            const bolt = document.createElement('span');
+            bolt.setAttribute('aria-hidden', 'true');
+            bolt.textContent = MOOD_ICONS[tier];
+            const user = document.createElement('span');
+            user.className = 'ladder-marquee-user';
+            user.textContent = item.username;
+            const sep1 = document.createElement('span');
+            sep1.textContent = '·';
+            const speed = document.createElement('span');
+            speed.className = tier === 'hot' ? 'ladder-marquee-tps' : tier === 'steady' ? 'ladder-marquee-steady' : 'ladder-marquee-online';
+            speed.textContent = item.tps > 0 ? formatLiveTps(item.tps, true) : (tier === 'idle' ? t('pulse-idle') : t('pulse-live-badge'));
+            chip.append(bolt, user, sep1, speed);
+            if (item.burstTokens > 0) {
+              const sep2 = document.createElement('span');
+              sep2.textContent = '·';
+              const burst = document.createElement('span');
+              burst.className = 'ladder-marquee-burst';
+              burst.textContent = '+' + formatCompactTokens(item.burstTokens);
+              chip.append(sep2, burst);
+            }
+            list.append(chip);
+          }
+          return list;
+        };
+        const track = document.createElement('div');
+        track.className = 'ladder-marquee-track';
+        track.append(buildList(false), buildList(true));
+        viewport.replaceChildren(track);
+      }
+
+      function paintPulseFrames(timeMs = performance.now()) {
+        const phaseSec = reduceMotion?.matches ? 0 : timeMs / 1000;
+        const main = mainPulseContext;
+        const geo = buildPulseGeometry(main.wave, main.serverTime || Date.now(), 240, 48, {
+          phaseSec, tpsHint: main.tps, burstHint: main.burst, tier: main.tier, sampleCount: 44
+        });
+        const gradId = main.tier === 'hot' ? 'hb-grad-hot' : main.tier === 'steady' ? 'hb-grad-steady' : 'hb-grad-idle';
+        const fillId = main.tier === 'hot' ? 'hb-fill-hot' : main.tier === 'steady' ? 'hb-fill-steady' : 'hb-fill-idle';
+        const glowEl = element('hb-glow');
+        const lineEl = element('hb-line');
+        const areaEl = element('hb-area');
+        glowEl.setAttribute('d', geo.line);
+        glowEl.setAttribute('stroke', `url(#${gradId})`);
+        lineEl.setAttribute('d', geo.line);
+        lineEl.setAttribute('stroke', `url(#${gradId})`);
+        areaEl.setAttribute('d', geo.area);
+        areaEl.setAttribute('fill', `url(#${fillId})`);
+        const dotEl = element('hb-dot');
+        if (geo.dot) {
+          dotEl.hidden = false;
+          dotEl.setAttribute('cx', geo.dot.cx.toFixed(1));
+          dotEl.setAttribute('cy', geo.dot.cy.toFixed(1));
+        } else {
+          dotEl.hidden = true;
+        }
+        for (const rowCtx of rowPulseContexts) {
+          if (!rowCtx.pulseRow.isConnected || rowCtx.pulseRow.hidden) continue;
+          const rGeo = buildPulseGeometry(rowCtx.wave, rowCtx.serverTime, 120, 22, {
+            paddingTop: 3, paddingBottom: 4, phaseSec: phaseSec + rowCtx.offset,
+            tpsHint: rowCtx.tps, burstHint: rowCtx.burst, tier: rowCtx.tier, sampleCount: 24
+          });
+          const rowGrad = rowCtx.tier === 'hot' ? 'hb-grad-hot' : rowCtx.tier === 'steady' ? 'hb-grad-steady' : 'hb-grad-idle';
+          rowCtx.glow.setAttribute('d', rGeo.line);
+          rowCtx.glow.setAttribute('stroke', `url(#${rowGrad})`);
+          rowCtx.line.setAttribute('d', rGeo.line);
+          rowCtx.line.setAttribute('stroke', `url(#${rowGrad})`);
+          rowCtx.area.setAttribute('d', rGeo.area);
+          rowCtx.area.setAttribute('fill', rowCtx.tier === 'hot' ? 'url(#hb-fill-hot)' : rowCtx.tier === 'steady' ? 'url(#hb-fill-steady)' : 'url(#hb-fill-idle)');
+        }
+      }
+
+      function stopPulseLoop() {
+        if (pulseAnimFrame !== null) {
+          cancelAnimationFrame(pulseAnimFrame);
+          pulseAnimFrame = null;
+        }
+      }
+
+      function ensurePulseLoop() {
+        if (group.hidden || document.visibilityState === 'hidden' || lifetime.signal.aborted || !pulseState?.available || reduceMotion?.matches) {
+          stopPulseLoop();
+          return;
+        }
+        if (pulseAnimFrame !== null) return;
+        const step = nowTs => {
+          pulseAnimFrame = null;
+          if (group.hidden || document.visibilityState === 'hidden' || lifetime.signal.aborted || !pulseState?.available || reduceMotion?.matches) return;
+          if (nowTs - pulseLastDraw >= 32) {
+            pulseLastDraw = nowTs;
+            paintPulseFrames(nowTs);
+          }
+          pulseAnimFrame = requestAnimationFrame(step);
+        };
+        pulseAnimFrame = requestAnimationFrame(step);
+      }
+
+      function renderPulseRows(pulse) {
+        const usersByName = new Map((pulse?.available && Array.isArray(pulse.users) ? pulse.users : []).map(user => [user.username, user]));
+        const serverTime = Number.isFinite(pulse?.serverTime) ? pulse.serverTime : Date.now();
+        const nextContexts = [];
+        let rowIndex = 0;
+        for (const item of element('rows').children) {
+          rowIndex += 1;
+          const name = item.dataset.username;
+          const live = name ? usersByName.get(name) : null;
+          const mood = item.querySelector('.ladder-avatar-mood');
+          const pulseRow = item.querySelector('.ladder-row-pulse');
+          if (!live) {
+            applyMoodBadge(mood, 'idle', false);
+            if (pulseRow) pulseRow.hidden = true;
+            continue;
+          }
+          const tier = pulseTier(live.tps, live.burstTokens);
+          applyMoodBadge(mood, tier, true);
+          if (!pulseRow) continue;
+          pulseRow.hidden = false;
+          pulseRow.dataset.tier = tier;
+          pulseRow.querySelector('.ladder-row-tps').textContent = live.tps > 0
+            ? formatLiveTps(live.tps, true)
+            : (live.burstTokens > 0 ? t('pulse-live-badge') : t('pulse-idle'));
+          const burstEl = pulseRow.querySelector('.ladder-row-burst');
+          burstEl.textContent = live.burstTokens > 0 ? '+' + formatCompactTokens(live.burstTokens) : '';
+          burstEl.hidden = !(live.burstTokens > 0);
+          nextContexts.push({
+            pulseRow,
+            tier,
+            wave: live.wave,
+            serverTime,
+            tps: live.tps,
+            burst: live.burstTokens,
+            offset: rowIndex * 0.7,
+            area: pulseRow.querySelector('.ladder-hb-area'),
+            glow: pulseRow.querySelector('.ladder-hb-glow'),
+            line: pulseRow.querySelector('.ladder-hb-line')
+          });
+        }
+        rowPulseContexts = nextContexts;
+      }
+
+      function renderPulse(username) {
+        const liveWrap = element('live');
+        if (!pulseState?.available) {
+          liveWrap.hidden = true;
+          applyMoodBadge(element('account-live'), 'idle', false);
+          renderPulseRows(null);
+          stopPulseLoop();
+          return;
+        }
+        liveWrap.hidden = false;
+        const activeCount = pulseState.activeCount ?? pulseState.users.length;
+        const pill = element('live-pill');
+        pill.classList.toggle('is-active', activeCount > 0);
+        element('live-count').textContent = activeCount > 0
+          ? t('pulse-active-users', locale.number(activeCount))
+          : t('pulse-standby');
+        renderMarquee(pulseState, username);
+
+        const users = pulseState.users ?? [];
+        const own = username ? users.find(user => user.username === username) : null;
+        const hb = element('heartbeat');
+        let targetWave = [], targetTps = 0, targetBurst = 0, labelKey = 'pulse-global-heartbeat';
+        if (own) {
+          labelKey = 'pulse-my-heartbeat';
+          targetWave = own.wave;
+          targetTps = own.tps;
+          targetBurst = own.burstTokens;
+        } else if (users.length > 0) {
+          targetWave = users.flatMap(user => user.wave ?? []);
+          targetTps = users.reduce((top, user) => Math.max(top, user.tps ?? 0), 0);
+          targetBurst = users.reduce((sum, user) => sum + (user.burstTokens ?? 0), 0);
+        } else if (username) {
+          labelKey = 'pulse-my-heartbeat';
+        }
+        const ownTier = username ? (own ? pulseTier(own.tps, own.burstTokens) : 'idle') : 'idle';
+        applyMoodBadge(element('account-live'), ownTier, Boolean(username));
+
+        const tier = pulseTier(targetTps, targetBurst);
+        const hasTraffic = tier !== 'idle';
+        const isOnline = Boolean(own || (!username && users.length > 0));
+        hb.dataset.tier = tier;
+        element('hb-label').textContent = t(labelKey);
+        const tierBadge = element('hb-tier');
+        tierBadge.textContent = `${MOOD_ICONS[tier]} ${t(MOOD_KEYS[tier])}`;
+        element('hb-speed').textContent = targetTps > 0
+          ? formatLiveTps(targetTps)
+          : (hasTraffic ? t('pulse-live-badge') : (isOnline ? t('pulse-online') : t('pulse-standby')));
+        const burstEl = element('hb-burst');
+        burstEl.textContent = targetBurst > 0 ? '+' + formatCompactTokens(targetBurst) : '';
+        burstEl.hidden = !(targetBurst > 0);
+
+        const serverTime = Number.isFinite(pulseState.serverTime) ? pulseState.serverTime : Date.now();
+        mainPulseContext = { tier, wave: targetWave, serverTime, tps: targetTps, burst: targetBurst, active: isOnline || hasTraffic };
+        const staticGeo = buildPulseGeometry(targetWave, serverTime, 240, 48, {
+          phaseSec: performance.now() / 1000, tpsHint: targetTps, burstHint: targetBurst, tier, sampleCount: 44
+        });
+        element('hb-bars').replaceChildren(...staticGeo.bars.map(bar => {
+          const rect = document.createElementNS(SVG_NS, 'rect');
+          rect.setAttribute('x', bar.x);
+          rect.setAttribute('y', bar.y);
+          rect.setAttribute('width', bar.width);
+          rect.setAttribute('height', bar.height);
+          rect.setAttribute('rx', '1.2');
+          return rect;
+        }));
+        renderPulseRows(pulseState);
+        paintPulseFrames(performance.now());
+        ensurePulseLoop();
+      }
+
       function renderRows(rows, username) {
         const signature = JSON.stringify([rankDays, username, rows]);
         if (signature === drawnRows) return;
@@ -1437,6 +2058,7 @@
         const keyOf = row => JSON.stringify([rankDays, username === row.username, row]);
         rankingNodes = updateList(element('rows'), rows, rankingNodes, keyOf, row => {
           const item = document.createElement('li');
+          item.dataset.username = row.username;
           if (username && row.username === username) item.classList.add('ladder-self');
           const rank = document.createElement('span'), name = document.createElement('span'), user = document.createElement('div');
           const total = document.createElement('strong'), time = document.createElement('time');
@@ -1449,11 +2071,17 @@
           name.textContent = row.username;
           name.dir = 'auto';
           name.title = row.username;
+          const avatarBox = document.createElement('span');
+          avatarBox.className = 'ladder-avatar-box';
           const avatar = document.createElement('span');
           avatar.className = 'ladder-avatar';
           avatar.setAttribute('aria-hidden', 'true');
           setAvatar(avatar, row.username);
-          user.append(avatar, name);
+          const liveMood = document.createElement('span');
+          liveMood.className = 'ladder-avatar-mood';
+          liveMood.hidden = true;
+          avatarBox.append(avatar, liveMood);
+          user.append(avatarBox, name);
           const badge = medal(row.rank, period);
           if (badge) user.append(badge);
           total.textContent = formatTokenMB(row.tokens);
@@ -1461,7 +2089,36 @@
           if (rankDays !== 1) time.setAttribute('data-localized-text', '');
           time.textContent = rankDays === 1 ? uploaded : t('last-upload-at', uploaded);
           time.dateTime = new Date(row.submittedAt).toISOString();
-          item.append(rank, user, total, time);
+
+          const pulseRow = document.createElement('div');
+          pulseRow.className = 'ladder-row-pulse';
+          pulseRow.dataset.tier = 'idle';
+          pulseRow.hidden = true;
+          const miniSvg = document.createElementNS(SVG_NS, 'svg');
+          miniSvg.setAttribute('class', 'ladder-row-hb');
+          miniSvg.setAttribute('viewBox', '0 0 120 22');
+          miniSvg.setAttribute('preserveAspectRatio', 'none');
+          miniSvg.setAttribute('aria-hidden', 'true');
+          const miniArea = document.createElementNS(SVG_NS, 'path');
+          miniArea.setAttribute('class', 'ladder-hb-area');
+          miniArea.setAttribute('d', '');
+          const miniGlow = document.createElementNS(SVG_NS, 'path');
+          miniGlow.setAttribute('class', 'ladder-hb-glow');
+          miniGlow.setAttribute('d', 'M0 18 L120 18');
+          const miniLine = document.createElementNS(SVG_NS, 'path');
+          miniLine.setAttribute('class', 'ladder-hb-line');
+          miniLine.setAttribute('d', 'M0 18 L120 18');
+          miniSvg.append(miniArea, miniGlow, miniLine);
+          const stats = document.createElement('span');
+          stats.className = 'ladder-row-stats';
+          const tpsEl = document.createElement('span');
+          tpsEl.className = 'ladder-row-tps';
+          const burstEl = document.createElement('span');
+          burstEl.className = 'ladder-row-burst';
+          stats.append(tpsEl, burstEl);
+          pulseRow.append(miniSvg, stats);
+
+          item.append(rank, user, total, time, pulseRow);
           return item;
         });
         for (const avatar of observedAvatars) {
@@ -1593,6 +2250,7 @@
         if (signedIn) renderAccount(username, account);
         renderSyncCountdown(snapshot, signedIn, time);
         renderSyncResult(signedIn ? snapshot : null);
+        renderPulse(username);
       }
 
       function scheduleRender() {
@@ -1690,8 +2348,31 @@
         return pending.promise;
       }
 
+      function watchPulse(active) {
+        if (!bridge?.request || lifetime.signal.aborted) return;
+        if (!active) {
+          pulseWatchRenewAt = 0;
+          void bridge.request('tps.leaderboard', { action: 'pulse-watch', days: rankDays, active: false }, { timeoutMs: 3000 }).catch(() => {});
+          return;
+        }
+        pulseWatchRenewAt = Date.now() + PULSE_WATCH_RENEW_MS;
+        void request('pulse-watch', { active: true }).then(result => {
+          if (lifetime.signal.aborted || !result?.pulse) return;
+          pulseState = result.pulse;
+          scheduleRender();
+        });
+      }
+
       function showCachedRanking() {
         render('');
+        watchPulse(true);
+        if (!pulseState) {
+          void request('pulse').then(result => {
+            if (lifetime.signal.aborted || !result?.pulse) return;
+            pulseState = result.pulse;
+            scheduleRender();
+          });
+        }
         void showCache().then(() => refresh());
         if (!session) void refreshSession();
         showSummaries();
@@ -1745,9 +2426,24 @@
         for (const tab of rankTabs) tab.setAttribute('aria-pressed', String(Number(tab.dataset.rankDays) === days));
         showCachedRanking();
       });
-      group.addEventListener('tps-view-opened', showCachedRanking);
+      group.addEventListener('tps-view-opened', () => {
+        showCachedRanking();
+        ensurePulseLoop();
+      });
+      group.addEventListener('tps-view-closed', () => {
+        watchPulse(false);
+        stopPulseLoop();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (group.hidden) return;
+        const visible = document.visibilityState !== 'hidden';
+        watchPulse(visible);
+        if (visible) ensurePulseLoop();
+        else stopPulseLoop();
+      }, { signal: lifetime.signal });
       document.addEventListener('tps-language-changed', () => {
         drawnRows = '';
+        drawnMarquee = '';
         rankingNodes.clear();
         for (const { days } of periods) delete element('user-badge-' + days).dataset.place;
         render();
@@ -1824,12 +2520,19 @@
         scheduleRender();
         showSummaries();
       });
+      pulseSubscription = bridge.on?.('tps.leaderboard.pulse', next => {
+        if (lifetime.signal.aborted || !next || typeof next !== 'object') return;
+        pulseState = next;
+        scheduleRender();
+      });
       void refreshSession();
       for (const { days } of periods) void showCache(days);
       const interval = setInterval(() => {
         if (group.hidden) return;
+        const nowTime = Date.now();
+        if (document.visibilityState !== 'hidden' && nowTime >= pulseWatchRenewAt) watchPulse(true);
         const snapshot = session ?? model;
-        renderSyncCountdown(snapshot, snapshot?.signedIn ?? snapshot?.board?.authenticated, Date.now());
+        renderSyncCountdown(snapshot, snapshot?.signedIn ?? snapshot?.board?.authenticated, nowTime);
         void refresh();
         if (!rankingPending) {
           for (const days of summaryQueue) {
@@ -1839,10 +2542,13 @@
         }
       }, 1000);
       window.addEventListener('pagehide', () => {
+        watchPulse(false);
+        stopPulseLoop();
         lifetime.abort();
         avatarObserver?.disconnect();
         observedAvatars.clear();
         rankingSubscription?.dispose();
+        pulseSubscription?.dispose();
         cancelAnimationFrame(leaderboardFrame);
         clearTimeout(retryLogin);
         clearInterval(interval);

@@ -21,6 +21,7 @@
 | `LEADERBOARD_PORT` | 本机监听端口，默认 `8787` |
 | `LEADERBOARD_DB` | 数据库路径，建议 `/var/lib/orca-tps/leaderboard.sqlite` |
 | `LEADERBOARD_MAX_TOKENS` | 可选。设置允许提交的 Token 上限，默认使用接口支持的最大整数 |
+| `REDIS_URL` | 可选。实时脉搏 Redis 地址，默认 `redis://127.0.0.1:6379`；设为 `off` 可关闭实时脉搏 |
 
 本地使用 Node.js 24 LTS 运行 `node --env-file=server/.env server/main.mjs`，打开 `/admin` 登录。注册单独的本地 OAuth 应用时，回调改为本地服务的 `/auth/github/callback`。运行 `npm test` 可用模拟 GitHub 服务验证完整的登录、提交、排名和管理流程。
 
@@ -81,6 +82,7 @@ systemctl reload caddy
 https://43.157.2.14 {
 	tls /etc/caddy/leaderboard-tls/fullchain.pem /etc/caddy/leaderboard-tls/privkey.pem
 	reverse_proxy 127.0.0.1:8787 {
+		flush_interval -1
 		header_up X-Real-IP {remote_host}
 	}
 }

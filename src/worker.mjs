@@ -9,8 +9,101 @@ import { startLeaderboard } from './leaderboard.mjs';
 const BACKFILL_DELAY_MS = 250, DISCOVERY_MS = 15_000, IDLE_DELAY_MS = 60_000, FIRST_DELAY_MS = 3_000;
 const PANEL_VIEW_KEY = 'panel-view';
 const PANEL_VIEWS = new Set(['current-data', 'usage', 'leaderboard']);
+const LIVE_WINDOW_MS = 30_000;
+const SEEN_TTL_MS = 120_000;
 
-let controller, remote, computation, cache, usage, remoteUsage, usageAbort, timer, handler, stopLeaderboard, stopPanelView, running = false;
+export function createPulseTracker({ now = Date.now } = {}) {
+  const listeners = new Set();
+  const seen = new Map();
+  let baselineDay = '', baselineTokens = 0, controllerReported = 0;
+  let lastTps = 0, lastTpsAt = -Infinity;
+
+  function emit(sample) {
+    for (const listener of listeners) listener(sample);
+  }
+
+  function pruneSeen(time) {
+    if (seen.size <= 300) return;
+    const cutoff = time - SEEN_TTL_MS;
+    for (const [key, at] of seen) {
+      if (at < cutoff || seen.size > 300) seen.delete(key);
+    }
+  }
+
+  function recordTokens(record) {
+    let total = 0;
+    for (const value of [record?.freshInputTokens, record?.outputTokens, record?.cacheReadTokens, record?.cacheCreationTokens]) {
+      if (Number.isFinite(value) && value > 0) total += value;
+    }
+    return Math.trunc(total);
+  }
+
+  function handleRecords(records) {
+    if (!Array.isArray(records) || !records.length) return;
+    const time = now();
+    const cutoff = time - LIVE_WINDOW_MS;
+    let burstTokens = 0, tps = 0;
+    for (const record of records.slice(0, 10)) {
+      if (!record || !Number.isFinite(record.completedAt)) continue;
+      if (!tps && Number.isFinite(record.tokensPerSecond) && record.tokensPerSecond > 0 && time - record.completedAt <= 600_000) {
+        lastTps = record.tokensPerSecond;
+        lastTpsAt = record.completedAt;
+      }
+      if (record.completedAt < cutoff || record.completedAt > time + 5000) continue;
+      const key = `${record.provider ?? ''}:${record.completedAt}:${record.outputTokens ?? 0}:${record.freshInputTokens ?? 0}`;
+      if (seen.has(key)) continue;
+      seen.set(key, record.completedAt);
+      burstTokens += recordTokens(record);
+      if (!tps && Number.isFinite(record.tokensPerSecond) && record.tokensPerSecond > 0) {
+        tps = record.tokensPerSecond;
+      }
+    }
+    pruneSeen(time);
+    if (tps > 0) {
+      lastTps = tps;
+      lastTpsAt = time;
+    }
+    if (burstTokens > 0 || tps > 0) {
+      controllerReported += burstTokens;
+      emit({ tps, burstTokens });
+    }
+  }
+
+  function handleUsage(usage) {
+    if (!usage?.ready || typeof usage.day !== 'string' || !Number.isFinite(usage.tokens)) return;
+    if (baselineDay !== usage.day) {
+      baselineDay = usage.day;
+      baselineTokens = usage.tokens;
+      controllerReported = 0;
+      return;
+    }
+    if (usage.tokens <= baselineTokens) return;
+    const totalDelta = Math.trunc(usage.tokens - baselineTokens);
+    baselineTokens = usage.tokens;
+    const extra = Math.max(0, totalDelta - controllerReported);
+    controllerReported = Math.max(0, controllerReported - totalDelta);
+    if (extra > 0) {
+      const time = now();
+      emit({ tps: time - lastTpsAt <= 15_000 ? lastTps : 0, burstTokens: extra });
+    }
+  }
+
+  function snapshot(fallbackTps = 0) {
+    const time = now();
+    const recentTps = time - lastTpsAt <= 600_000 ? lastTps : 0;
+    const tps = recentTps > 0 ? recentTps : (Number.isFinite(fallbackTps) && fallbackTps > 0 ? fallbackTps : 0);
+    return { tps: Math.round(tps * 10) / 10, burstTokens: 0 };
+  }
+
+  function subscribe(listener) {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  return { handleRecords, handleUsage, snapshot, subscribe };
+}
+
+let controller, remote, computation, cache, usage, remoteUsage, usageAbort, timer, handler, stopLeaderboard, stopPanelView, pulseTracker, running = false;
 let locales, localeRegistration;
 
 export default async function activate(orca) {
@@ -29,6 +122,7 @@ export default async function activate(orca) {
   };
   const remoteReader = remote = createRemoteChannelReader(orca, remoteOptions);
   const channelCache = cache = createChannelCache(orca.storage);
+  const tracker = pulseTracker = createPulseTracker();
   controller = createTpsController(orca, {
     cache: channelCache, locales: language,
     pollMs: 250, livePollMs: 250, focusPollMs: 1000,
@@ -37,7 +131,8 @@ export default async function activate(orca) {
     readSession: (target, options) => target.executionHostId
       ? remoteReader.read(target, options)
       : compute.call('live', target, options),
-    onOpenTargets: remoteReader.setTargets
+    onOpenTargets: remoteReader.setTargets,
+    onRecords: tracker.handleRecords
   });
   await controller.start({ background: true });
   const history = remoteUsage = createRemoteUsageReader(orca, remoteOptions);
@@ -68,10 +163,16 @@ export default async function activate(orca) {
   handler = orca.panels.handle('tps.summary', () => usageReady ? index.summary() : null);
   void index.ready().then(() => {
     usageReady = true;
+    tracker.handleUsage(index.leaderboardUsage());
     if (usage === index) publishUsage(orca, index);
   });
   try {
     stopLeaderboard = startLeaderboard(orca, {
+      subscribePulse: tracker.subscribe,
+      readPulseSeed: () => {
+        const todaySpeed = usageReady ? index.summary()?.windows?.today?.speeds?.[0]?.tokensPerSecond : 0;
+        return tracker.snapshot(todaySpeed);
+      },
       async readUsage() {
         await index.ready();
         return index.leaderboardUsage();
@@ -123,7 +224,10 @@ async function tick(orca) {
   let delay = DISCOVERY_MS;
   try {
     const { pending } = await index.refresh({ signal });
-    if (!signal.aborted) publishUsage(orca, index);
+    if (!signal.aborted) {
+      pulseTracker?.handleUsage(index.leaderboardUsage());
+      publishUsage(orca, index);
+    }
     delay = index.hasBackfill() ? BACKFILL_DELAY_MS : pending ? DISCOVERY_MS : IDLE_DELAY_MS;
   } catch (error) {
     if (!signal.aborted) orca.log(locales.t('notice.usage-refresh-failed', error?.message ?? 'unknown'));
@@ -145,6 +249,7 @@ export async function deactivate() {
   stopPanelView = undefined;
   stopLeaderboard?.();
   stopLeaderboard = undefined;
+  pulseTracker = undefined;
   controller?.stop();
   controller = undefined;
   usage = undefined;

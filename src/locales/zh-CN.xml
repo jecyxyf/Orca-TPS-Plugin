@@ -243,4 +243,15 @@
   <message id="sync-waiting">等待同步…</message>
   <message id="sync-now">手动同步</message>
   <message id="sync-queued">已加入下次同步</message>
+  <message id="pulse-title">实时脉搏</message>
+  <message id="pulse-active-users">{0} 人实时输出</message>
+  <message id="pulse-standby">待机中</message>
+  <message id="pulse-idle-marquee">暂无实时动态，运行 AI 对话后将在此实时播报</message>
+  <message id="pulse-my-heartbeat">我的实时心跳</message>
+  <message id="pulse-global-heartbeat">全服实时脉搏</message>
+  <message id="pulse-live-badge">实时</message>
+  <message id="pulse-online">在线</message>
+  <message id="pulse-hot">火热输出</message>
+  <message id="pulse-steady">平稳输出</message>
+  <message id="pulse-idle">闲置休息</message>
 </messages>

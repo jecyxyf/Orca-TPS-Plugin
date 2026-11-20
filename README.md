@@ -56,6 +56,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - Browse today’s, 7-day, and 30-day rankings. Entries show GitHub avatars, and the top three get gold, silver, and bronze medals.
 - Sign in with GitHub to participate. The leaderboard combines usage across installations linked to the same account. The plugin fetches avatars directly from GitHub and uses a built-in hooded avatar while one is unavailable.
 - While signed in, the plugin attempts to sync every 10 seconds. Manual sync shares the same interval. The account card shows the countdown, the last successful sync, and any recent error.
+- Stream live token output on the Leaderboard with a real-time marquee, dancing heartbeat curves (reflecting speed and token bursts), and avatar status badges (`🔥` blazing, `⚡` steady, `☕` idle).
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">

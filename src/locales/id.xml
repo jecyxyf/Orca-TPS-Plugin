@@ -243,4 +243,15 @@
   <message id="sync-waiting">Menunggu sinkronisasi…</message>
   <message id="sync-now">Sinkronkan sekarang</message>
   <message id="sync-queued">Dalam antrean untuk sinkronisasi berikutnya</message>
+  <message id="pulse-title">Denyut Langsung</message>
+  <message id="pulse-active-users">{0} aktif sekarang</message>
+  <message id="pulse-standby">Siaga</message>
+  <message id="pulse-idle-marquee">Belum ada aktivitas langsung — jalankan AI untuk melihat di sini</message>
+  <message id="pulse-my-heartbeat">Detak Langsung Saya</message>
+  <message id="pulse-global-heartbeat">Denyut Langsung Global</message>
+  <message id="pulse-live-badge">LIVE</message>
+  <message id="pulse-online">Daring</message>
+  <message id="pulse-hot">Membara</message>
+  <message id="pulse-steady">Stabil</message>
+  <message id="pulse-idle">Santai</message>
 </messages>

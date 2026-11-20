@@ -243,4 +243,15 @@
   <message id="sync-waiting">Aguardando sincronização…</message>
   <message id="sync-now">Sincronizar agora</message>
   <message id="sync-queued">Na fila para a próxima sincronização</message>
+  <message id="pulse-title">Pulso ao vivo</message>
+  <message id="pulse-active-users">{0} ativos agora</message>
+  <message id="pulse-standby">Em espera</message>
+  <message id="pulse-idle-marquee">Sem atividade ao vivo — execute uma tarefa de IA para exibir aqui</message>
+  <message id="pulse-my-heartbeat">Meu batimento ao vivo</message>
+  <message id="pulse-global-heartbeat">Pulso global ao vivo</message>
+  <message id="pulse-live-badge">AO VIVO</message>
+  <message id="pulse-online">Online</message>
+  <message id="pulse-hot">Intenso</message>
+  <message id="pulse-steady">Estável</message>
+  <message id="pulse-idle">Em pausa</message>
 </messages>

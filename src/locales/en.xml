@@ -243,4 +243,15 @@
   <message id="sync-waiting">Waiting to sync…</message>
   <message id="sync-now">Sync now</message>
   <message id="sync-queued">Queued for the next sync</message>
+  <message id="pulse-title">Live Pulse</message>
+  <message id="pulse-active-users">{0} active now</message>
+  <message id="pulse-standby">Standby</message>
+  <message id="pulse-idle-marquee">No live traffic yet — run an AI prompt to stream here</message>
+  <message id="pulse-my-heartbeat">My Live Heartbeat</message>
+  <message id="pulse-global-heartbeat">Global Live Pulse</message>
+  <message id="pulse-live-badge">LIVE</message>
+  <message id="pulse-online">Online</message>
+  <message id="pulse-hot">Blazing</message>
+  <message id="pulse-steady">Steady</message>
+  <message id="pulse-idle">Idle</message>
 </messages>

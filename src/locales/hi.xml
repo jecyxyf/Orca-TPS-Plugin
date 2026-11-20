@@ -243,4 +243,15 @@
   <message id="sync-waiting">सिंक का इंतज़ार…</message>
   <message id="sync-now">अभी सिंक करें</message>
   <message id="sync-queued">अगले सिंक के लिए कतार में</message>
+  <message id="pulse-title">लाइव पल्स</message>
+  <message id="pulse-active-users">अभी {0} सक्रिय</message>
+  <message id="pulse-standby">स्टैंडबाय</message>
+  <message id="pulse-idle-marquee">अभी कोई लाइव गतिविधि नहीं — एआई चलाने पर यहाँ दिखेगा</message>
+  <message id="pulse-my-heartbeat">मेरी लाइव धड़कन</message>
+  <message id="pulse-global-heartbeat">लाइव पल्स</message>
+  <message id="pulse-live-badge">लाइव</message>
+  <message id="pulse-online">ऑनलाइन</message>
+  <message id="pulse-hot">तेज़ गति</message>
+  <message id="pulse-steady">संतुलित</message>
+  <message id="pulse-idle">विराम</message>
 </messages>
