@@ -286,9 +286,8 @@
     .ladder-recent { grid-area: recent; min-width: 0; }
     .ladder-chart {
       display: block; width: 100%; height: 30px; border-radius: 6px;
-      background: var(--button-bg); color: var(--blue);
+      background: transparent; color: var(--blue);
     }
-    .ladder-chart-pulse { background: transparent; }
     .ladder-chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin-top: 3px; }
     .ladder-recent-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 4px; font-size: 11px; }
     .ladder-recent-tools { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -1522,6 +1521,15 @@
       const usageChartLabel = () => t(rankDays === 1 ? 'leaderboard-five-minute-usage' : 'leaderboard-daily-usage');
       const chartPadding = 4;
 
+      function dailyUsagePoints(daily, left, days) {
+        if (!Array.isArray(daily)) return [];
+        const totals = new Map(daily.map(({ day, tokens }) => [day, tokens]));
+        return Array.from({ length: days }, (_, offset) => {
+          const day = new Date(left + offset * DAY_MS).toISOString().slice(0, 10);
+          return { day, tokens: totals.get(day) ?? 0 };
+        });
+      }
+
       function setUsageGradient(ctx, baseline) {
         const colors = window.getComputedStyle(document.documentElement);
         const low = colors.getPropertyValue('--usage-wave-low').trim();
@@ -1607,14 +1615,13 @@
         tools.className = 'ladder-recent-tools';
         speed.className = 'ladder-recent-speed';
         const byDay = rankDays > 1, latest = recent?.points.at(-1);
-        if (!byDay) chart.classList.add('ladder-chart-pulse');
-        const points = byDay ? daily ?? [] : recent?.points ?? [];
         const dayStart = day => Date.parse(day + 'T00:00:00Z');
         const dateLabel = time => locale.date(time, { timeZone: 'UTC', month: 'numeric', day: 'numeric' });
         const timeOf = point => byDay ? dayStart(point.day) : point.submittedAt;
         const tokensOf = point => byDay ? point.tokens : point.deltaTokens;
         const span = byDay ? (rankDays - 1) * DAY_MS : RECENT_STATS_MS;
         const left = (byDay ? dayStart(renderedDay) : now) - span;
+        const points = byDay ? dailyUsagePoints(daily, left, rankDays) : recent?.points ?? [];
         const speedText = value => Number.isFinite(value) ? `${locale.number(value, { maximumFractionDigits: 1 })} tokens/s` : '—';
         const cli = recent?.topCli;
         const cliLabel = Object.hasOwn(AGENT_LABELS, cli) ? AGENT_LABELS[cli] : cli;
@@ -1622,7 +1629,7 @@
         tools.title = tools.textContent;
         speed.textContent = speedText(latest?.avgTps);
         speed.title = t('leaderboard-average-speed');
-        const pointTitle = point => byDay ? `${point.day} · ${formatTokenMB(point.tokens)}`
+        const pointTitle = point => byDay ? `${point.day} · ${point.tokens === 0 ? `${locale.number(0)} MB` : formatTokenMB(point.tokens)}`
           : `${shortClock(point.submittedAt)} · ${locale.number(point.deltaTokens)} Token · ${speedText(point.avgTps)}`;
         const latestPoint = points.at(-1);
         chart.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : usageChartLabel();
@@ -1652,12 +1659,8 @@
             setUsageGradient(ctx, chart.height - chartPadding);
             ctx.lineWidth = 2;
             ctx.beginPath();
-            let previous = null;
-            for (const point of points) {
-              if (previous && timeOf(point) - timeOf(previous) <= DAY_MS) ctx.lineTo(x(point), y(point));
-              else ctx.moveTo(x(point), y(point));
-              previous = point;
-            }
+            ctx.moveTo(x(points[0]), y(points[0]));
+            for (const point of points.slice(1)) ctx.lineTo(x(point), y(point));
             ctx.stroke();
             for (const point of points) {
               ctx.beginPath();

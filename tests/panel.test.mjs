@@ -107,7 +107,7 @@ test('today usage connects pulses at real timestamps and animates new points onc
   const html = await readFile(panelPath, 'utf8');
   const source = /const chartPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];
   assert.ok(source);
-  assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart-pulse').background, 'transparent');
+  assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart').background, 'transparent');
   const frames = [], painters = new WeakMap(), paths = [], stops = [];
   let path;
   const ctx = {
@@ -144,6 +144,21 @@ test('today usage connects pulses at real timestamps and animates new points onc
   assert.deepEqual([chart.width, chart.height], [316, 60]);
   assert.deepEqual(paths[0][6], [50.5, 4]);
   assert.equal(frames.length, 0);
+});
+
+test('daily usage fills missing dates with zero across the entire selected window', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function dailyUsagePoints\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(source);
+  const dailyUsagePoints = new Function(`const DAY_MS = 86400000; ${source}; return dailyUsagePoints;`)();
+  const week = dailyUsagePoints([{ day: '2026-11-15', tokens: 7 }, { day: '2026-11-19', tokens: 20 }], Date.UTC(2026, 10, 14), 7);
+  assert.deepEqual(week.map(point => point.tokens), [0, 7, 0, 0, 0, 20, 0]);
+  assert.deepEqual([week[0].day, week.at(-1).day], ['2026-11-14', '2026-11-20']);
+  const month = dailyUsagePoints([{ day: '2024-02-29', tokens: 11 }], Date.UTC(2024, 1, 1), 30);
+  assert.equal(month.length, 30);
+  assert.deepEqual(month.slice(-3), [{ day: '2024-02-28', tokens: 0 }, { day: '2024-02-29', tokens: 11 }, { day: '2024-03-01', tokens: 0 }]);
+  assert.equal(dailyUsagePoints([], Date.UTC(2026, 10, 14), 7).filter(point => point.tokens === 0).length, 7);
+  assert.deepEqual(dailyUsagePoints(undefined, Date.UTC(2026, 10, 14), 7), []);
 });
 
 async function loadAvatarView() {

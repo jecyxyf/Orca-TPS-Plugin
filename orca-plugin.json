@@ -32,7 +32,7 @@
     },
     {
       "path": "assets/five-minute-stats/leaderboard.png",
-      "alt": "Today's leaderboard with five-minute usage waveforms, model and CLI names, and average generation speeds",
+      "alt": "30-day leaderboard with continuous daily usage lines, model and CLI names, and average generation speeds",
       "caption": "Leaderboard · Follow five-minute activity and daily usage trends",
       "theme": "dark"
     }
