@@ -143,7 +143,7 @@ test('today usage connects pulses at real timestamps and animates new points onc
     { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
   frames.shift()(1000);
   assert.deepEqual([chart.width, chart.height], [616, 60]);
-  assert.deepEqual(stops, [[0, 'transparent'], [1, '#60a589'], [0, '#60a589'], [0.58, '#60a589'], [1, '#ff6b72']]);
+  assert.deepEqual(stops, [[0, 'transparent'], [0.72, '#60a589'], [0, '#60a589'], [0.58, '#60a589'], [1, '#ff6b72']]);
   assert.deepEqual(paths[0].slice(2, 7), [[24, 15], [27.25, 26], [44, 26], [93.75, 26], [97, 26]]);
   assert.deepEqual(paths[1][0], [44, 26, 1.4]);
   assert.deepEqual(areas[0].points, [...paths[0], [100.25, 26], [20.75, 26], 'closed']);

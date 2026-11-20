@@ -1566,9 +1566,9 @@
         area.closePath();
         const shade = ctx.createLinearGradient(0, baseline, 0, chartPadding);
         shade.addColorStop(0, 'transparent');
-        shade.addColorStop(1, low);
+        shade.addColorStop(0.72, low);
         ctx.save();
-        ctx.globalAlpha = 0.24;
+        ctx.globalAlpha = 0.34;
         ctx.fillStyle = shade;
         ctx.fill(area);
         ctx.restore();
