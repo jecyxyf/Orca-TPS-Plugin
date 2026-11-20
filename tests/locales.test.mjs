@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createLocalePreferences, sourceMessage } from '../src/locales.mjs';
 
-const codes = ['en', 'zh-CN', 'hi', 'es', 'ar', 'fr', 'bn', 'pt-BR', 'id', 'ur'];
+const codes = ['en', 'zh-CN', 'de', 'ja', 'hi', 'fr', 'ru', 'it', 'pt-BR', 'es', 'id', 'ar', 'bn', 'ur', 'pt-PT'];
 const storage = () => {
   const data = new Map();
   return {
@@ -19,9 +19,10 @@ test('every shipped locale has the same XML message IDs and placeholders', async
       id, [...new Set(text.match(/\{\d+\}/g) ?? [])].sort()
     ]);
   }));
-  assert.ok(dictionaries[0].length > 150);
+  const english = dictionaries[codes.indexOf('en')];
+  assert.ok(english.length > 150);
   for (const [index, dictionary] of dictionaries.entries()) {
-    assert.deepEqual(dictionary, dictionaries[0], codes[index]);
+    assert.deepEqual(dictionary, english, codes[index]);
   }
 });
 
@@ -33,6 +34,8 @@ test('language preferences default to English and persist a selected language ac
   assert.equal(initial.strings['current-data'], 'Current Data');
   assert.deepEqual(initial.options.map(option => option.code), codes);
   for (const { flag } of initial.options) assert.match(flag, /^data:image\/png;base64,iVBORw0KGgo/);
+  const usFlag = await readFile(new URL('../src/locales/flags/us.png', import.meta.url));
+  assert.equal(initial.options[0].flag, 'data:image/png;base64,' + usFlag.toString('base64'));
   const changes = [];
   const readCurrent = () => changes.push(first.code);
   await Promise.all([first.select('ar', readCurrent), first.select('zh-CN', readCurrent)]);
