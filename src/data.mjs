@@ -704,7 +704,9 @@ async function readSingleTargetSession(target, options = {}) {
       records,
       ...(safeTitle(target.title) ? { title: safeTitle(target.title) } : {})
     };
-    return { session: enriched, warnings: [...warnings] };
+    return { session: enriched, warnings: [...warnings], ...(options.includeUsageRecords ? {
+      usageRecords: session.records.map(record => ({ ...record, provider: session.provider }))
+    } : {}) };
   };
   if (target.provider === 'hermes') {
     const roots = await configuredRoots(options.roots, options.includeDefaults !== false);
@@ -891,7 +893,9 @@ async function readChannelSessions(target, options = {}) {
       updatedAt: maxUpdatedAt || Date.now(),
       records: mergedRecords
     },
-    warnings: [...warnings]
+    warnings: [...warnings],
+    ...(options.includeUsageRecords ? { usageRecords: recentRecords(proxyEntries.flatMap(entry =>
+      entry.records.map(record => ({ ...record, provider: entry.provider })))) } : {})
   };
 }
 
@@ -966,7 +970,7 @@ export function createLiveSessionReader() {
       const directory = path.dirname(explicit);
       if (!watchers.has(directory) && (await info(directory))?.isDirectory() && !closed) observe(directory, false);
     }
-    const key = JSON.stringify([target.key, target.worktreePath, target.sessions, rootsKey]);
+    const key = JSON.stringify([target.key, target.worktreePath, target.sessions, rootsKey, options.includeUsageRecords === true]);
     const saved = snapshots.get(key);
     const at = Date.now();
     if (!options.fresh && saved?.version === version && at - saved.at < (watchFailed ? 250 : 4000)) return saved.result;

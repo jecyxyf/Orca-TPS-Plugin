@@ -11,6 +11,7 @@ export function personalRecordsCutoff(now) {
   return Math.min(calendarStart, localHourStart(now) - USAGE_RETENTION_MS);
 }
 const PANELS = new Set(['current-data', 'usage', 'leaderboard']);
+const COLLECTION_KEY = 'usage-collection';
 
 const metrics = [
   ['freshInputTokens', 'input_tokens'], ['outputTokens', 'output_tokens'],
@@ -42,6 +43,7 @@ const recordFields = [
 const recordColumns = recordFields.map(([, column]) => column);
 const recordSelect = recordFields.map(([key, column]) => `${column} AS ${key}`).join(', ');
 const fingerprint = record => JSON.stringify(recordFields.map(([key]) => record[key]));
+const recordValues = record => recordFields.map(([key]) => typeof record[key] === 'boolean' ? Number(record[key]) : record[key]);
 const encode = value => JSON.stringify(value);
 const decode = value => value == null ? undefined : JSON.parse(value);
 
@@ -76,6 +78,7 @@ export function openLocalUsageDb(filename) {
         PRIMARY KEY(origin, account_id, device_guid, request_id)
       );
       CREATE INDEX IF NOT EXISTS upload_queue_scope ON upload_queue(origin, account_id, state, updated_at);
+      ${version === 0 ? "INSERT OR IGNORE INTO panel_cache(panel, current_scope, current_snapshot, current_at) VALUES ('usage-collection', 'desktop', 'null', 0);" : ''}
       PRAGMA user_version=1;
       COMMIT;
     `);
@@ -103,6 +106,8 @@ export function openLocalUsageDb(filename) {
   const columns = ['device_guid', 'log_unit_key', 'log_stamp', 'updated_at', ...recordColumns];
   const upsertRecord = db.prepare(`INSERT INTO usage_records(${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})
     ON CONFLICT(device_guid, record_id) DO UPDATE SET ${columns.slice(2).map(column => `${column}=excluded.${column}`).join(', ')}`);
+  const insertRecord = db.prepare(`INSERT INTO usage_records(${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})
+    ON CONFLICT(device_guid, record_id) DO NOTHING`);
   const updateStamp = db.prepare('UPDATE usage_records SET log_stamp=?, updated_at=? WHERE device_guid=? AND log_unit_key=? AND log_stamp<>?');
   const selectPanel = db.prepare('SELECT * FROM panel_cache WHERE panel=?');
   const upsertPanel = db.prepare(`INSERT INTO panel_cache(panel, current_scope, current_snapshot, current_at) VALUES (?, ?, ?, ?)
@@ -145,8 +150,7 @@ export function openLocalUsageDb(filename) {
         const previous = old.get(id);
         if (previous?.username) record.username = previous.username;
         if (previous && fingerprint(previous) === fingerprint(record)) continue;
-        upsertRecord.run(deviceGuid, logUnitKey, logStamp, now,
-          ...recordFields.map(([key]) => typeof record[key] === 'boolean' ? Number(record[key]) : record[key]));
+        upsertRecord.run(deviceGuid, logUnitKey, logStamp, now, ...recordValues(record));
         if (previous) affected.add(previous.completedAt);
         affected.add(record.completedAt);
       }
@@ -155,10 +159,39 @@ export function openLocalUsageDb(filename) {
     });
   }
 
+  function appendRecords({ deviceGuid, records, now, from = 0, logUnitKey = 'live', logStamp = 'live' }) {
+    const cutoff = Math.max(from, personalRecordsCutoff(now));
+    const incoming = [];
+    for (const row of records) {
+      const record = sanitize(row);
+      if (record && record.completedAt >= cutoff && record.completedAt <= now) incoming.push(record);
+    }
+    if (!incoming.length) return 0;
+    return atomic(() => {
+      let inserted = 0;
+      for (const record of incoming) inserted += Number(insertRecord.run(deviceGuid, logUnitKey, logStamp, now, ...recordValues(record)).changes);
+      return inserted;
+    });
+  }
+
   function readRecords({ from = 0, to = Number.MAX_SAFE_INTEGER, deviceGuid } = {}) {
-    return db.prepare(`SELECT device_guid AS deviceGuid, log_unit_key AS logUnitKey, ${recordSelect}
+    return db.prepare(`SELECT device_guid AS deviceGuid, log_unit_key AS logUnitKey, updated_at AS indexedAt, ${recordSelect}
       FROM usage_records WHERE completed_at>=? AND completed_at<?${deviceGuid ? ' AND device_guid=?' : ''}
       ORDER BY completed_at, record_id`).all(from, to, ...(deviceGuid ? [deviceGuid] : [])).map(shape);
+  }
+
+  function loadCollection(now) {
+    const row = selectPanel.get(COLLECTION_KEY);
+    const stored = decode(row?.current_snapshot);
+    if (stored) return stored;
+    // An older database already contains the previous collector's history.
+    const state = { startedAt: now, importedAt: row ? null : now };
+    saveCollection(state, now);
+    return state;
+  }
+
+  function saveCollection(state, now) {
+    upsertPanel.run(COLLECTION_KEY, 'desktop', encode(state), now);
   }
 
   function readPanel(panel, scope, { previous = false } = {}) {
@@ -190,7 +223,8 @@ export function openLocalUsageDb(filename) {
   };
 
   return {
-    replaceLog, readRecords, readSources: (from = 0) => listSources.all(from).map(row => row.deviceGuid),
+    replaceLog, appendRecords, readRecords, loadCollection, saveCollection,
+    readSources: (from = 0) => listSources.all(from).map(row => row.deviceGuid),
     readLogVersions: deviceGuid => new Map(readLogStamp.all(deviceGuid).map(row => [row.log_unit_key, row.log_stamp])),
     prune(now) {
       queue.prune(now - USAGE_RETENTION_MS);

@@ -71,45 +71,87 @@ test('each panel retains two successful snapshots and matches the requested scop
   } finally { db.close(); }
 });
 
-test('the detail index retains a disconnected SSH source and counts same-time requests once per record', async () => {
-  const db = openLocalUsageDb(':memory:');
+test('a fresh database imports local history once, then resumes live collection after a restart', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'tps-live-usage-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const filename = path.join(dir, 'usage.sqlite');
+  let db = openLocalUsageDb(filename);
   const remote = 'afe04472-9c3e-416c-a382-11a6bd1fb170';
-  let online = true, complete = true, revision = 1, clock = now;
-  const log = (deviceGuid, key, tokens) => ({ deviceGuid, key, stamp: String(revision), bytes: 100, mtimeMs: clock,
-    readRecords: async () => ({ records: tokens.map((value, index) => record('r' + index, now - 100, value)),
-      nextOffset: null, complete: deviceGuid === source || complete }) });
-  const index = createRecordUsageIndex({ db, deviceGuid: source, now: () => clock, maxUnits: 10, budgetBytes: 1000,
-    discover: async () => ({
-      descriptors: [log(source, 'local', [30]), ...(online ? [log(remote, 'ssh', revision === 1 ? [40, 60] : [120])] : [])],
-      localComplete: true, remoteComplete: online,
-      remoteSources: new Map(online ? [[remote, { sourceId: remote, observedAt: clock }]] : [])
-    }) });
+  let clock = now, scans = 0;
+  const errors = [];
+  const makeIndex = () => createRecordUsageIndex({ db, deviceGuid: source, now: () => clock, maxUnits: 1, budgetBytes: 1000,
+    discover: async () => {
+      scans++;
+      return [
+        { key: 'local', stamp: 'initial', bytes: 100, mtimeMs: now,
+          readRecords: async () => ({ records: [record('history', now - 1000, 30)], nextOffset: null, complete: true }) },
+        { key: 'unreadable', stamp: 'initial', bytes: 100, mtimeMs: now - 1000,
+          readRecords: async () => { throw new Error('local_read_failed'); } }
+      ];
+    }, log: text => errors.push(text) });
+  let index = makeIndex();
   try {
+    await index.refresh();
+    assert.equal(index.initialized(), false);
+    assert.equal(index.leaderboardUsage().tokens, 30);
+    clock += 1000;
+    const local = record('same id', clock, 40);
+    assert.equal(index.observe(source, [local]), true);
+    assert.equal(index.observe(remote, [record('before init', clock, 60)]), false);
+    await index.refresh();
+    assert.equal(index.initialized(), true);
+    assert.equal(errors.length, 1);
+    clock += 1000;
+    const liveRemote = record('same id', clock, 60);
+    assert.equal(index.observe(remote, [record('old remote', now - 1, 100), liveRemote]), true);
+    assert.equal(index.observe(remote, [liveRemote]), false);
     await index.refresh();
     assert.equal(index.leaderboardUsage().tokens, 130);
     assert.equal(index.summary().windows.today.requests, 3);
-    assert.deepEqual(index.leaderboardSources().find(item => item.sourceId === remote).buckets, [[now - 100, 100]]);
-    online = false;
+    assert.deepEqual(index.leaderboardSources().find(item => item.sourceId === remote).buckets, [[clock, 60]]);
+    assert.equal(index.leaderboardHours().find(item => item.sourceId === remote).hours.length, 1);
+    assert.equal(scans, 1);
+
+    db.close();
+    db = openLocalUsageDb(filename);
+    index = makeIndex();
+    clock += 1000;
     await index.refresh();
     assert.equal(index.leaderboardUsage().tokens, 130);
-    assert.equal(index.leaderboardSources().find(item => item.sourceId === remote).coverage, undefined);
-    online = true;
-    revision++;
-    complete = false;
-    await index.refresh();
-    assert.equal(index.leaderboardUsage().tokens, 130);
-    complete = true;
-    clock += 15_001;
+    assert.equal(index.leaderboardSources().find(item => item.sourceId === remote).observedAt, undefined);
+    assert.equal(index.observe(source, [local]), false);
+    assert.equal(index.observe(remote, [record('new on reconnect', clock - 300, 20)]), true);
     await index.refresh();
     assert.equal(index.leaderboardUsage().tokens, 150);
-    assert.equal(index.summary().windows.today.requests, 2);
+    assert.equal(scans, 1);
+  } finally { db.close(); }
+});
+
+test('a database from the previous version keeps its data without running historical discovery again', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'tps-existing-usage-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const filename = path.join(dir, 'usage.sqlite');
+  let db = openLocalUsageDb(filename);
+  db.replaceLog(reading([record('existing', now - 100, 12)]));
+  db.close();
+  const olderDatabase = new DatabaseSync(filename);
+  olderDatabase.prepare('DELETE FROM panel_cache WHERE panel=?').run('usage-collection');
+  olderDatabase.close();
+  db = openLocalUsageDb(filename);
+  const index = createRecordUsageIndex({ db, deviceGuid: source, now: () => now,
+    discover: async () => assert.fail('an existing database must skip historical discovery') });
+  try {
+    await index.refresh();
+    assert.equal(index.initialized(), true);
+    assert.equal(index.observe(source, [record('old unindexed', now - 200, 40)]), false);
+    assert.equal(index.summary().windows.today.tokens, 12);
   } finally { db.close(); }
 });
 
 test('personal hourly stats use the last local hour for all three periods and hold until the next hour', async () => {
   const db = openLocalUsageDb(':memory:');
   const cutoff = new Date(2026, 10, 21, 14).getTime();
-  let clock = cutoff + 35 * 60_000, stamp = 'stamp';
+  let clock = cutoff + 35 * 60_000;
   const records = [
     record('too old', cutoff - 720 * HOUR_MS - 1, 1000),
     record('month edge', cutoff - 720 * HOUR_MS, 1),
@@ -121,20 +163,12 @@ test('personal hourly stats use the last local hour for all three periods and ho
     record('at cutoff', cutoff, 64),
     record('after cutoff', cutoff + 100, 128)
   ];
-  const discovery = async () => ({
-    descriptors: [{ deviceGuid: source, key: 'log', stamp, bytes: 100, mtimeMs: clock,
-      readRecords: async () => ({ records, nextOffset: null, complete: true }) }],
-    localComplete: true, remoteComplete: true
-  });
   const createIndex = () => createRecordUsageIndex({ db, deviceGuid: source, now: () => clock,
-    maxUnits: 10, budgetBytes: 1000, discover: discovery });
+    discover: async () => assert.fail('a ready database must not rescan logs') });
   const index = createIndex();
   try {
-    // Simulate an existing database whose previous retention rule already dropped the month edge.
-    db.replaceLog(reading([records[6]], { now: clock }));
-    await index.ready();
-    assert.equal(index.summary().hourly.ready, false);
-    assert.equal(index.summary().hourly.windows.today.tokens, 32);
+    db.saveCollection({ startedAt: cutoff - 60_000, importedAt: cutoff - 60_000 }, cutoff - 60_000);
+    db.appendRecords({ deviceGuid: source, records, now: clock });
     await index.refresh();
     const first = index.summary().hourly;
     assert.equal(first.cutoffAt, cutoff);
@@ -143,9 +177,8 @@ test('personal hourly stats use the last local hour for all three periods and ho
     assert.equal(index.summary().windows.today.tokens, 224);
     assert.ok(index.leaderboardSources()[0].buckets.every(([at]) => at >= clock - USAGE_RETENTION_MS));
 
-    stamp = 'next';
-    records.push(record('read late', cutoff - 20, 256));
     clock += 10 * 60_000;
+    assert.equal(index.observe(source, [record('read late', cutoff - 20, 256)]), true);
     await index.refresh();
     assert.strictEqual(index.summary().hourly, first);
     assert.equal(index.summary().windows.today.tokens, 480);
@@ -166,7 +199,7 @@ test('personal date stats start a new day at local midnight while hourly stats k
   const midnight = new Date(2026, 10, 22).getTime();
   let clock = midnight - 1;
   const index = createRecordUsageIndex({ db, deviceGuid: source, now: () => clock, maxUnits: 10, budgetBytes: 1000,
-    discover: async () => ({ descriptors: [], localComplete: true, remoteComplete: true }) });
+    discover: async () => [] });
   try {
     db.replaceLog(reading([record('before midnight', clock)], { now: clock }));
     await index.refresh();

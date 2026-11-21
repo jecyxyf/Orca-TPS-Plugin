@@ -53,7 +53,7 @@ test('one SSH stream merges project sessions and receives new records without se
       const command = collectorCommand(token).split('"')[1];
       child = spawn(process.execPath, ['--input-type=commonjs', '-e', command], {
         cwd: project, env: { ...process.env, HOME: home, USERPROFILE: home, LOCALAPPDATA: home, ORCA_USER_DATA_PATH: home, CODEX_HOME: codexHome,
-          HERMES_HOME: hermesHome, TZ: 'UTC' },
+          HERMES_HOME: hermesHome, XDG_DATA_HOME: path.join(home, 'data'), TZ: 'UTC' },
         stdio: ['pipe', 'pipe', 'ignore']
       });
       const write = child.stdin.write.bind(child.stdin);
@@ -66,15 +66,19 @@ test('one SSH stream merges project sessions and receives new records without se
   });
   try {
     remote.setTarget(target);
-    const first = await remote.read(target);
+    assert.equal((await remote.read(target)).usage, undefined);
+    const first = await remote.read(target, { includeUsageRecords: true });
     assert.deepEqual(first.warnings, []);
     assert.deepEqual(first.session.records.map(record => record.outputTokens), [60, 330, 200]);
     assert.deepEqual(first.session.records.map(record => record.tokensPerSecond), [30, 110, 100]);
     assert.equal(first.session.records[0].dataSource, 'hermes_log');
     assert.equal(first.session.records[0].model, 'vendor/flash-model:free');
     assert.equal(first.session.records[0].cacheHitRate, undefined);
+    const sourceId = (await readFile(path.join(home, 'data', 'orca-tps-plugin', 'source-id'), 'utf8')).trim();
+    assert.equal(first.usage.sourceId, sourceId);
+    assert.deepEqual(first.usage.records.map(record => remoteRecord(record).id), first.session.records.map(record => record.id));
     assert.doesNotMatch(JSON.stringify(first), /PRIVATE_CHAT_CONTENT|remote-one|remote-two|hermes-remote/);
-    assert.deepEqual(await remote.read(target, { fresh: true }), first);
+    assert.deepEqual(await remote.read(target, { fresh: true, includeUsageRecords: true }), first);
     assert.equal(launches, 1);
 
     const sends = requests;
@@ -87,10 +91,12 @@ test('one SSH stream merges project sessions and receives new records without se
     let observed;
     for (let attempt = 0; attempt < 30; attempt++) {
       await delay(100);
-      observed = await remote.read(target);
+      observed = await remote.read(target, { includeUsageRecords: true });
       if (observed.session?.records[0]?.outputTokens === 500) break;
     }
     assert.deepEqual(observed.session.records.map(record => record.outputTokens), [500, 60, 330, 200]);
+    assert.equal(observed.usage.sourceId, sourceId);
+    assert.deepEqual(observed.usage.records.map(record => record.outputTokens), [500, 60, 330, 200]);
     assert.equal(requests, sends, 'no repeat remote query');
   } finally {
     await remote.dispose();

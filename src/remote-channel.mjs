@@ -365,7 +365,7 @@ export function createRemoteChannelReader(orca, {
     return loadCollectorFiles();
   }
 
-  async function read(target, { fresh = false } = {}) {
+  async function read(target, { fresh = false, includeUsageRecords = false } = {}) {
     if (!wanted.has(target.key)) return resultError('workspace');
     const retry = retries.get(target.key);
     if (!fresh && retry && now() < retry.at) return resultError(retry.reason);
@@ -379,14 +379,16 @@ export function createRemoteChannelReader(orca, {
       const files = !entry.connection ? await start(entry, target, signal) : undefined;
       entry.stage = 'read';
       const signature = JSON.stringify(target.sessions ?? []);
-      if (files || fresh || signature !== entry.signature || now() - entry.lastHandshake >= 30_000) {
+      if (files || fresh || signature !== entry.signature || includeUsageRecords !== entry.includeUsageRecords ||
+          now() - entry.lastHandshake >= 30_000) {
         const response = await entry.connection.exchange({
           ...(files ? { files } : {}),
           watchId: entry.watchId,
-          project: { worktreePath: entry.path, sessions: target.sessions, fresh }
+          project: { worktreePath: entry.path, sessions: target.sessions, fresh, includeUsageRecords }
         }, signal);
         if (!response.answer) throw new RemoteReadError('read');
         entry.signature = signature;
+        entry.includeUsageRecords = includeUsageRecords;
         entry.version = response.version;
         entry.lastHandshake = now();
         entry.lastReply = response.answer;
@@ -400,6 +402,14 @@ export function createRemoteChannelReader(orca, {
       const answer = entry.lastReply;
       if (answer.error) throw new RemoteReadError(answer.error);
       if (!Array.isArray(answer.records)) return resultError('read');
+      const capture = answer.usage;
+      const usage = includeUsageRecords && validInstallationId(capture?.sourceId) && Array.isArray(capture.records) ? {
+        sourceId: capture.sourceId,
+        records: capture.records.slice(0, 100).flatMap(row => {
+          const safe = remoteRecord(row);
+          return safe && usageKey.test(row.id) ? [{ ...safe, id: row.id }] : [];
+        })
+      } : null;
       retries.delete(target.key);
       return {
         session: {
@@ -407,7 +417,8 @@ export function createRemoteChannelReader(orca, {
           provider: 'channel',
           records: answer.records.slice(0, 100).map(remoteRecord).filter(Boolean).sort((a, b) => b.completedAt - a.completedAt)
         },
-        warnings: answer.incomplete ? [sourceMessage('notice.remote-logs-incomplete')] : []
+        warnings: answer.incomplete ? [sourceMessage('notice.remote-logs-incomplete')] : [],
+        ...(usage ? { usage } : {})
       };
     } catch (error) {
       if (collectors.get(target.key) === entry) {

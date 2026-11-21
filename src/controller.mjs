@@ -55,7 +55,7 @@ const TRANSIENT_PAGE_PATTERNS = [
 export function createTpsController(orca, {
   readActive, readSession, now = Date.now, pollMs = 5000, focusPollMs = 250,
   livePollMs = focusPollMs, backgroundPollMs = pollMs, backgroundLimit = 2, watchWorkspace = false,
-  holdActivityMs = 120_000, onTargetChange = () => {}, onOpenTargets = () => {}, cache, locales
+  holdActivityMs = 120_000, onTargetChange = () => {}, onOpenTargets = () => {}, onSessionRead, cache, locales
 } = {}) {
   const t = locales?.t ?? sourceMessage;
   const instanceId = randomUUID();
@@ -219,9 +219,18 @@ export function createTpsController(orca, {
     finally { if (contextPending === task) contextPending = null; }
   }
 
+  async function loadSession(requestedTarget, options) {
+    const result = await readSession(requestedTarget, options);
+    if (!stopped && onSessionRead && matchesTarget(result?.session, requestedTarget)) {
+      try { onSessionRead(requestedTarget, result); }
+      catch (error) { orca.log(t('notice.usage-read-failed', error?.code ?? error?.message ?? 'unknown')); }
+    }
+    return result;
+  }
+
   function readProject(requestedTarget, force) {
     const options = { roots: structuredClone(roots), ...(force ? { fresh: true } : {}) };
-    if (!cache || !isChannelTarget(requestedTarget)) return readSession(requestedTarget, options);
+    if (!cache || !isChannelTarget(requestedTarget)) return loadSession(requestedTarget, options);
     const channel = targetKey(requestedTarget);
     if (projectReads.has(channel)) return projectReads.get(channel);
     channelReadAt.set(channel, now());
@@ -229,7 +238,7 @@ export function createTpsController(orca, {
     const pending = (async () => {
       await cache.get(id);
       if (stopped) return { session: null, warnings: [] };
-      const result = await readSession(requestedTarget, options);
+      const result = await loadSession(requestedTarget, options);
       if (stopped || !matchesTarget(result.session, requestedTarget)) return result;
       const saved = cache.set(id, result.session.records, { display: channel === key && !result.warnings?.length });
       return { ...result, cachedAt: saved.updatedAt, session: { ...result.session, records: saved.records } };

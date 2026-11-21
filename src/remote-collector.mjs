@@ -42,6 +42,7 @@ const NUMBERS = [
 const clean = value => typeof value === 'string' && value.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value);
 const hermesModelId = /^[a-z\d][a-z\d._-]*\/[a-z\d][a-z\d._:-]*$/i;
 const liveSessions = createLiveSessionReader();
+let liveSourceId;
 
 export function remoteRecord(record) {
   if (!record || !PROVIDERS.has(record.provider) || !Number.isFinite(record.completedAt) || record.completedAt < 0 ||
@@ -78,13 +79,22 @@ export async function collectRemoteChannel(request, { cwd = process.cwd(), load 
     if (clean(entry[field]) && path.isAbsolute(entry[field])) session[field] = entry[field];
     sessions.push(session);
   }
-  const { session, warnings } = await load(
+  const includeUsageRecords = request.includeUsageRecords === true;
+  const { session, warnings, usageRecords } = await load(
     { worktreePath: request.worktreePath, sessions },
-    { fresh: request.fresh === true }
+    { fresh: request.fresh === true, ...(includeUsageRecords ? { includeUsageRecords } : {}) }
   );
+  let usage;
+  if (includeUsageRecords && usageRecords?.length) {
+    try {
+      liveSourceId ??= await readRemoteSourceId();
+      usage = { sourceId: liveSourceId, records: usageRecords.slice(0, 100).map(remoteRecord).filter(Boolean) };
+    } catch { /* Current Data can still show records when the source identifier is unavailable. */ }
+  }
   return {
     records: session ? session.records.slice(0, 100).map(remoteRecord).filter(Boolean) : null,
-    incomplete: Boolean(warnings?.length)
+    incomplete: Boolean(warnings?.length),
+    ...(usage ? { usage } : {})
   };
 }
 
