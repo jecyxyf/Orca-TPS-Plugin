@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
   "manifestVersion": 2,
-  "id": "tps-stats",
+  "id": "tps-plugin",
   "name": "TPS Plugin",
   "version": "1.6.5",
   "description": "Track request speed and token usage in Orca, compare models, and explore rolling usage rankings and the fastest uploads from the past 24 hours.",
