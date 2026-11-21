@@ -127,6 +127,8 @@ test('speed ranks cap at 20 and fill the gap when a faster upload expires', asyn
       stats: { deltaTokens,
         avgTps: i === 107 ? null : i === 108 ? 0 : i, topModel: 'gpt-test', topCli: 'codex' } };
     const submittedAt = i === 105 ? first : first + 1000;
+    if (i === 103) assert.equal(store.submit(i, { ...upload, requestId: randomUUID(), fingerprint: 'second-best',
+      stats: { ...upload.stats, avgTps: 102.5 } }, first - 9000, 1_000_000), 'accepted');
     assert.equal(store.submit(i, upload, submittedAt, 1_000_000), 'accepted');
     if (i === 103) assert.equal(store.submit(i, upload, submittedAt, 1_000_000), 'accepted');
   }
@@ -154,6 +156,37 @@ test('speed ranks cap at 20 and fill the gap when a faster upload expires', asyn
   assert.equal((await (await call(path)).json()).rows[0].username, 'user102');
   advance(1000);
   assert.deepEqual((await (await call(path)).json()).rows, []);
+});
+
+test('speed ranking takes one best result per GitHub account across devices and falls back when it expires', async t => {
+  const { call, advance, clock, store } = await fixture(t);
+  const first = clock();
+  store.upsertAccount({ id: 1, login: 'alice' });
+  store.upsertAccount({ id: 2, login: 'bob' });
+  const laptop = randomUUID(), desktop = randomUUID(), bobDevice = randomUUID();
+  const submit = (account, installationId, at, avgTps, topModel, topCli, deltaTokens) =>
+    store.submit(account, { day: leaderboardDay(at), tokens: 1000, requestId: randomUUID(),
+      fingerprint: randomUUID(), installationId, stats: { avgTps, topModel, topCli, deltaTokens } }, at, 1_000_000);
+  assert.equal(submit(1, laptop, first, 110, 'fast-model', 'codex', 601), 'accepted');
+  assert.equal(submit(2, bobDevice, first + 1, 100, 'other-model', 'claude', 777), 'accepted');
+  assert.equal(submit(1, desktop, first + 10_000, 95, 'next-model', 'pi', 720), 'accepted');
+  assert.equal(submit(1, desktop, first + 20_000, 200, 'too-small', 'pi', 500), 'accepted');
+  advance(20_000);
+  const compact = rows => rows.map(({ rank, username, avgTps, topModel, topCli, deltaTokens }) =>
+    [rank, username, avgTps, topModel, topCli, deltaTokens]);
+  const path = '/api/leaderboard/speeds';
+  const initial = await call(path);
+  const { rows } = await initial.json();
+  assert.deepEqual(compact(rows), [
+    [1, 'alice', 110, 'fast-model', 'codex', 601], [2, 'bob', 100, 'other-model', 'claude', 777]
+  ]);
+  assert.deepEqual((await (await call('/api/leaderboard/snapshot')).json()).boards[0].rows, rows);
+  advance(SPEED_WINDOW_MS - 20_000);
+  const shifted = await call(path, { headers: { 'If-None-Match': initial.headers.get('etag') } });
+  assert.equal(shifted.status, 200);
+  assert.deepEqual(compact((await shifted.json()).rows), [
+    [1, 'bob', 100, 'other-model', 'claude', 777], [2, 'alice', 95, 'next-model', 'pi', 720]
+  ]);
 });
 
 test('hourly windows freeze all periods at the same cutoff and merge device updates at the next cutoff', async t => {

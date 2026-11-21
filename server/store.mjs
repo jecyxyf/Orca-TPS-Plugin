@@ -137,14 +137,24 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     }
   }
 
-  function speedRanking(now) {
-    const rows = all(`SELECT accounts.username, submitted_at AS submittedAt, avg_tps AS avgTps, delta_tokens AS deltaTokens,
+  const fastestSubmissions = db.prepare(`SELECT submission_stats.account, accounts.username,
+        submitted_at AS submittedAt, avg_tps AS avgTps, delta_tokens AS deltaTokens,
         top_model AS topModel, top_cli AS topCli
       FROM submission_stats JOIN accounts ON accounts.id=submission_stats.account
       WHERE delta_tokens>${SPEED_MIN_DELTA} AND avg_tps>0 AND submitted_at>? AND submitted_at<=? AND accounts.banned=0
-      ORDER BY avg_tps DESC, submitted_at, account, request_id LIMIT 20`, now - SPEED_WINDOW_MS, now)
-      .map((row, index) => ({ ...row, rank: index + 1 }));
-    return { rows, expiresAt: rows.reduce((expiry, row) => Math.min(expiry, row.submittedAt + SPEED_WINDOW_MS), Infinity) };
+      ORDER BY avg_tps DESC, submitted_at, account, request_id`);
+
+  function speedRanking(now) {
+    const rows = [], accounts = new Set();
+    let expiresAt = Infinity;
+    for (const { account, ...row } of fastestSubmissions.iterate(now - SPEED_WINDOW_MS, now)) {
+      if (accounts.has(account)) continue;
+      accounts.add(account);
+      rows.push({ ...row, rank: rows.length + 1 });
+      expiresAt = Math.min(expiresAt, row.submittedAt + SPEED_WINDOW_MS);
+      if (rows.length === 20) break;
+    }
+    return { rows, expiresAt };
   }
 
   function bindAdministrator(account) {
