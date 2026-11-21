@@ -35,6 +35,14 @@
   <message id="empty-today">आज अभी कोई अपलोड नहीं है।</message>
   <message id="usage-overview">उपयोग का सारांश</message>
   <message id="usage-period">उपयोग की अवधि</message>
+  <message id="usage-update-mode">आँकड़े अपडेट करने का तरीका</message>
+  <message id="usage-update-daily">तारीख के अनुसार</message>
+  <message id="usage-update-hourly">हर घंटे</message>
+  <message id="usage-update-help">अपडेट के तरीके की जानकारी</message>
+  <message id="usage-update-hint-daily">तारीख के अनुसार। स्थानीय समय में आधी रात को आज के आँकड़े फिर से शून्य से शुरू होते हैं।</message>
+  <message id="usage-update-hint-hourly">हर घंटे। स्थानीय समय में हर घंटे की शुरुआत पर पिछले 24, 168 या 720 घंटे के आँकड़े निकाले जाते हैं।</message>
+  <message id="usage-update-hint-ranking">उपयोग में बदलाव से लीडरबोर्ड की रैंकिंग बदल सकती है।</message>
+  <message id="usage-update-hint-recommended">हम हर घंटे अपडेट करने की सलाह देते हैं।</message>
   <message id="total-usage">कुल उपयोग (कैश पढ़ना और लिखना शामिल)</message>
   <message id="request-count">अनुरोध</message>
   <message id="model-usage">मॉडल के अनुसार उपयोग</message>

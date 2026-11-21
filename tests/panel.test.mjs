@@ -157,6 +157,16 @@ test('the panel title has a logo and Current Data shows the update time beside a
   assert.doesNotMatch(html, /recent-requests|request-speed-note/);
 });
 
+test('Personal Stats opens with hourly updates as the first option above the period tabs', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const toolbar = /<section\b[^>]*\bid="usage"[^>]*>\s*<div class="war-mode">([\s\S]*?)\n      <section class="war"/.exec(html)?.[1];
+  assert.ok(toolbar);
+  assert.deepEqual([...toolbar.matchAll(/data-usage-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
+    .map(match => match.slice(1)), [['hourly', 'true'], ['calendar', 'false']]);
+  assert.match(html, /usageMode = 'hourly'/);
+  assert.equal([...toolbar.matchAll(/<li data-i18n="usage-update-hint-/g)].length, 4);
+});
+
 test('today usage connects pulses at real timestamps and animates new points once', async () => {
   const html = await readFile(panelPath, 'utf8');
   const source = /const chartVerticalPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];

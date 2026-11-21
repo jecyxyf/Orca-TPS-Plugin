@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto';
-import { USAGE_RETENTION_MS } from './local-usage-db.mjs';
+import { personalRecordsCutoff, USAGE_RETENTION_MS } from './local-usage-db.mjs';
 import { HOUR_MS, MAX_RECENT_REQUESTS, RECENT_STATS_MS, hourStart, validStatsLabel } from './leaderboard-stats.mjs';
 import { sourceMessage } from './locales.mjs';
-import { accumulateRecords, dailySeries, leaderboardDay, requestTokens, summarizeUsage } from './usage-summary.mjs';
+import { accumulateRecords, dailySeries, leaderboardDay, localHourStart, requestTokens, summarizeHourlyUsage, summarizeUsage } from './usage-summary.mjs';
 
 const RETRY_MS = 15_000;
 const LARGE_UNIT_BYTES = 64 * 1024 * 1024;
 const LARGE_UNIT_INTERVAL_MS = 10 * 60_000;
 const keyFor = ({ deviceGuid, key }) => `${deviceGuid}/${key}`;
+// Re-read old logs once to recover records between the calendar scan and the hourly retention boundary.
+const usageStamp = item => `hourly-v1:${item.stamp}`;
 const sumTokens = (a, b) => Math.min(Number.MAX_SAFE_INTEGER, a + b);
 
 export function createRecordUsageIndex({
@@ -15,15 +17,18 @@ export function createRecordUsageIndex({
   onRecentRequests, log = () => {}
 }) {
   const scans = new Map(), empty = new Map(), retries = new Map(), readAt = new Map();
-  let ready, refreshTail = Promise.resolve(), recordsChanged = true, totals, personal, updatedAt = null;
+  let ready, refreshTail = Promise.resolve(), recordsChanged = true, totals, personal, hourly, updatedAt = null;
   let moreBackfill = false, complete = false, progress = { done: 0, total: 0 };
 
   function assemble(at) {
     if (!recordsChanged && totals && totals.day === leaderboardDay(at) && at < totals.nextExpiry) return totals;
-    const records = db.readRecords({ from: at - USAGE_RETENTION_MS, to: at + 1 });
+    const leaderboardCutoff = at - USAGE_RETENTION_MS;
+    const records = db.readRecords({ from: personalRecordsCutoff(at), to: at + 1 });
+    const firstRankingRecord = records.find(row => row.completedAt >= leaderboardCutoff);
     const days = Object.create(null), sources = new Map(), recent = new Map();
     for (const [provider, items] of Map.groupBy(records, item => item.provider)) accumulateRecords(days, provider, items);
     for (const row of records) {
+      if (row.completedAt < leaderboardCutoff) continue;
       if (!sources.has(row.deviceGuid)) sources.set(row.deviceGuid, { daily: new Map(), buckets: new Map() });
       const source = sources.get(row.deviceGuid);
       const day = leaderboardDay(row.completedAt);
@@ -41,18 +46,27 @@ export function createRecordUsageIndex({
       }
     }
     for (const [key, items] of recent) onRecentRequests(key, items);
-    totals = { day: leaderboardDay(at), days, sources, nextExpiry: records.length ? records[0].completedAt + USAGE_RETENTION_MS + 1 : Infinity };
+    totals = { day: leaderboardDay(at), days, sources,
+      nextExpiry: firstRankingRecord ? firstRankingRecord.completedAt + USAGE_RETENTION_MS + 1 : Infinity };
     recordsChanged = false;
     return totals;
   }
 
-  function snapshot(at) {
+  function snapshot(at, hourlyReady = false) {
+    const cutoffAt = localHourStart(at);
+    if (!hourly || (hourlyReady && (!hourly.ready || hourly.cutoffAt !== cutoffAt))) {
+      const records = db.readRecords({ from: personalRecordsCutoff(at), to: cutoffAt });
+      hourly = { cutoffAt, ready: hourlyReady, windows: summarizeHourlyUsage(records, cutoffAt) };
+    }
     const { days } = assemble(at);
-    personal = { updatedAt, progress, windows: summarizeUsage([days], at), daily: dailySeries([days], at) };
+    personal = { updatedAt, progress, windows: summarizeUsage([days], at), daily: dailySeries([days], at), hourly };
   }
 
   const initialize = () => ready ??= Promise.resolve().then(() => {
-    snapshot(now());
+    const at = now();
+    const cachedHour = db.readPanel('usage', 'desktop')?.value?.hourly;
+    if (cachedHour?.windows && cachedHour.cutoffAt === localHourStart(at)) hourly = cachedHour;
+    snapshot(at);
     return true;
   });
 
@@ -60,9 +74,10 @@ export function createRecordUsageIndex({
     await initialize();
     signal?.throwIfAborted();
     const at = now(), cutoff = at - USAGE_RETENTION_MS;
+    const recordCutoff = personalRecordsCutoff(at);
     const purged = db.prune(at);
     recordsChanged ||= purged > 0;
-    const view = await discover(Math.floor(cutoff / HOUR_MS) * HOUR_MS, at);
+    const view = await discover(hourStart(recordCutoff), at);
     signal?.throwIfAborted();
     scans.clear();
     complete = false;
@@ -70,7 +85,7 @@ export function createRecordUsageIndex({
     const items = view.descriptors;
     const versions = new Map([...new Set(items.map(item => item.deviceGuid))].map(id => [id, db.readLogVersions(id)]));
     const seenStamp = item => empty.get(keyFor(item)) ?? versions.get(item.deviceGuid)?.get(item.key);
-    const current = item => seenStamp(item) === item.stamp;
+    const current = item => seenStamp(item) === usageStamp(item);
     const deferred = item => seenStamp(item) && item.bytes > LARGE_UNIT_BYTES &&
       (readAt.get(keyFor(item)) ?? -Infinity) + LARGE_UNIT_INTERVAL_MS > at;
     const pending = items.filter(item => !current(item) && !deferred(item) && (retries.get(keyFor(item)) ?? 0) <= at)
@@ -90,16 +105,17 @@ export function createRecordUsageIndex({
           if (!Array.isArray(page.records) || (page.nextOffset !== null &&
               (!page.records.length || page.nextOffset !== offset + page.records.length))) throw new Error('invalid usage records page');
           isComplete &&= page.complete === true;
-          for (const record of page.records) if (record.completedAt >= cutoff) records.push({ ...record, username: username() });
+          for (const record of page.records) if (record.completedAt >= recordCutoff) records.push({ ...record, username: username() });
           offset = page.nextOffset;
         } while (offset !== null);
         if (!isComplete) throw new Error('usage_log_incomplete');
-        const changed = db.replaceLog({ deviceGuid: item.deviceGuid, logUnitKey: item.key, logStamp: item.stamp,
+        const stamp = usageStamp(item);
+        const changed = db.replaceLog({ deviceGuid: item.deviceGuid, logUnitKey: item.key, logStamp: stamp,
           records, complete: true, now: at });
         recordsChanged ||= changed.length > 0;
-        successful.set(keyFor(item), item.stamp);
+        successful.set(keyFor(item), stamp);
         readAt.set(keyFor(item), at);
-        if (!records.length) empty.set(keyFor(item), item.stamp);
+        if (!records.length) empty.set(keyFor(item), stamp);
         else empty.delete(keyFor(item));
         retries.delete(keyFor(item));
       } catch (error) {
@@ -108,7 +124,7 @@ export function createRecordUsageIndex({
         log(sourceMessage('notice.usage-read-failed', error?.code ?? error?.message ?? 'unknown'));
       }
     }
-    const done = item => successful.get(keyFor(item)) === item.stamp || current(item);
+    const done = item => successful.get(keyFor(item)) === usageStamp(item) || current(item);
     const bySource = Map.groupBy(items, item => item.deviceGuid);
     const missing = id => (bySource.get(id) ?? []).filter(item => !done(item));
     function scanned(id, observedAt, sourceTime) {
@@ -122,13 +138,13 @@ export function createRecordUsageIndex({
     if (view.localComplete) scanned(deviceGuid, at, view.localSourceTime ?? at);
     for (const source of view.remoteSources?.values() ?? []) scanned(source.sourceId, source.observedAt, source.sourceTime);
     complete = view.localComplete && view.remoteComplete && items.every(done) &&
-      db.readSources().every(id => scans.has(id));
+      db.readSources(cutoff).every(id => scans.has(id));
     progress = { done: items.filter(done).length, total: items.length };
     moreBackfill = count < pending.length;
     const known = new Set(items.map(keyFor));
     for (const map of [empty, retries, readAt]) for (const key of map.keys()) if (!known.has(key)) map.delete(key);
     updatedAt = now();
-    snapshot(updatedAt);
+    snapshot(updatedAt, !moreBackfill && localHourStart(at) === localHourStart(updatedAt));
     return { pending: progress.total - progress.done };
   }
 

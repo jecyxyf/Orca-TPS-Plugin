@@ -35,6 +35,14 @@
   <message id="empty-today">Belum ada unggahan hari ini.</message>
   <message id="usage-overview">Ringkasan penggunaan</message>
   <message id="usage-period">Periode penggunaan</message>
+  <message id="usage-update-mode">Cara memperbarui statistik</message>
+  <message id="usage-update-daily">Menurut tanggal</message>
+  <message id="usage-update-hourly">Setiap jam</message>
+  <message id="usage-update-help">Tentang cara pembaruan</message>
+  <message id="usage-update-hint-daily">Menurut tanggal. Statistik hari ini dimulai lagi dari nol pada tengah malam waktu setempat.</message>
+  <message id="usage-update-hint-hourly">Setiap jam. Pada awal setiap jam setempat, statistik 24, 168, atau 720 jam terakhir dihitung ulang.</message>
+  <message id="usage-update-hint-ranking">Perubahan penggunaan dapat memengaruhi peringkat.</message>
+  <message id="usage-update-hint-recommended">Kami menyarankan pembaruan setiap jam.</message>
   <message id="total-usage">Total penggunaan (termasuk baca dan tulis cache)</message>
   <message id="request-count">Permintaan</message>
   <message id="model-usage">Penggunaan per model</message>

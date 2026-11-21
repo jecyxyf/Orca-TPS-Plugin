@@ -44,6 +44,13 @@ export function dayKeyAgo(nowMs, daysAgo) {
   return localDayKey(new Date(date.getFullYear(), date.getMonth(), date.getDate() - daysAgo).getTime());
 }
 
+export function localHourStart(ms) {
+  const date = new Date(ms);
+  const start = ms - date.getMinutes() * 60_000 - date.getSeconds() * 1000 - date.getMilliseconds();
+  // A half-hour clock change can put the candidate between two real local hour boundaries.
+  return start - new Date(start).getMinutes() * 60_000;
+}
+
 /** Oldest local midnight the index keeps; files last written before this cannot contribute. */
 export function usageCutoffMs(nowMs) {
   const date = new Date(nowMs);
@@ -135,41 +142,53 @@ export function cacheHitRate(counters) {
 
 /** Totals per window, using the same real-total and hit-rate definitions as CC Switch's usage summary. */
 export function summarizeUsage(dayMaps, nowMs) {
-  const today = localDayKey(nowMs), windows = {};
-  for (const [name, span] of WINDOWS) {
+  const today = localDayKey(nowMs);
+  const days = dayMaps.flatMap(map => Object.entries(map));
+  return Object.fromEntries(WINDOWS.map(([name, span]) => {
     const first = dayKeyAgo(nowMs, span - 1);
-    const totals = { requests: 0, freshInput: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-    const rows = new Map(), speeds = new Map();
-    for (const days of dayMaps) {
-      for (const [day, byProvider] of Object.entries(days)) {
-        if (day < first || day > today) continue;
-        for (const [provider, byModel] of Object.entries(byProvider)) {
-          for (const [model, cell] of Object.entries(byModel)) {
-            addCounters(totals, cell);
-            const key = `${provider}\u0000${model}`;
-            const row = rows.get(key) ?? { provider, model, requests: 0, freshInput: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-            addCounters(row, cell);
-            rows.set(key, row);
-            if (model) addSpeed(speeds, provider, model, cell);
-          }
-        }
+    const groups = days.filter(([day]) => day >= first && day <= today).map(([, byProvider]) => byProvider);
+    return [name, summarizeGroups(groups)];
+  }));
+}
+
+export function summarizeHourlyUsage(records, cutoffAt) {
+  return Object.fromEntries(WINDOWS.map(([name, span]) => {
+    const start = cutoffAt - span * 24 * HOUR_MS;
+    const rows = records.filter(row => row.completedAt >= start && row.completedAt < cutoffAt);
+    const days = Object.create(null);
+    for (const [provider, items] of Map.groupBy(rows, row => row.provider)) accumulateRecords(days, provider, items);
+    return [name, summarizeGroups(Object.values(days))];
+  }));
+}
+
+function summarizeGroups(groups) {
+  const totals = { requests: 0, freshInput: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const rows = new Map(), speeds = new Map();
+  for (const byProvider of groups) {
+    for (const [provider, byModel] of Object.entries(byProvider)) {
+      for (const [model, cell] of Object.entries(byModel)) {
+        addCounters(totals, cell);
+        const key = `${provider}\u0000${model}`;
+        const row = rows.get(key) ?? { provider, model, requests: 0, freshInput: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+        addCounters(row, cell);
+        rows.set(key, row);
+        if (model) addSpeed(speeds, provider, model, cell);
       }
     }
-    const list = [...rows.values()].map(row => ({ ...row, tokens: realTokens(row) }))
-      .sort((a, b) => b.tokens - a.tokens || b.requests - a.requests);
-    const speed = rankSpeeds(speeds);
-    windows[name] = {
-      ...totals,
-      tokens: realTokens(totals),
-      cacheHitRate: cacheHitRate(totals),
-      rows: list.slice(0, ROW_LIMIT),
-      hiddenRows: Math.max(0, list.length - ROW_LIMIT),
-      speeds: speed.speeds,
-      speedHidden: speed.hidden,
-      speedSparse: speed.sparse
-    };
   }
-  return windows;
+  const list = [...rows.values()].map(row => ({ ...row, tokens: realTokens(row) }))
+    .sort((a, b) => b.tokens - a.tokens || b.requests - a.requests);
+  const speed = rankSpeeds(speeds);
+  return {
+    ...totals,
+    tokens: realTokens(totals),
+    cacheHitRate: cacheHitRate(totals),
+    rows: list.slice(0, ROW_LIMIT),
+    hiddenRows: Math.max(0, list.length - ROW_LIMIT),
+    speeds: speed.speeds,
+    speedHidden: speed.hidden,
+    speedSparse: speed.sparse
+  };
 }
 
 /** Speed samples for one model, merged across agents; a cell without speed counters (older schema) adds nothing. */

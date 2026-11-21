@@ -5,7 +5,8 @@ import { createComputation } from './computation.mjs';
 import { createTpsController } from './controller.mjs';
 import { createRemoteChannelReader, createRemoteUsageReader } from './remote-channel.mjs';
 import { createChannelCache } from './channel-cache.mjs';
-import { BACKFILL_BYTES, BACKFILL_UNITS } from './usage-summary.mjs';
+import { BACKFILL_BYTES, BACKFILL_UNITS, localHourStart } from './usage-summary.mjs';
+import { HOUR_MS } from './leaderboard-stats.mjs';
 import { createRecordUsageIndex } from './record-usage-index.mjs';
 import { openLocalUsageDb } from './local-usage-db.mjs';
 import { localUsageDatabasePath } from './data-paths.mjs';
@@ -67,7 +68,8 @@ export default async function activate(orca) {
     onRecentRequests: stats.observe,
     async discover(cutoffMs, sourceReadAt) {
       const interval = Date.now() < recentCollectionUntil ? RECENT_REFRESH_MS : DISCOVERY_MS;
-      if (!discovery || discoveryKey !== cutoffMs || Date.now() - discoveryAt >= interval) {
+      if (!discovery || discoveryKey !== cutoffMs || localHourStart(discovery.sourceReadAt) !== localHourStart(sourceReadAt) ||
+          Date.now() - discoveryAt >= interval) {
         await history.finish();
         const localUnits = await compute.call('discover', cutoffMs, { includeRecords: true });
         const remoteUnits = await history.discover(cutoffMs);
@@ -173,6 +175,7 @@ function publishUsage(orca, index) {
 async function tick(orca) {
   if (!running) return;
   const index = usage, signal = usageAbort.signal;
+  const startingHour = localHourStart(Date.now());
   let delay = DISCOVERY_MS;
   try {
     const { pending } = await index.refresh({ signal });
@@ -182,7 +185,11 @@ async function tick(orca) {
   } catch (error) {
     if (!signal.aborted) orca.log(locales.t('notice.usage-refresh-failed', error?.message ?? 'unknown'));
   }
-  if (running && usage === index) schedule(orca, delay);
+  if (running && usage === index) {
+    const now = Date.now(), hour = localHourStart(now);
+    const untilNextHour = hour + HOUR_MS - now;
+    schedule(orca, hour !== startingHour ? 0 : untilNextHour > 0 ? Math.min(delay, untilNextHour) : delay);
+  }
 }
 
 export async function deactivate() {

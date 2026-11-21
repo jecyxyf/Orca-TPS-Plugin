@@ -35,6 +35,14 @@
   <message id="empty-today">Oggi non ci sono ancora caricamenti.</message>
   <message id="usage-overview">Panoramica di utilizzo</message>
   <message id="usage-period">Periodo di utilizzo</message>
+  <message id="usage-update-mode">Metodo di aggiornamento</message>
+  <message id="usage-update-daily">Per data</message>
+  <message id="usage-update-hourly">Ogni ora</message>
+  <message id="usage-update-help">Informazioni sull’aggiornamento</message>
+  <message id="usage-update-hint-daily">Per data. Le statistiche di oggi ripartono da zero a mezzanotte, ora locale.</message>
+  <message id="usage-update-hint-hourly">Ogni ora. All’inizio di ogni ora locale si ricalcolano le ultime 24, 168 o 720 ore.</message>
+  <message id="usage-update-hint-ranking">Le variazioni di utilizzo possono influire sulla classifica.</message>
+  <message id="usage-update-hint-recommended">Consigliamo l’aggiornamento ogni ora.</message>
   <message id="total-usage">Uso totale (incluse letture e scritture della cache)</message>
   <message id="request-count">Richieste</message>
   <message id="model-usage">Uso per modello</message>

@@ -4,7 +4,8 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { openLocalUsageDb, USAGE_RETENTION_MS } from '../src/local-usage-db.mjs';
+import { openLocalUsageDb, personalRecordsCutoff, USAGE_RETENTION_MS } from '../src/local-usage-db.mjs';
+import { HOUR_MS } from '../src/leaderboard-stats.mjs';
 import { createRecordUsageIndex } from '../src/record-usage-index.mjs';
 import { createSourceUploader, createSqliteUploadStorage } from '../src/usage-upload.mjs';
 
@@ -38,10 +39,10 @@ test('the local database keeps exactly three business tables and survives a larg
   } finally { db.close(); }
 });
 
-test('complete log reads replace old rows, while interrupted reads preserve them and enforce the 720-hour boundary', () => {
+test('complete log reads replace old rows, while interrupted reads preserve them up to the personal history boundary', () => {
   const db = openLocalUsageDb(':memory:');
   try {
-    const edge = now - USAGE_RETENTION_MS;
+    const edge = personalRecordsCutoff(now);
     const a = record('a', edge), b = record('b', now - 1);
     db.replaceLog(reading([record('too old', edge - 1), a, b, record('future', now + 1)]));
     assert.deepEqual(db.readRecords().map(row => row.id), ['a', 'b']);
@@ -50,7 +51,7 @@ test('complete log reads replace old rows, while interrupted reads preserve them
     const affected = db.replaceLog(reading([record('a', now, 20)], { logStamp: 'updated' }));
     assert.deepEqual(affected, [edge, now - 1, now]);
     assert.deepEqual(db.readRecords().map(row => [row.id, row.tokens]), [['a', 20]]);
-    db.prune(now + USAGE_RETENTION_MS + 1);
+    db.prune(now + USAGE_RETENTION_MS + 2 * HOUR_MS);
     assert.deepEqual(db.readRecords(), []);
   } finally { db.close(); }
 });
@@ -102,6 +103,80 @@ test('the detail index retains a disconnected SSH source and counts same-time re
     await index.refresh();
     assert.equal(index.leaderboardUsage().tokens, 150);
     assert.equal(index.summary().windows.today.requests, 2);
+  } finally { db.close(); }
+});
+
+test('personal hourly stats use the last local hour for all three periods and hold until the next hour', async () => {
+  const db = openLocalUsageDb(':memory:');
+  const cutoff = new Date(2026, 10, 21, 14).getTime();
+  let clock = cutoff + 35 * 60_000, stamp = 'stamp';
+  const records = [
+    record('too old', cutoff - 720 * HOUR_MS - 1, 1000),
+    record('month edge', cutoff - 720 * HOUR_MS, 1),
+    record('before week', cutoff - 168 * HOUR_MS - 1, 2),
+    record('week edge', cutoff - 168 * HOUR_MS, 4),
+    record('before day', cutoff - 24 * HOUR_MS - 1, 8),
+    record('day edge', cutoff - 24 * HOUR_MS, 16),
+    record('before cutoff', cutoff - 1, 32),
+    record('at cutoff', cutoff, 64),
+    record('after cutoff', cutoff + 100, 128)
+  ];
+  const discovery = async () => ({
+    descriptors: [{ deviceGuid: source, key: 'log', stamp, bytes: 100, mtimeMs: clock,
+      readRecords: async () => ({ records, nextOffset: null, complete: true }) }],
+    localComplete: true, remoteComplete: true
+  });
+  const createIndex = () => createRecordUsageIndex({ db, deviceGuid: source, now: () => clock,
+    maxUnits: 10, budgetBytes: 1000, discover: discovery });
+  const index = createIndex();
+  try {
+    // Simulate an existing database whose previous retention rule already dropped the month edge.
+    db.replaceLog(reading([records[6]], { now: clock }));
+    await index.ready();
+    assert.equal(index.summary().hourly.ready, false);
+    assert.equal(index.summary().hourly.windows.today.tokens, 32);
+    await index.refresh();
+    const first = index.summary().hourly;
+    assert.equal(first.cutoffAt, cutoff);
+    assert.equal(first.ready, true);
+    assert.deepEqual(Object.values(first.windows).map(value => [value.tokens, value.requests]), [[48, 2], [60, 4], [63, 6]]);
+    assert.equal(index.summary().windows.today.tokens, 224);
+    assert.ok(index.leaderboardSources()[0].buckets.every(([at]) => at >= clock - USAGE_RETENTION_MS));
+
+    stamp = 'next';
+    records.push(record('read late', cutoff - 20, 256));
+    clock += 10 * 60_000;
+    await index.refresh();
+    assert.strictEqual(index.summary().hourly, first);
+    assert.equal(index.summary().windows.today.tokens, 480);
+
+    db.publishPanel('usage', 'desktop', index.summary(), clock);
+    const restarted = createIndex();
+    await restarted.ready();
+    assert.deepEqual(restarted.summary().hourly, first);
+    clock = cutoff + HOUR_MS;
+    await restarted.refresh();
+    assert.equal(restarted.summary().hourly.cutoffAt, clock);
+    assert.deepEqual(Object.values(restarted.summary().hourly.windows).map(value => value.tokens), [480, 504, 510]);
+  } finally { db.close(); }
+});
+
+test('personal date stats start a new day at local midnight while hourly stats keep the recent hours', async () => {
+  const db = openLocalUsageDb(':memory:');
+  const midnight = new Date(2026, 10, 22).getTime();
+  let clock = midnight - 1;
+  const index = createRecordUsageIndex({ db, deviceGuid: source, now: () => clock, maxUnits: 10, budgetBytes: 1000,
+    discover: async () => ({ descriptors: [], localComplete: true, remoteComplete: true }) });
+  try {
+    db.replaceLog(reading([record('before midnight', clock)], { now: clock }));
+    await index.refresh();
+    assert.equal(index.summary().windows.today.requests, 1);
+    clock = midnight;
+    await index.refresh();
+    assert.equal(index.summary().windows.today.requests, 0);
+    assert.equal(index.summary().windows.week.requests, 1);
+    assert.equal(index.summary().hourly.cutoffAt, midnight);
+    assert.equal(index.summary().hourly.windows.today.requests, 1);
   } finally { db.close(); }
 });
 

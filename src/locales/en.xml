@@ -35,6 +35,14 @@
   <message id="empty-today">No uploads yet today.</message>
   <message id="usage-overview">Usage overview</message>
   <message id="usage-period">Usage period</message>
+  <message id="usage-update-mode">Personal stats update method</message>
+  <message id="usage-update-daily">Update by date</message>
+  <message id="usage-update-hourly">Update hourly</message>
+  <message id="usage-update-help">About update methods</message>
+  <message id="usage-update-hint-daily">Update by date. At local midnight, today’s stats reset and start counting again.</message>
+  <message id="usage-update-hint-hourly">Update hourly. On each local hour, stats are recalculated for the past 24, 168, or 720 hours.</message>
+  <message id="usage-update-hint-ranking">Usage changes can affect leaderboard rankings.</message>
+  <message id="usage-update-hint-recommended">We recommend hourly updates.</message>
   <message id="total-usage">Total usage (including cache reads and writes)</message>
   <message id="request-count">Requests</message>
   <message id="model-usage">Usage by model</message>

@@ -35,6 +35,14 @@
   <message id="empty-today">Сегодня ещё не было загрузок.</message>
   <message id="usage-overview">Обзор расхода</message>
   <message id="usage-period">Период расхода</message>
+  <message id="usage-update-mode">Способ обновления статистики</message>
+  <message id="usage-update-daily">По дате</message>
+  <message id="usage-update-hourly">Каждый час</message>
+  <message id="usage-update-help">О способе обновления</message>
+  <message id="usage-update-hint-daily">По дате. В полночь по местному времени сегодняшняя статистика обнуляется, и подсчёт начинается заново.</message>
+  <message id="usage-update-hint-hourly">Каждый час. В начале местного часа пересчитываются данные за последние 24, 168 или 720 часов.</message>
+  <message id="usage-update-hint-ranking">Изменения в использовании могут повлиять на место в рейтинге.</message>
+  <message id="usage-update-hint-recommended">Рекомендуем обновлять данные каждый час.</message>
   <message id="total-usage">Общий расход (включая чтение и запись кэша)</message>
   <message id="request-count">Запросы</message>
   <message id="model-usage">Расход по моделям</message>

@@ -35,6 +35,14 @@
   <message id="empty-today">今日のアップロードはまだありません。</message>
   <message id="usage-overview">使用量の概要</message>
   <message id="usage-period">使用量の集計期間</message>
+  <message id="usage-update-mode">統計の更新方法</message>
+  <message id="usage-update-daily">日付で更新</message>
+  <message id="usage-update-hourly">毎時更新</message>
+  <message id="usage-update-help">更新方法について</message>
+  <message id="usage-update-hint-daily">日付で更新。現地時刻の午前0時に今日の統計をリセットし、ゼロから集計します。</message>
+  <message id="usage-update-hint-hourly">毎時更新。現地時刻の毎時0分に、過去24時間、168時間、または720時間の統計を更新します。</message>
+  <message id="usage-update-hint-ranking">使用量の変化によって順位が変わることがあります。</message>
+  <message id="usage-update-hint-recommended">毎時更新をおすすめします。</message>
   <message id="total-usage">合計使用量（キャッシュの読み取りと書き込みを含む）</message>
   <message id="request-count">リクエスト数</message>
   <message id="model-usage">モデル別使用量</message>

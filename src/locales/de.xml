@@ -35,6 +35,14 @@
   <message id="empty-today">Heute gibt es noch keine Uploads.</message>
   <message id="usage-overview">Verbrauchsübersicht</message>
   <message id="usage-period">Verbrauchszeitraum</message>
+  <message id="usage-update-mode">Art der Aktualisierung</message>
+  <message id="usage-update-daily">Nach Datum</message>
+  <message id="usage-update-hourly">Stündlich</message>
+  <message id="usage-update-help">Info zur Aktualisierung</message>
+  <message id="usage-update-hint-daily">Nach Datum. Die heutige Statistik beginnt um Mitternacht Ortszeit wieder bei null.</message>
+  <message id="usage-update-hint-hourly">Stündlich. Zu jeder vollen Ortsstunde werden die letzten 24, 168 oder 720 Stunden neu ausgewertet.</message>
+  <message id="usage-update-hint-ranking">Änderungen beim Verbrauch können die Platzierung in der Bestenliste beeinflussen.</message>
+  <message id="usage-update-hint-recommended">Wir empfehlen die stündliche Aktualisierung.</message>
   <message id="total-usage">Gesamtverbrauch (einschließlich Cache-Lese- und Schreibvorgängen)</message>
   <message id="request-count">Anfragen</message>
   <message id="model-usage">Verbrauch nach Modell</message>

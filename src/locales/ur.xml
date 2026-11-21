@@ -35,6 +35,14 @@
   <message id="empty-today">آج ابھی کوئی اپ لوڈ نہیں ہوا۔</message>
   <message id="usage-overview">استعمال کا خلاصہ</message>
   <message id="usage-period">استعمال کی مدت</message>
+  <message id="usage-update-mode">اعداد و شمار اپ ڈیٹ کرنے کا طریقہ</message>
+  <message id="usage-update-daily">تاریخ کے مطابق</message>
+  <message id="usage-update-hourly">ہر گھنٹے</message>
+  <message id="usage-update-help">اپ ڈیٹ کے طریقے کی معلومات</message>
+  <message id="usage-update-hint-daily">تاریخ کے مطابق۔ مقامی وقت کے مطابق آدھی رات کو آج کے اعداد و شمار صفر سے دوبارہ شمار ہوتے ہیں۔</message>
+  <message id="usage-update-hint-hourly">ہر گھنٹے۔ مقامی وقت میں ہر گھنٹے کے آغاز پر گزشتہ 24، 168 یا 720 گھنٹوں کے اعداد و شمار دوبارہ شمار ہوتے ہیں۔</message>
+  <message id="usage-update-hint-ranking">استعمال میں تبدیلی درجہ بندی کو متاثر کر سکتی ہے۔</message>
+  <message id="usage-update-hint-recommended">ہم ہر گھنٹے اپ ڈیٹ کرنے کی تجویز دیتے ہیں۔</message>
   <message id="total-usage">کل استعمال (کیش پڑھنا اور لکھنا شامل ہے)</message>
   <message id="request-count">درخواستیں</message>
   <message id="model-usage">ماڈل کے لحاظ سے استعمال</message>

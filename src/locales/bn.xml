@@ -35,6 +35,14 @@
   <message id="empty-today">আজ এখনো কোনো আপলোড নেই।</message>
   <message id="usage-overview">ব্যবহারের সারসংক্ষেপ</message>
   <message id="usage-period">ব্যবহারের সময়সীমা</message>
+  <message id="usage-update-mode">পরিসংখ্যান হালনাগাদের পদ্ধতি</message>
+  <message id="usage-update-daily">তারিখ অনুযায়ী</message>
+  <message id="usage-update-hourly">প্রতি ঘণ্টায়</message>
+  <message id="usage-update-help">হালনাগাদের পদ্ধতি সম্পর্কে</message>
+  <message id="usage-update-hint-daily">তারিখ অনুযায়ী। স্থানীয় মধ্যরাতে আজকের পরিসংখ্যান আবার শূন্য থেকে শুরু হয়।</message>
+  <message id="usage-update-hint-hourly">প্রতি ঘণ্টায়। স্থানীয় সময়ে প্রতি ঘণ্টার শুরুতে গত ২৪, ১৬৮ বা ৭২০ ঘণ্টার হিসাব হালনাগাদ হয়।</message>
+  <message id="usage-update-hint-ranking">ব্যবহার বদলালে লিডারবোর্ডে অবস্থান বদলাতে পারে।</message>
+  <message id="usage-update-hint-recommended">প্রতি ঘণ্টায় হালনাগাদ বেছে নেওয়ার পরামর্শ দিই।</message>
   <message id="total-usage">মোট ব্যবহার (ক্যাশ পড়া ও লেখা সহ)</message>
   <message id="request-count">অনুরোধ</message>
   <message id="model-usage">মডেল অনুযায়ী ব্যবহার</message>

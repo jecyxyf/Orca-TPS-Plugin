@@ -416,6 +416,24 @@
     .war-tab { min-width: 0; padding: 5px 4px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 650; cursor: pointer; }
     .war-tab[aria-selected="true"], .war-tab[aria-pressed="true"] { background: var(--button-bg); color: var(--blue); }
     .war-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .war-mode { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .war-mode-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
+    .war-mode-tabs .war-tab { padding-inline: 9px; overflow-wrap: anywhere; }
+    .war-mode-help { flex: none; }
+    .war-mode-help summary {
+      display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; list-style: none;
+      background: var(--speed-bg); color: var(--muted); font-weight: 750; cursor: pointer;
+    }
+    .war-mode-help summary::-webkit-details-marker { display: none; }
+    .war-mode-help[open] summary, .war-mode-help summary:hover { background: var(--button-bg); color: var(--blue); }
+    .war-mode-help summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .war-mode-hint {
+      position: absolute; z-index: 2; inset-block-start: calc(100% + 6px); inset-inline-start: 0;
+      width: min(265px, 100%); margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px;
+      padding-inline-start: 26px;
+      background: var(--surface); color: var(--ink); box-shadow: 0 5px 18px rgb(0 0 0 / 15%); font-size: 11px; overflow-wrap: anywhere;
+    }
+    .war-mode-hint li + li { margin-top: 4px; }
     .war-totals { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; }
     .war-stat { min-width: 0; padding: 7px 9px; border-radius: 13px; background: var(--speed-bg); }
     .war-label { display: block; color: var(--muted); font-size: 11px; }
@@ -639,6 +657,21 @@
       </section>
     </section>
     <section class="panel-view" id="usage" role="tabpanel" aria-labelledby="tab-usage" tabindex="0" data-testid="usage-group" hidden>
+      <div class="war-mode">
+        <div class="war-tabs war-mode-tabs" role="group" data-i18n-aria-label="usage-update-mode">
+          <button class="war-tab" type="button" data-usage-mode="hourly" aria-pressed="true"><span data-i18n="usage-update-hourly"></span></button>
+          <button class="war-tab" type="button" data-usage-mode="calendar" aria-pressed="false"><span data-i18n="usage-update-daily"></span></button>
+        </div>
+        <details class="war-mode-help" id="war-mode-help">
+          <summary data-i18n-aria-label="usage-update-help"><span aria-hidden="true">?</span></summary>
+          <ol class="war-mode-hint">
+            <li data-i18n="usage-update-hint-daily"></li>
+            <li data-i18n="usage-update-hint-hourly"></li>
+            <li data-i18n="usage-update-hint-ranking"></li>
+            <li data-i18n="usage-update-hint-recommended"></li>
+          </ol>
+        </details>
+      </div>
       <section class="war" id="war" data-i18n-aria-label="usage-overview">
         <div class="war-tabs" role="tablist" data-i18n-aria-label="usage-period">
           <button class="war-tab" type="button" role="tab" data-range="today" aria-selected="true" data-testid="range-today"><span data-i18n="today"></span></button>
@@ -1110,9 +1143,12 @@
       function agentLabel(provider) {
         return AGENT_LABELS[provider || current?.activeSession?.provider] ?? '';
       }
-      let usageSummary = null, usageRange = 'today', usageProblem = false, usageTimer = null;
+      let usageSummary = null, usageRange = 'today', usageMode = 'hourly', usageProblem = false, usageTimer = null;
       let usagePending, usageFrame, drawnUsage, drawnHeat, heatLayout, heatCells = [], usageRevision = 0;
       const usageGroup = byId('usage');
+      const usageRangeTabs = usageGroup.querySelectorAll('[data-range]');
+      const usageModeButtons = usageGroup.querySelectorAll('[data-usage-mode]');
+      const usageHelp = byId('war-mode-help');
       function formatCount(value) {
         if (!numeric(value)) return '—';
         return value >= 1e4 ? locale.number(value, { notation: 'compact', maximumFractionDigits: 2 }) : number(value);
@@ -1152,25 +1188,26 @@
       }
       function renderUsage() {
         if (disposed || usageGroup.hidden) return;
-        const range = usageSummary?.windows?.[usageRange] ?? null;
-        for (const tab of document.querySelectorAll('[data-range]')) {
+        const windows = usageMode === 'hourly' ? usageSummary?.hourly?.windows : usageSummary?.windows;
+        const range = windows?.[usageRange] ?? null;
+        for (const tab of usageRangeTabs) {
           tab.setAttribute('aria-selected', String(tab.dataset.range === usageRange));
         }
         byId('war-tokens').textContent = range ? formatMillionTokens(range.tokens) : '—';
         byId('war-requests').textContent = range ? formatCount(range.requests) : '—';
         const list = Array.isArray(range?.rows) ? range.rows : [];
-        const signature = JSON.stringify([usageRange, list, range?.speeds]);
+        const signature = JSON.stringify([usageRange, usageMode, list, range?.speeds]);
         if (signature !== drawnUsage) {
           drawnUsage = signature;
           const max = list.reduce((top, row) => Math.max(top, numeric(row.tokens) ? row.tokens : 0), 0);
           byId('war-rows').replaceChildren(...list.map(row => usageRow(row, max)));
           renderSpeeds(range);
         }
-        byId('war-empty').hidden = !usageSummary || list.length > 0;
+        byId('war-empty').hidden = !range || list.length > 0;
         const notes = [];
-        if (usageProblem) notes.push(t('usage-unavailable'));
-        else if (!usageSummary) notes.push(t('calculating-usage'));
         const progress = usageSummary?.progress;
+        if (usageProblem) notes.push(t('usage-unavailable'));
+        else if (!range || (usageMode === 'hourly' && usageSummary?.hourly?.ready === false && !progress?.total)) notes.push(t('calculating-usage'));
         if (progress && progress.done < progress.total) notes.push(t('usage-backfill-progress', number(progress.done), number(progress.total)));
         if (range && numeric(range.cacheHitRate)) notes.push(t('cache-hit-rate', percent(range.cacheHitRate, 1)));
         if (range && numeric(range.hiddenRows) && range.hiddenRows > 0) notes.push(t('model-list-truncated', number(range.hiddenRows)));
@@ -1220,7 +1257,7 @@
         const list = Array.isArray(range?.speeds) ? range.speeds : [];
         const max = list.reduce((top, entry) => Math.max(top, numeric(entry.tokensPerSecond) ? entry.tokensPerSecond : 0), 0);
         byId('speed-rows').replaceChildren(...list.map((entry, index) => speedRow(entry, index, max)));
-        byId('speed-empty').hidden = !usageSummary || list.length > 0;
+        byId('speed-empty').hidden = !range || list.length > 0;
         const notes = [];
         if (range && numeric(range.speedSparse) && range.speedSparse > 0) notes.push(t('model-speed-insufficient-samples', number(range.speedSparse)));
         if (range && numeric(range.speedHidden) && range.speedHidden > 0) notes.push(t('model-list-truncated', number(range.speedHidden)));
@@ -1245,9 +1282,24 @@
         if (disposed || usageGroup.hidden || usageFrame !== undefined) return;
         usageFrame = requestAnimationFrame(() => { usageFrame = undefined; renderUsage(); });
       }
-      for (const tab of document.querySelectorAll('[data-range]')) {
+      for (const tab of usageRangeTabs) {
         tab.addEventListener('click', () => { usageRange = tab.dataset.range; renderUsage(); });
       }
+      for (const button of usageModeButtons) {
+        button.addEventListener('click', () => {
+          usageMode = button.dataset.usageMode;
+          for (const option of usageModeButtons) option.setAttribute('aria-pressed', String(option === button));
+          renderUsage();
+        });
+      }
+      document.addEventListener('click', event => {
+        if (usageHelp.open && !usageHelp.contains(event.target)) usageHelp.open = false;
+      }, { signal: lifetime.signal });
+      usageHelp.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || !usageHelp.open) return;
+        usageHelp.open = false;
+        usageHelp.querySelector('summary').focus();
+      });
       // One cell per local day over the last 30 days, grouped by week.
       const HEAT_DAYS = 30;
       const localKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;

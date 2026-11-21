@@ -2,9 +2,14 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { HOUR_MS } from './leaderboard-stats.mjs';
-import { requestTokens } from './usage-summary.mjs';
+import { localHourStart, MAX_WINDOW_DAYS, requestTokens } from './usage-summary.mjs';
 
 export const USAGE_RETENTION_MS = 720 * HOUR_MS;
+export function personalRecordsCutoff(now) {
+  const date = new Date(now);
+  const calendarStart = new Date(date.getFullYear(), date.getMonth(), date.getDate() - (MAX_WINDOW_DAYS - 1)).getTime();
+  return Math.min(calendarStart, localHourStart(now) - USAGE_RETENTION_MS);
+}
 const PANELS = new Set(['current-data', 'usage', 'leaderboard']);
 
 const metrics = [
@@ -94,7 +99,7 @@ export function openLocalUsageDb(filename) {
   const readLogStamp = db.prepare('SELECT log_unit_key, log_stamp FROM usage_records WHERE device_guid=? GROUP BY log_unit_key');
   const deleteRecord = db.prepare('DELETE FROM usage_records WHERE device_guid=? AND record_id=?');
   const expiredRecords = db.prepare('DELETE FROM usage_records WHERE completed_at<?');
-  const listSources = db.prepare('SELECT DISTINCT device_guid AS deviceGuid FROM usage_records');
+  const listSources = db.prepare('SELECT DISTINCT device_guid AS deviceGuid FROM usage_records WHERE completed_at>=?');
   const columns = ['device_guid', 'log_unit_key', 'log_stamp', 'updated_at', ...recordColumns];
   const upsertRecord = db.prepare(`INSERT INTO usage_records(${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})
     ON CONFLICT(device_guid, record_id) DO UPDATE SET ${columns.slice(2).map(column => `${column}=excluded.${column}`).join(', ')}`);
@@ -119,6 +124,7 @@ export function openLocalUsageDb(filename) {
 
   function replaceLog({ deviceGuid, logUnitKey, logStamp, records, complete, now }) {
     if (!complete) return [];
+    const cutoff = personalRecordsCutoff(now);
     return atomic(() => {
       const old = new Map(selectLog.all(deviceGuid, logUnitKey).map(raw => {
         const row = shape(raw);
@@ -127,7 +133,7 @@ export function openLocalUsageDb(filename) {
       const incoming = new Map();
       for (const row of records) {
         const record = sanitize(row);
-        if (record && record.completedAt >= now - USAGE_RETENTION_MS && record.completedAt <= now) incoming.set(record.id, record);
+        if (record && record.completedAt >= cutoff && record.completedAt <= now) incoming.set(record.id, record);
       }
       const affected = new Set();
       for (const [id, previous] of old) {
@@ -184,12 +190,11 @@ export function openLocalUsageDb(filename) {
   };
 
   return {
-    replaceLog, readRecords, readSources: () => listSources.all().map(row => row.deviceGuid),
+    replaceLog, readRecords, readSources: (from = 0) => listSources.all(from).map(row => row.deviceGuid),
     readLogVersions: deviceGuid => new Map(readLogStamp.all(deviceGuid).map(row => [row.log_unit_key, row.log_stamp])),
     prune(now) {
-      const cutoff = now - USAGE_RETENTION_MS;
-      queue.prune(cutoff);
-      return Number(expiredRecords.run(cutoff).changes);
+      queue.prune(now - USAGE_RETENTION_MS);
+      return Number(expiredRecords.run(personalRecordsCutoff(now)).changes);
     },
     readPanel, publishPanel, queue, close: () => db.close()
   };

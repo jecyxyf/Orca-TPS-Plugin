@@ -35,6 +35,14 @@
   <message id="empty-today">لم تُرفع أي بيانات اليوم بعد.</message>
   <message id="usage-overview">نظرة عامة على الاستخدام</message>
   <message id="usage-period">فترة الاستخدام</message>
+  <message id="usage-update-mode">طريقة تحديث الإحصاءات</message>
+  <message id="usage-update-daily">حسب التاريخ</message>
+  <message id="usage-update-hourly">كل ساعة</message>
+  <message id="usage-update-help">حول طريقة التحديث</message>
+  <message id="usage-update-hint-daily">حسب التاريخ. تبدأ إحصاءات اليوم من الصفر عند منتصف الليل بالتوقيت المحلي.</message>
+  <message id="usage-update-hint-hourly">كل ساعة. تُحدّث إحصاءات آخر 24 أو 168 أو 720 ساعة عند بداية كل ساعة بالتوقيت المحلي.</message>
+  <message id="usage-update-hint-ranking">قد يؤثر تغيّر الاستخدام في ترتيب لوحة الصدارة.</message>
+  <message id="usage-update-hint-recommended">نوصي بالتحديث كل ساعة.</message>
   <message id="total-usage">إجمالي الاستخدام (يشمل القراءة من ذاكرة التخزين المؤقت والكتابة إليها)</message>
   <message id="request-count">الطلبات</message>
   <message id="model-usage">الاستخدام حسب النموذج</message>

@@ -35,6 +35,14 @@
   <message id="empty-today">Ainda não houve envios hoje.</message>
   <message id="usage-overview">Resumo da utilização</message>
   <message id="usage-period">Período de utilização</message>
+  <message id="usage-update-mode">Modo de atualização</message>
+  <message id="usage-update-daily">Por data</message>
+  <message id="usage-update-hourly">De hora a hora</message>
+  <message id="usage-update-help">Sobre a atualização</message>
+  <message id="usage-update-hint-daily">Por data. As estatísticas de hoje voltam a zero à meia-noite, na hora local.</message>
+  <message id="usage-update-hint-hourly">De hora a hora. No início de cada hora local, recalculam-se as últimas 24, 168 ou 720 horas.</message>
+  <message id="usage-update-hint-ranking">Alterações na utilização podem afetar a classificação.</message>
+  <message id="usage-update-hint-recommended">Recomendamos a atualização de hora a hora.</message>
   <message id="total-usage">Utilização total (inclui leituras e escritas na cache)</message>
   <message id="request-count">Pedidos</message>
   <message id="model-usage">Utilização por modelo</message>
