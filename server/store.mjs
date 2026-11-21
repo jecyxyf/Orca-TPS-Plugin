@@ -333,6 +333,8 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     const recent = identified
       ? get('SELECT attempted_at, consecutive FROM installation_upload_clock WHERE account=? AND installation_id=?', account, installationId)
       : get('SELECT attempted_at, consecutive FROM upload_attempt_clock WHERE account=?', account);
+    // A Kafka partition can catch up after a different source from the same reporter has already written.
+    if (recent && now < recent.attempted_at) return null;
     const consecutive = recent && now - recent.attempted_at < RAPID_UPLOAD_INTERVAL ? recent.consecutive + 1 : 0;
     if (identified) {
       run(`INSERT INTO installation_upload_clock VALUES (?, ?, ?, ?) ON CONFLICT(account, installation_id)
@@ -646,7 +648,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
         }
       }
       for (const [account, at] of changed) run(`INSERT INTO source_write_clock VALUES (?, ?)
-        ON CONFLICT(account) DO UPDATE SET at=excluded.at`, account, at);
+        ON CONFLICT(account) DO UPDATE SET at=MAX(source_write_clock.at, excluded.at)`, account, at);
       if (changed.size) { rankingRevision++; speedRevision++; }
       for (const [index, { changed: _changed, ...result }] of saved.entries()) {
         const upload = uploads[index];
@@ -690,4 +692,14 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     removeSession: digest => run('DELETE FROM sessions WHERE digest=?', digest),
     close: () => db.close()
   };
+}
+
+export function writeUploadRequests(store, requests, maxTokens) {
+  const responses = store.uploadBatch(requests.flat(), maxTokens);
+  let offset = 0;
+  return requests.map(entries => {
+    const result = responses.slice(offset, offset + entries.length);
+    offset += entries.length;
+    return result;
+  });
 }

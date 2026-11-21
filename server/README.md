@@ -37,7 +37,7 @@
 
 | 接口 | 用途 |
 | --- | --- |
-| `POST /api/leaderboard/uploads` | 登录后每 10 秒提交用量和速度。写入线程每 2 秒批量提交，提交后确认。 |
+| `POST /api/leaderboard/uploads` | 登录后每 10 秒提交用量和速度。默认每 2 秒批量写入。Kafka 模式持续取包写入。SQLite 提交成功后才确认。 |
 | `GET /api/leaderboard/snapshot` | 下载完整榜单。每个整点生成共享截止时间的 24 小时、7 天、30 天和速度榜，并保存最新和上一份结果。 |
 
 先部署服务端，再更新插件。SQLite 会自动增加按来源上传所需的表。新版插件分别提交本机和 SSH 用量，服务端在同一个 GitHub 账号下只计算一次同一个 SSH 来源。远端编号保存在远端用户的数据目录中。上报电脑断线 60 秒后，其他连接同一来源的电脑可以接手。
@@ -123,3 +123,27 @@ test.itps8.com {
 访问 `https://test.itps8.com/admin` 测试网页登录，或给开发版 Orca 设置 `ORCA_TPS_LEADERBOARD_URL=https://test.itps8.com`。
 
 部署后分别请求两个环境的 `/healthz`，确认响应正常且 `githubConfigured` 为 `true`。再各验证一次登录、提交、榜单查询和重启后的数据读取。
+
+### 测试版 Kafka 写入模式
+
+为测试服准备独立的 Kafka。测试服从同一主机的私有端口连接 Kafka。回归验证使用 Kafka 4.2.2 与 KafkaJS 2.2.4。安装服务端依赖 `npm ci --prefix server --omit=dev`，再创建四分区主题。[Apache Kafka 快速入门](https://kafka.apache.org/42/getting-started/quickstart/)
+
+```sh
+bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --create \
+  --topic orca-tps-test-uploads --partitions 4 --replication-factor 1 \
+  --config retention.ms=259200000
+```
+
+在测试服环境文件加上三项，再重启测试服务。一个榜单服务进程负责发送整点标记，并启动同一个消费组的四个线程。重启时沿用主题、消费组和 SQLite 路径。
+
+```dotenv
+LEADERBOARD_KAFKA_BROKERS=127.0.0.1:9092
+LEADERBOARD_KAFKA_TOPIC=orca-tps-test-uploads
+LEADERBOARD_KAFKA_GROUP_ID=orca-tps-test-writers
+```
+
+Kafka 接通前，上传会收到可重试的响应，已有榜单可以继续读取。取到数据的线程直接写 SQLite。整点时，等四个分区都写完截止前的数据，再由一个线程生成四张榜。
+
+用独立 Kafka 验证时，设置 `ORCA_TPS_KAFKA_TEST_BROKERS` 后运行 `node --test tests/leaderboard-kafka.test.mjs`。测试会建立独立主题、消费组及临时 SQLite。请为该实例预留测试主题空间。
+
+回退时先在测试入口暂停新上传，保持榜单服务运行。用 `kafka-consumer-groups.sh --bootstrap-server 127.0.0.1:9092 --describe --group orca-tps-test-writers` 核对四个分区的消费积压都为零。然后移除上面三项配置，沿用当前 SQLite 重启测试服务，再恢复上传。保留 Kafka 中的数据和消费组进度。

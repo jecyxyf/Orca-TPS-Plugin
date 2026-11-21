@@ -1,0 +1,7 @@
+{
+  "name": "orca-tps-leaderboard-server",
+  "private": true,
+  "dependencies": {
+    "kafkajs": "2.2.4"
+  }
+}

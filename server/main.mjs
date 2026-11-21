@@ -13,8 +13,13 @@ mkdirSync(dirname(filename), { recursive: true, mode: 0o700 });
 const store = openLeaderboardStore(filename);
 const maxTokens = Number(env.LEADERBOARD_MAX_TOKENS ?? Number.MAX_SAFE_INTEGER);
 const log = message => process.stderr.write(message + '\n');
-const jobs = createLeaderboardJobs({ filename, maxTokens, readPublished: store.leaderboardData.latestResult,
-  onWrite: store.invalidateUploadCaches, log });
+const jobOptions = { filename, maxTokens, readPublished: store.leaderboardData.latestResult,
+  onWrite: store.invalidateUploadCaches, log };
+const brokers = env.LEADERBOARD_KAFKA_BROKERS?.split(',').map(address => address.trim()).filter(Boolean);
+const jobs = brokers?.length
+  ? (await import('./kafka-transport.mjs')).createKafkaLeaderboardJobs({ ...jobOptions, brokers,
+    topic: env.LEADERBOARD_KAFKA_TOPIC, groupId: env.LEADERBOARD_KAFKA_GROUP_ID })
+  : createLeaderboardJobs(jobOptions);
 const server = createLeaderboardServer({
   store, jobs, maxTokens, log,
   baseUrl: env.LEADERBOARD_BASE_URL ?? `http://127.0.0.1:${port}`,

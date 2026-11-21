@@ -113,7 +113,7 @@ export function createLeaderboardServer({
   const publicRankings = new Map();
   const hourlyRankings = new Map();
   let minute, prunedDay, publicSpeeds;
-  const recordUploads = entries => jobs ? jobs.submit(entries) : store.uploadBatch(entries, maxTokens);
+  const recordUploads = (accountId, entries) => jobs ? jobs.submit(entries, accountId) : store.uploadBatch(entries, maxTokens);
 
   function cachedJson(value) {
     const body = JSON.stringify(value);
@@ -569,13 +569,13 @@ export function createLeaderboardServer({
           return send(res, 400, { code: 'invalid' });
         }
         if (format === 4) {
-          const [result] = await recordUploads([{ kind: 'hourly-source', sessionDigest, receivedAt, input: {
+          const [result] = await recordUploads(account.id, [{ kind: 'hourly-source', sessionDigest, receivedAt, input: {
             username, sourceId: deviceGuid, reporterId: reporterGuid, operation, requestId, ...fields,
             fingerprint: digest(raw)
           } }]);
           return send(res, statuses[result.code] ?? 400, result);
         }
-        const [result] = await recordUploads([{ kind: 'sources', sessionDigest, receivedAt, input: {
+        const [result] = await recordUploads(account.id, [{ kind: 'sources', sessionDigest, receivedAt, input: {
           username, reporterId: reporterGuid, requestId, stats, statsId, fingerprint: digest(raw), operations: [{
             ...fields, type: operation, sourceId: deviceGuid, sourceKind: reporterGuid === deviceGuid ? 'local' : 'ssh'
           }]
@@ -587,7 +587,7 @@ export function createLeaderboardServer({
             !validInstallationId(body.reporterId) || !validRequestId(body.requestId) || !Array.isArray(body.operations) ||
             !body.operations.length || body.operations.length > 64 ||
             !body.operations.every(op => op && typeof op.type === 'string')) return send(res, 400, { code: 'invalid' });
-        const [result] = await recordUploads([{ kind: 'sources', sessionDigest, receivedAt,
+        const [result] = await recordUploads(account.id, [{ kind: 'sources', sessionDigest, receivedAt,
           input: { ...body, fingerprint: digest(raw) } }]);
         return send(res, result.results ? 200 : statuses[result.code] ?? 400, result);
       }
@@ -597,7 +597,7 @@ export function createLeaderboardServer({
         const { requestId, body: data } = body[kind];
         return { kind, sessionDigest, receivedAt, input: { ...data, requestId, fingerprint: digest(JSON.stringify(data)) } };
       });
-      const [daily, rolling] = await recordUploads(entries);
+      const [daily, rolling] = await recordUploads(account.id, entries);
       if (daily.code === 'login_required') return send(res, 401, daily);
       if (daily.code === 'unavailable' && rolling.code === 'unavailable') return send(res, 503, daily);
       return send(res, 200, { daily, rolling });
@@ -610,7 +610,7 @@ export function createLeaderboardServer({
           req.headers['content-type']?.split(';')[0] !== 'application/json') return send(res, 400, { code: 'invalid' });
       const body = parseJson(raw);
       if (!body || typeof body !== 'object' || Array.isArray(body)) return send(res, 400, { code: 'invalid' });
-      const [result] = await recordUploads([{ kind: rollingUpload ? 'rolling' : 'hourly', sessionDigest, receivedAt: now(),
+      const [result] = await recordUploads(account.id, [{ kind: rollingUpload ? 'rolling' : 'hourly', sessionDigest, receivedAt: now(),
         input: { ...body, requestId, fingerprint: digest(raw) } }]);
       return send(res, statuses[result.code], result);
     }
@@ -633,7 +633,7 @@ export function createLeaderboardServer({
         requestId: (history ? 'history:' : '') + (identified ? requestId : randomUUID()),
         fingerprint: digest(raw ?? 'oversized request')
       };
-      const [result] = await recordUploads([{ kind: history ? 'history' : 'daily', sessionDigest, receivedAt, input }]);
+      const [result] = await recordUploads(account.id, [{ kind: history ? 'history' : 'daily', sessionDigest, receivedAt, input }]);
       return send(res, statuses[result.code], result);
     }
     return send(res, 404, { code: 'not_found' });
