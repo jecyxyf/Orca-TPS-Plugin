@@ -22,7 +22,7 @@ export async function createSubmissionStats(storage, now = Date.now) {
 
   function discardExpired(time) {
     const cutoff = time - RECENT_STATS_MS;
-    for (const [key, record] of records) if (record[1] <= cutoff) records.delete(key);
+    for (const [key, { record }] of records) if (record[1] <= cutoff) records.delete(key);
     for (const [key, completedAt] of acknowledged) if (completedAt <= cutoff) acknowledged.delete(key);
   }
 
@@ -37,7 +37,7 @@ export async function createSubmissionStats(storage, now = Date.now) {
     for (const record of recent) {
       if (!validRecentRequest(record) || record[1] <= Math.max(startedAt, time - RECENT_STATS_MS) || record[1] > time + 1000) continue;
       const key = createHash('sha256').update(source).update(':').update(record[0]).digest('hex').slice(0, 24);
-      records.set(key, record);
+      records.set(key, { source, record });
     }
   }
 
@@ -57,15 +57,16 @@ export async function createSubmissionStats(storage, now = Date.now) {
     return winner;
   }
 
-  async function prepare(session, score) {
+  async function prepare(session, score, sourceId) {
     const time = now();
     if (pending?.session === session && pending.options?.body?.day === score.day &&
-      pending.options.body.installationId === score.installationId && time - pending.createdAt < RECENT_STATS_MS) return pending.options;
+      pending.options.body.installationId === score.installationId && pending.sourceId === sourceId &&
+      time - pending.createdAt < RECENT_STATS_MS) return pending.options;
     discardExpired(time);
     const sent = [], models = new Map(), tools = new Map();
     let deltaTokens = 0, speeds = 0, avgTps = 0;
-    for (const [key, [, completedAt, tokens, speed, model, cli]] of records) {
-      if (completedAt > time) continue;
+    for (const [key, { source, record: [, completedAt, tokens, speed, model, cli] }] of records) {
+      if (completedAt > time || (sourceId && source !== sourceId)) continue;
       if (!acknowledged.has(key)) {
         deltaTokens = Math.min(Number.MAX_SAFE_INTEGER, deltaTokens + tokens);
         sent.push([key, completedAt]);
@@ -76,7 +77,7 @@ export async function createSubmissionStats(storage, now = Date.now) {
     }
     const stats = { deltaTokens, avgTps: speeds ? avgTps : null, topModel: mostUsed(models), topCli: mostUsed(tools) };
     const options = { requestId: randomUUID(), body: { ...score, stats } };
-    pending = { session, createdAt: time, options, records: sent };
+    pending = { session, sourceId, createdAt: time, options, records: sent };
     await persist();
     return options;
   }

@@ -1,7 +1,9 @@
 import { createServer } from 'node:http';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { isIP, SocketAddress } from 'node:net';
 import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
 import { RECENT_STATS_MS, RANKING_HOURS, USAGE_UPLOAD_BYTES } from '../src/leaderboard-stats.mjs';
+import { validInstallationId } from '../src/leaderboard-installation.mjs';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
 import { createRankingSnapshot, recentRankingRows, rollingBoard } from './ranking-snapshot.mjs';
 
@@ -15,9 +17,24 @@ const challengeOf = value => createHash('sha256').update(value).digest('base64ur
 const tokenPattern = /^[\w-]{43}$/;
 const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
 const statuses = { accepted: 201, initialized: 200, invalid: 400, duplicate: 409, removed: 409, upgrade_required: 409,
-  too_soon: 429, locked: 429, banned: 403, login_required: 401, stale_version: 409, unavailable: 503 };
+  username_changed: 409, too_soon: 429, locked: 429, banned: 403, login_required: 401, stale_version: 409, unavailable: 503 };
 const validRequestId = id => typeof id === 'string' && /^[\w-]{16,128}$/.test(id);
+const sourceFields = new Map([
+  ['lease', ['observedAt']],
+  ['update', ['revision', 'leaseEpoch', 'coverage', 'daily', 'buckets']],
+  ['baseline-part', ['leaseEpoch', 'coverage', 'snapshotId', 'partIndex', 'partCount', 'purpose', 'daily', 'buckets']],
+  ['baseline-commit', ['leaseEpoch', 'coverage', 'snapshotId']]
+]);
 const feedback = { updated: '已保存。', rejected: '操作未执行，请检查输入。', forbidden: '该 GitHub 账号没有管理权限。', failed: 'GitHub 登录未完成，请重新登录。' };
+
+function normalizeIp(value) {
+  if (typeof value !== 'string' || value.includes('%')) return null;
+  const family = isIP(value);
+  if (family === 4) return value;
+  if (family !== 6) return null;
+  const { address } = new SocketAddress({ address: value, family: 'ipv6' });
+  return address.replace(/^::ffff:/, '');
+}
 
 function cookieValue(req, name) {
   return req.headers.cookie?.split(';').map(value => value.trim()).find(value => value.startsWith(name + '='))?.slice(name.length + 1);
@@ -69,7 +86,7 @@ function redirect(res, location) {
 
 export function createLeaderboardServer({
   store, baseUrl, clientId, clientSecret, adminEmail = '', maxTokens = Number.MAX_SAFE_INTEGER,
-  fetcher = fetch, now = Date.now, log = () => {}, jobs
+  fetcher = fetch, now = Date.now, log = () => {}, jobs, trustedProxyIps = []
 }) {
   const base = new URL(baseUrl);
   const secure = base.protocol === 'https:';
@@ -79,6 +96,12 @@ export function createLeaderboardServer({
   if (Boolean(clientId) !== Boolean(clientSecret)) throw new Error('Configure both GitHub application credentials');
   const githubConfigured = Boolean(clientId && clientSecret);
   if (!Number.isSafeInteger(maxTokens) || maxTokens < 1) throw new Error('LEADERBOARD_MAX_TOKENS must be a positive safe integer');
+  const trustedProxies = new Set(['127.0.0.1', '::1']);
+  for (const value of trustedProxyIps) {
+    const address = normalizeIp(value);
+    if (!address) throw new Error('LEADERBOARD_TRUSTED_PROXY_IPS must contain individual IP addresses');
+    trustedProxies.add(address);
+  }
   const callback = new URL('/auth/github/callback', base).href;
   const deviceLogins = new Map();
   const browserLogins = new Map();
@@ -424,9 +447,9 @@ export function createLeaderboardServer({
       minute = currentMinute;
     }
     const url = new URL(req.url, base), route = url.pathname, method = req.method;
-    const address = req.socket.remoteAddress;
-    const forwarded = address === '127.0.0.1' || address === '::1' ? req.headers['x-real-ip'] : '';
-    const ip = typeof forwarded === 'string' && /^[a-f\d.:]{3,45}$/i.test(forwarded) ? forwarded : address;
+    const address = normalizeIp(req.socket.remoteAddress) ?? req.socket.remoteAddress;
+    const forwarded = trustedProxies.has(address) ? normalizeIp(req.headers['x-real-ip']) : null;
+    const ip = forwarded ?? address;
     const auth = route.startsWith('/auth/') || route.startsWith('/api/auth/');
     const requestKey = (auth ? 'auth/' : 'other/') + ip;
     const count = (requests.get(requestKey) ?? 0) + 1;
@@ -486,8 +509,37 @@ export function createLeaderboardServer({
     }
     if (account.banned) return send(res, 403, { code: 'banned', username: account.username });
     if (method === 'POST' && route === '/api/leaderboard/uploads') {
-      const body = parseJson(await readBody(req, USAGE_UPLOAD_BYTES + 4608));
+      const raw = await readBody(req, USAGE_UPLOAD_BYTES + 4608);
+      const body = parseJson(raw);
       const receivedAt = now();
+      if (body?.data?.format === 3) {
+        const { username, deviceGuid, data } = body;
+        const { operation, requestId, reporterGuid = deviceGuid, stats, statsId, ...fields } = data;
+        delete fields.format;
+        const allowed = sourceFields.get(operation);
+        if (req.headers['content-type']?.split(';')[0] !== 'application/json' || Buffer.byteLength(raw) > USAGE_UPLOAD_BYTES ||
+            Object.keys(body).length !== 3 ||
+            typeof username !== 'string' || !/^[a-z\d-]{1,39}$/i.test(username) ||
+            !validInstallationId(deviceGuid) || !validInstallationId(reporterGuid) || !validRequestId(requestId) ||
+            !allowed || Object.keys(fields).some(field => !allowed.includes(field))) {
+          return send(res, 400, { code: 'invalid' });
+        }
+        const [result] = await recordUploads([{ kind: 'sources', sessionDigest, receivedAt, input: {
+          username, reporterId: reporterGuid, requestId, stats, statsId, fingerprint: digest(raw), operations: [{
+            ...fields, type: operation, sourceId: deviceGuid, sourceKind: reporterGuid === deviceGuid ? 'local' : 'ssh'
+          }]
+        } }]);
+        return send(res, result.results ? 200 : statuses[result.code] ?? 400, result);
+      }
+      if (body?.format === 2) {
+        if (req.headers['content-type']?.split(';')[0] !== 'application/json' || Buffer.byteLength(raw) > USAGE_UPLOAD_BYTES ||
+            !validInstallationId(body.reporterId) || !validRequestId(body.requestId) || !Array.isArray(body.operations) ||
+            !body.operations.length || body.operations.length > 64 ||
+            !body.operations.every(op => op && typeof op.type === 'string')) return send(res, 400, { code: 'invalid' });
+        const [result] = await recordUploads([{ kind: 'sources', sessionDigest, receivedAt,
+          input: { ...body, fingerprint: digest(raw) } }]);
+        return send(res, result.results ? 200 : statuses[result.code] ?? 400, result);
+      }
       if (!body || !isUpload(body.daily, 4096) || !isUpload(body.rolling, USAGE_UPLOAD_BYTES) ||
           req.headers['content-type']?.split(';')[0] !== 'application/json') return send(res, 400, { code: 'invalid' });
       const entries = ['daily', 'rolling'].map(kind => {
@@ -511,7 +563,9 @@ export function createLeaderboardServer({
         input: { ...body, requestId, fingerprint: digest(raw) } }]);
       return send(res, statuses[result.code], result);
     }
-    if (method === 'GET' && route === '/api/today/status') return send(res, 200, store.status(account.id, time));
+    if (method === 'GET' && route === '/api/today/status') {
+      return send(res, 200, { ...store.status(account.id, time), username: account.username, accountId: account.id, uploadFormat: 3 });
+    }
     if (method === 'GET' && route === '/api/history/status') {
       return send(res, 200, { initialized: store.historyInitialized(account.id), ...store.status(account.id, time) });
     }

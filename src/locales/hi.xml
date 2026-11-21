@@ -45,8 +45,8 @@
   <message id="model-speed-list">औसत आउटपुट गति के अनुसार मॉडल, सबसे तेज़ पहले</message>
   <message id="empty-model-speeds">इस अवधि में किसी मॉडल के पर्याप्त अनुरोध नहीं हैं</message>
   <message id="usage-heatmap">उपयोग का हीटमैप</message>
-  <message id="heatmap-description">पिछले साल का दैनिक उपयोग (M, कैश सहित)</message>
-  <message id="heatmap-label">पिछले साल का दैनिक उपयोग हीटमैप (M)</message>
+  <message id="heatmap-description">पिछले 30 दिनों का दैनिक उपयोग (M, कैश सहित)</message>
+  <message id="heatmap-label">पिछले 30 दिनों का दैनिक उपयोग हीटमैप (M)</message>
   <message id="heatmap-less">कम</message>
   <message id="heatmap-more">ज़्यादा</message>
   <message id="initial-recent-requests">मौजूदा चैनल · हाल के अनुरोध: 0</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">सूची से छूटे अतिरिक्त मॉडल: {0}</message>
   <message id="model-speed-insufficient-samples">रैंकिंग के लिए कम अनुरोध वाले मॉडल: {0}</message>
   <message id="usage-unavailable">उपयोग के आँकड़े अभी उपलब्ध नहीं हैं</message>
-  <message id="yearly-usage-total">पिछला साल: {0} · सक्रिय दिन: {1}</message>
+  <message id="recent-usage-total">पिछले 30 दिन: {0} · सक्रिय दिन: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · अनुरोध: {2}</message>
   <message id="heatmap-day-empty">{0} · कोई उपयोग दर्ज नहीं</message>
   <message id="current-channel">मौजूदा चैनल</message>
@@ -251,6 +251,9 @@
   <message id="language-name">हिन्दी</message>
   <message id="last-sync-time">पिछला सिंक</message>
   <message id="last-sync-failed">{0} पर अपलोड विफल · {1}</message>
+  <message id="rolling-upload-failed">रोलिंग लीडरबोर्ड का सिंक विफल · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">आज का उपयोग अपलोड हो गया। रोलिंग लीडरबोर्ड का सिंक विफल · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">रोलिंग लीडरबोर्ड सिंक हो गया। आज के उपयोग का अपलोड विफल · {0}</message>
   <message id="sync-failure-unknown">कारण उपलब्ध नहीं है</message>
   <message id="data-upload">डेटा अपलोड</message>
   <message id="upload-now">अभी अपलोड करें</message>

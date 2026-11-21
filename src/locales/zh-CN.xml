@@ -45,8 +45,8 @@
   <message id="model-speed-list">按模型的平均输出速度，从高到低</message>
   <message id="empty-model-speeds">这段时间还没有样本充足的模型</message>
   <message id="usage-heatmap">用量热力图</message>
-  <message id="heatmap-description">近一年每日用量（M，含缓存）</message>
-  <message id="heatmap-label">近一年每日用量热力图（M）</message>
+  <message id="heatmap-description">近 30 天每日用量（M，含缓存）</message>
+  <message id="heatmap-label">近 30 天每日用量热力图（M）</message>
   <message id="heatmap-less">少</message>
   <message id="heatmap-more">多</message>
   <message id="initial-recent-requests">当前频道 · 最近 0 次请求</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">另有 {0} 个模型未列出</message>
   <message id="model-speed-insufficient-samples">{0} 个模型请求数不足，未参与排名</message>
   <message id="usage-unavailable">用量统计暂不可用</message>
-  <message id="yearly-usage-total">近一年 {0} · {1} 天有用量</message>
+  <message id="recent-usage-total">近 30 天 {0} · {1} 天有用量</message>
   <message id="heatmap-day-usage">{0} · {1} · {2} 次请求</message>
   <message id="heatmap-day-empty">{0} · 无用量记录</message>
   <message id="current-channel">当前频道</message>
@@ -251,6 +251,9 @@
   <message id="language-name">简体中文</message>
   <message id="last-sync-time">上次同步</message>
   <message id="last-sync-failed">{0} 上传失败 · {1}</message>
+  <message id="rolling-upload-failed">滚动榜同步失败 · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">当天用量已上传，滚动榜同步失败 · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">滚动榜已同步，当天用量上传失败 · {0}</message>
   <message id="sync-failure-unknown">原因未记录</message>
   <message id="data-upload">数据上传</message>
   <message id="upload-now">手动上传</message>

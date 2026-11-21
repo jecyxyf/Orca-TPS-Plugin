@@ -45,8 +45,8 @@
   <message id="model-speed-list">মডেল অনুযায়ী গড় আউটপুট গতি, দ্রুততম আগে</message>
   <message id="empty-model-speeds">এই সময়ে কোনো মডেলের যথেষ্ট অনুরোধ নেই</message>
   <message id="usage-heatmap">ব্যবহারের হিটম্যাপ</message>
-  <message id="heatmap-description">গত এক বছরের দৈনিক ব্যবহার (M, ক্যাশ সহ)</message>
-  <message id="heatmap-label">গত এক বছরের দৈনিক ব্যবহারের হিটম্যাপ (M)</message>
+  <message id="heatmap-description">গত ৩০ দিনের দৈনিক ব্যবহার (M, ক্যাশ সহ)</message>
+  <message id="heatmap-label">গত ৩০ দিনের দৈনিক ব্যবহারের হিটম্যাপ (M)</message>
   <message id="heatmap-less">কম</message>
   <message id="heatmap-more">বেশি</message>
   <message id="initial-recent-requests">বর্তমান চ্যানেল · সাম্প্রতিক অনুরোধ: ০</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">বাদ পড়া অতিরিক্ত মডেল: {0}</message>
   <message id="model-speed-insufficient-samples">র‍্যাঙ্কিংয়ের জন্য কম অনুরোধ থাকা মডেল: {0}</message>
   <message id="usage-unavailable">ব্যবহারের পরিসংখ্যান সাময়িকভাবে পাওয়া যাচ্ছে না</message>
-  <message id="yearly-usage-total">গত বছর: {0} · সক্রিয় দিন: {1}</message>
+  <message id="recent-usage-total">গত ৩০ দিন: {0} · সক্রিয় দিন: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · অনুরোধ: {2}</message>
   <message id="heatmap-day-empty">{0} · কোনো ব্যবহার রেকর্ড হয়নি</message>
   <message id="current-channel">বর্তমান চ্যানেল</message>
@@ -251,6 +251,9 @@
   <message id="language-name">বাংলা</message>
   <message id="last-sync-time">শেষ সিঙ্ক</message>
   <message id="last-sync-failed">{0}-এ আপলোড ব্যর্থ · {1}</message>
+  <message id="rolling-upload-failed">রোলিং লিডারবোর্ড সিঙ্ক ব্যর্থ · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">আজকের ব্যবহার আপলোড হয়েছে। রোলিং লিডারবোর্ড সিঙ্ক ব্যর্থ · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">রোলিং লিডারবোর্ড সিঙ্ক হয়েছে। আজকের ব্যবহার আপলোড ব্যর্থ · {0}</message>
   <message id="sync-failure-unknown">কারণ পাওয়া যায়নি</message>
   <message id="data-upload">ডেটা আপলোড</message>
   <message id="upload-now">এখন আপলোড করুন</message>

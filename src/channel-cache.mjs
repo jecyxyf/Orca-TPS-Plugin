@@ -6,7 +6,7 @@ const MEMORY_LIMIT = 64;
 const cleanRecords = records => recentRecords(records.map(remoteRecord), 100);
 
 // Persist only numeric/label data used by the panel, keyed by its opaque project ID.
-export function createChannelCache(storage, { now = Date.now } = {}) {
+export function createChannelCache(storage, { now = Date.now, panels } = {}) {
   const entries = new Map(), reads = new Map(), writes = new Map();
 
   function remember(key, value) {
@@ -22,7 +22,7 @@ export function createChannelCache(storage, { now = Date.now } = {}) {
     const pending = (async () => {
       if (writes.has(key)) await writes.get(key);
       let stored;
-      try { stored = await storage.get(PREFIX + key); }
+      try { stored = panels ? panels.readPanel('current-data', key)?.value : await storage.get(PREFIX + key); }
       catch { /* A damaged or unavailable cache can be rebuilt. */ }
       if (entries.has(key)) return entries.get(key);
       if (!Number.isFinite(stored?.updatedAt) || !Array.isArray(stored.records)) return remember(key, null);
@@ -36,12 +36,25 @@ export function createChannelCache(storage, { now = Date.now } = {}) {
     return pending;
   }
 
-  function set(key, records) {
+  function set(key, records, { display = true } = {}) {
     const clean = cleanRecords(records), stamp = JSON.stringify(clean);
     const previous = entries.get(key);
-    if (previous?.stamp === stamp) return remember(key, previous);
+    if (previous?.stamp === stamp) {
+      if (panels && display) {
+        try { panels.publishPanel('current-data', key, { records: previous.records, updatedAt: previous.updatedAt }, now()); }
+        catch { /* The live view still has its last successful result. */ }
+      }
+      return remember(key, previous);
+    }
     const updatedAt = now();
     const snapshot = remember(key, { records: clean, updatedAt, stamp });
+    if (panels) {
+      if (display) {
+        try { panels.publishPanel('current-data', key, { records: clean, updatedAt }, updatedAt); }
+        catch { /* The live view still has its last successful result. */ }
+      }
+      return snapshot;
+    }
     const write = (writes.get(key) ?? Promise.resolve())
       .then(() => storage.set(PREFIX + key, { records: clean, updatedAt }))
       .catch(() => {})

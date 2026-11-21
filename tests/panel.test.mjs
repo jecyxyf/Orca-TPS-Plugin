@@ -6,6 +6,32 @@ import { fileURLToPath } from 'node:url';
 
 const panelPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'panel.html');
 
+test('the upload notice names the failed part and clears when the rolling retry succeeds', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function renderUploadResult\(snapshot\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(source);
+  const elements = { 'sync-result': {}, 'sync-error': {} };
+  const render = new Function('element', 'renderToolbarTime', 'shortClock', 'messageFor', 't',
+    `${source}\nreturn renderUploadResult;`)(
+    id => elements[id], (target, time) => { target.lastSyncAt = time; }, String, code => code,
+    (key, ...values) => [key, ...values].join(' ')
+  );
+
+  render({ lastSyncAt: 50, lastUpload: { at: 100, code: 'accepted', rollingCode: 'unavailable' }, rollingProblem: 'unavailable' });
+  assert.deepEqual(elements['sync-error'], { textContent: 'daily-upload-succeeded-rolling-failed unavailable', hidden: false });
+  assert.equal(elements['sync-result'].lastSyncAt, 50);
+
+  render({ lastSyncAt: 50, lastUpload: { at: 110, code: 'invalid', rollingCode: 'accepted' } });
+  assert.equal(elements['sync-error'].textContent, 'rolling-upload-succeeded-daily-failed invalid');
+
+  render({ lastSyncAt: 50, lastUpload: { at: 115, code: 'unavailable', rollingOnly: true }, rollingProblem: 'unavailable' });
+  assert.equal(elements['sync-error'].textContent, 'rolling-upload-failed unavailable');
+
+  render({ lastSyncAt: 120, lastUpload: { at: 120, code: 'accepted', rollingCode: 'accepted' }, rollingProblem: null });
+  assert.deepEqual(elements['sync-error'], { textContent: '', hidden: true });
+  assert.equal(elements['sync-result'].lastSyncAt, 120);
+});
+
 test('per-request output uses Tokens and aggregate usage uses millions without rounding small counts to zero', async () => {
   const html = await readFile(panelPath, 'utf8');
   const source = /const formatMillionTokens = tokens => \{[\s\S]*?\n    \};/.exec(html)?.[0];

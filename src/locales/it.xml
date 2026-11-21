@@ -45,8 +45,8 @@
   <message id="model-speed-list">Velocità media di output per modello, dal più veloce</message>
   <message id="empty-model-speeds">In questo periodo nessun modello ha abbastanza richieste</message>
   <message id="usage-heatmap">Mappa di calore dell’utilizzo</message>
-  <message id="heatmap-description">Uso giornaliero nell’ultimo anno (M, cache inclusa)</message>
-  <message id="heatmap-label">Mappa di calore dell’uso giornaliero nell’ultimo anno (M)</message>
+  <message id="heatmap-description">Uso giornaliero negli ultimi 30 giorni (M, cache inclusa)</message>
+  <message id="heatmap-label">Mappa di calore dell’uso giornaliero negli ultimi 30 giorni (M)</message>
   <message id="heatmap-less">Meno</message>
   <message id="heatmap-more">Più</message>
   <message id="initial-recent-requests">Canale corrente · 0 richieste recenti</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">Altri modelli omessi · {0}</message>
   <message id="model-speed-insufficient-samples">Modelli con troppo poche richieste per la classifica · {0}</message>
   <message id="usage-unavailable">Statistiche di utilizzo temporaneamente non disponibili</message>
-  <message id="yearly-usage-total">Ultimo anno · {0} · Giorni attivi · {1}</message>
+  <message id="recent-usage-total">Ultimi 30 giorni · {0} · Giorni attivi · {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Richieste · {2}</message>
   <message id="heatmap-day-empty">{0} · Nessun utilizzo registrato</message>
   <message id="current-channel">Canale corrente</message>
@@ -251,6 +251,9 @@
   <message id="language-name">Italiano</message>
   <message id="last-sync-time">Ultima sincronizzazione</message>
   <message id="last-sync-failed">Caricamento non riuscito alle {0} · {1}</message>
+  <message id="rolling-upload-failed">Sincronizzazione della classifica mobile non riuscita · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">L’utilizzo di oggi è stato caricato. Sincronizzazione della classifica mobile non riuscita · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">La classifica mobile è sincronizzata. Caricamento dell’utilizzo di oggi non riuscito · {0}</message>
   <message id="sync-failure-unknown">Motivo non disponibile</message>
   <message id="data-upload">Caricamento dati</message>
   <message id="upload-now">Carica ora</message>

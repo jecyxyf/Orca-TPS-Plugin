@@ -27,6 +27,7 @@
 | `LEADERBOARD_PORT` | 监听端口，默认 `8787` |
 | `LEADERBOARD_DB` | SQLite 路径。Compose 使用 `/data/leaderboard.sqlite` |
 | `LEADERBOARD_MAX_TOKENS` | 可选。设置允许提交的 Token 上限，默认使用接口支持的最大整数 |
+| `LEADERBOARD_TRUSTED_PROXY_IPS` | 可选。额外信任的转发 IP，多个地址用逗号分隔。默认信任 `127.0.0.1` 和 `::1`。 |
 
 本地使用 Node.js 24 LTS 运行 `node --env-file=server/.env server/main.mjs`，打开 `/admin` 登录。注册单独的本地 OAuth 应用时，回调改为本地服务的 `/auth/github/callback`。运行 `npm test` 可用模拟 GitHub 服务验证完整的登录、提交、排名和管理流程。
 
@@ -39,7 +40,11 @@
 | `POST /api/leaderboard/uploads` | 登录后每 10 秒提交用量和速度。写入线程每 2 秒批量提交，提交后确认。 |
 | `GET /api/leaderboard/snapshot` | 下载完整榜单。榜单线程每 10 秒读取共享截止时刻的 24 小时、7 天、30 天和速度榜。 |
 
-先部署服务端，再更新插件。SQLite 自动增加滚动榜所需的表，新版插件按可读日志逐步补传用量。已有上传和榜单接口继续支持旧客户端。
+先部署服务端，再更新插件。SQLite 会自动增加按来源上传所需的表。新版插件分别提交本机和 SSH 用量，服务端在同一个 GitHub 账号下只计算一次同一个 SSH 来源。远端编号保存在远端用户的数据目录中。上报电脑断线 60 秒后，其他连接同一来源的电脑可以接手。
+
+格式 3 的上传包包含 `username`、`deviceGuid` 和 `data`，每包一个来源且最多 64 KiB。插件在本机 SQLite 中保存待确认的包，断线后沿用原编号。服务端通过 `GET /api/today/status` 公布支持的格式。测试服先验证两个客户端连接同一 SSH 来源时当天榜和滚动榜的合计。
+
+已有混合上报记录的账号先保留当前榜单。等相关电脑补齐日志，并能核对现有用量后，服务端一次切换到按来源计数。若旧日志已丢失，相关记录移出 30 天统计范围后可以继续切换。完成切换的账号需要用新版插件上传，旧客户端仍可查询榜单。
 
 ## 正式版（Docker Compose）
 
@@ -61,6 +66,14 @@ itps8.com {
 	}
 }
 ```
+
+如果容器看到的转发来源是 Docker 网桥地址，将这个地址填入 `/etc/orca-tps/prod.env` 的 `LEADERBOARD_TRUSTED_PROXY_IPS`。可用下面的命令查看默认网络的网关，再核对它是否就是容器看到的来源。填入单个 IP 地址即可，Compose 端口继续绑定在 `127.0.0.1`。
+
+```sh
+sudo docker network inspect orca-tps-prod_default --format '{{range .IPAM.Config}}{{println .Gateway}}{{end}}'
+```
+
+服务端会使用可信转发提供的 `X-Real-IP` 计算每位访客的接口额度。改动环境变量后，重新运行上面的 Compose 部署命令。如果重建了 Docker 网桥，核对网关地址并更新配置。
 
 ## 测试版（Node.js 和 systemd）
 

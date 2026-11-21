@@ -2,6 +2,7 @@ import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { gzip, gunzip } from 'node:zlib';
 import { sourceMessage } from './locales.mjs';
+import { validInstallationId } from './leaderboard-installation.mjs';
 import { HOUR_MS, MAX_RECENT_REQUESTS, RANKING_HOURS, RECENT_STATS_MS, isUsageTime, validStatsLabel } from './leaderboard-stats.mjs';
 // Usage totals for the 当日/近一周/近一月 cards. Pure aggregation plus an incremental index: each source unit
 // (one session file, or one OpenCode session) is parsed once, its per-day counts are stored, and it is only
@@ -53,6 +54,9 @@ export function usageCutoffMs(nowMs) {
 export function accumulateRecords(days, provider, records, { minDay = '', leaderboardDays } = {}) {
   for (const record of records) {
     if (!Number.isFinite(record?.completedAt)) continue;
+    if (leaderboardDays?.records && record.completedAt >= leaderboardDays.recordFrom) {
+      leaderboardDays.records.push({ ...record, provider });
+    }
     const day = localDayKey(record.completedAt);
     if (day < minDay) continue;
     if (leaderboardDays?.recent && record.completedAt >= leaderboardDays.recentFrom && typeof record.id === 'string') {
@@ -95,7 +99,7 @@ export function accumulateRecords(days, provider, records, { minDay = '', leader
 
 const numberOr0 = value => Number.isFinite(value) && value > 0 ? value : 0;
 
-function requestTokens(record) {
+export function requestTokens(record) {
   return numberOr0(record.freshInputTokens) + numberOr0(record.outputTokens) +
     numberOr0(record.cacheReadTokens) + numberOr0(record.cacheCreationTokens);
 }
@@ -357,7 +361,9 @@ export function createUsageIndex({
   let loaded = null, progress = { done: 0, total: 0 }, updatedAt = null, summaryCache, summaryDay;
   let refreshQueue = Promise.resolve();
   let readyLeaderboardDay = '', readyHistoryDay = '', moreBackfill = false, coveredUntil = null;
+  let sourceScans = new Map();
   const recentReads = new Set();
+  const scopeOf = key => key.startsWith(REMOTE_USAGE_PREFIX) ? key.slice(0, key.lastIndexOf(':') + 1) : '';
 
   function adjust(unit, direction) {
     if (!unit) return;
@@ -435,15 +441,15 @@ export function createUsageIndex({
     const usageTimesFrom = leaderboardUsageTimesFrom(rankFrom);
     const discovery = await discover(usageCutoffMs(refreshAt), leaderboard ? rankDay : undefined, leaderboard ? rankFrom : undefined);
     signal?.throwIfAborted();
-    const { descriptors, coveredRemoteScopes, localComplete = true, remoteComplete = true } = Array.isArray(discovery)
+    const { descriptors, coveredRemoteScopes, remoteSources = new Map(), localComplete = true, remoteComplete = true } = Array.isArray(discovery)
       ? { descriptors: discovery, coveredRemoteScopes: new Set() }
       : discovery;
     const wanted = new Set(descriptors.map(descriptor => descriptor.key));
     for (const key of [...units.keys()]) {
       signal?.throwIfAborted();
       if (wanted.has(key)) continue;
-      const remote = key.startsWith(REMOTE_USAGE_PREFIX);
-      if (remote ? !coveredRemoteScopes.has(key.slice(0, key.lastIndexOf(':') + 1)) : !localComplete) continue;
+      const scope = scopeOf(key);
+      if (scope ? !coveredRemoteScopes.has(scope) : !localComplete) continue;
       setUnit(key, units.get(key));
       recentReads.delete(key);
       usageStorage.update(key);
@@ -472,6 +478,22 @@ export function createUsageIndex({
       const current = units.get(descriptor.key);
       return current?.failed && current.failedStamp === descriptor.stamp && now() < current.retryAt;
     };
+    const aliases = new Map();
+    for (const [scope, source] of remoteSources) {
+      for (const legacy of source.legacyScopes) aliases.set(legacy, scope);
+    }
+    const legacyUnits = [];
+    for (const [key, unit] of units) {
+      const legacy = scopeOf(key), scope = aliases.get(legacy);
+      if (!scope) continue;
+      legacyUnits.push({ key, unit, scope, canonical: scope + key.slice(legacy.length) });
+    }
+    const known = new Map(descriptors.map(descriptor => [descriptor.key, descriptor]));
+    for (const { unit, canonical } of legacyUnits) {
+      if (units.has(canonical) || unit.failed || known.get(canonical)?.stamp !== unit.stamp) continue;
+      setUnit(canonical, undefined, unit);
+      usageStorage.update(canonical, unit);
+    }
     const pending = descriptors.filter(descriptor => needsRead(descriptor) && !deferred(descriptor) && !waitingRetry(descriptor))
       .sort((a, b) => b.mtimeMs - a.mtimeMs);
     const incomplete = (descriptor, boundary, missing) => descriptor.mtimeMs >= boundary &&
@@ -484,6 +506,7 @@ export function createUsageIndex({
       if (includeUsageTimes) coveredUntil = complete && !descriptors.some(item => incomplete(item, usageTimesFrom, missingUsageTimes))
         ? refreshAt : undefined;
     }
+    sourceScans = new Map();
     updateReadiness();
     let spent = 0;
     const selected = [];
@@ -549,6 +572,22 @@ export function createUsageIndex({
       setUnit(descriptor.key, units.get(descriptor.key), unit);
       usageStorage.update(descriptor.key, unit);
     }
+    const byScope = Map.groupBy(descriptors, descriptor => scopeOf(descriptor.key));
+    function scanFor(scope, observedAt) {
+      const items = byScope.get(scope) ?? [];
+      const incompleteRead = items.some(descriptor => incomplete(descriptor, usageTimesFrom, missingUsageTimes));
+      const failed = scope && items.some(item => item.mtimeMs >= usageTimesFrom && units.get(item.key)?.failed);
+      return { observedAt: failed ? undefined : observedAt, ...(incompleteRead ? {} : { coverage: [usageTimesFrom, refreshAt] }) };
+    }
+    if (localComplete) sourceScans.set('', scanFor('', refreshAt));
+    for (const [scope, source] of remoteSources) sourceScans.set(scope, scanFor(scope, source.observedAt));
+    for (const { key, unit, scope, canonical } of legacyUnits) {
+      const current = units.get(canonical);
+      if (!sourceScans.get(scope)?.coverage && (!current || current.failed || !known.has(canonical))) continue;
+      setUnit(key, unit);
+      recentReads.delete(key);
+      usageStorage.update(key);
+    }
     const migrating = await usageStorage.flush(signal);
     moreBackfill ||= migrating;
     progress = {
@@ -591,5 +630,40 @@ export function createUsageIndex({
     return { buckets, coverage: coveredUntil > start && coveredUntil <= cutoff ? [start, coveredUntil] : undefined };
   }
 
-  return { refresh, summary, ready, leaderboardUsage, leaderboardHistory, leaderboardUsageTimes, hasBackfill: () => moreBackfill };
+  function leaderboardSources(reporterId) {
+    const cutoff = now(), span = RANKING_HOURS.at(-1) * HOUR_MS, start = cutoff - span;
+    const today = leaderboardDay(cutoff), first = leaderboardDay(start);
+    const groups = new Map([...sourceScans.keys()].map(scope => [scope, { daily: new Map(), buckets: new Map() }]));
+    for (const [key, unit] of units) {
+      const scope = scopeOf(key);
+      if (scope && !validInstallationId(scope.slice(REMOTE_USAGE_PREFIX.length, -1))) continue;
+      if (!groups.has(scope)) groups.set(scope, { daily: new Map(), buckets: new Map() });
+      const source = groups.get(scope);
+      const edge = sourceScans.get(scope)?.coverage?.[1];
+      const from = edge === undefined ? start : Math.min(start, edge - span);
+      for (const [day, tokens] of Object.entries(unit.leaderboardDays ?? {})) {
+        if (day >= first && day <= today) source.daily.set(day, (source.daily.get(day) ?? 0) + tokens);
+      }
+      for (const [time, tokens] of Object.entries(unit.leaderboardUsageByTime ?? {})) {
+        const at = Number(time);
+        if (at >= from && at <= cutoff) {
+          source.buckets.set(at, (source.buckets.get(at) ?? 0n) + BigInt(tokens));
+        }
+      }
+    }
+    const limit = BigInt(Number.MAX_SAFE_INTEGER);
+    return [...groups].map(([scope, source]) => {
+      const { coverage, observedAt } = sourceScans.get(scope) ?? {};
+      return {
+        sourceId: scope ? scope.slice(REMOTE_USAGE_PREFIX.length, -1) : reporterId,
+        sourceKind: scope ? 'ssh' : 'local', observedAt,
+        daily: [...source.daily].sort(([a], [b]) => a.localeCompare(b)).map(([day, tokens]) => ({ day, tokens })),
+        buckets: [...source.buckets].sort(([a], [b]) => a - b).map(([at, tokens]) => [at, Number(tokens > limit ? limit : tokens)]),
+        ...(coverage?.[1] > start && coverage[0] <= coverage[1] - span ? { coverage: [coverage[1] - span, coverage[1]] } : {})
+      };
+    });
+  }
+
+  return { refresh, summary, ready, leaderboardUsage, leaderboardHistory, leaderboardUsageTimes, leaderboardSources,
+    hasBackfill: () => moreBackfill };
 }

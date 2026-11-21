@@ -449,7 +449,7 @@
     .heat-cell.lv2 { background: var(--heat-2); }
     .heat-cell.lv3 { background: var(--heat-3); }
     .heat-cell.lv4 { background: var(--heat-4); }
-    .heat-cell.future { visibility: hidden; }
+    .heat-cell.outside { visibility: hidden; }
     .heat-cell:hover { outline: 1px solid var(--blue); outline-offset: 0; }
     .heat-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--muted); font-size: 10px; }
     .heat-legend { display: inline-flex; align-items: center; gap: 3px; }
@@ -1252,8 +1252,8 @@
       for (const tab of document.querySelectorAll('[data-range]')) {
         tab.addEventListener('click', () => { usageRange = tab.dataset.range; renderUsage(); });
       }
-      // 用量热力图: one cell per local day for the last year; weeks are columns (Sunday first), five levels by quartile.
-      const HEAT_DAYS = 365;
+      // One cell per local day over the last 30 days, grouped by week.
+      const HEAT_DAYS = 30;
       const localKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
       const dayLabel = date => locale.date(date, { dateStyle: 'full' });
       function renderHeatmap() {
@@ -1267,9 +1267,11 @@
         drawnHeat = signature;
         const rebuild = layout !== heatLayout;
         heatLayout = layout;
-        const byDay = new Map(daily.map(entry => [entry.day, entry]));
-        const start = new Date(today);
-        start.setDate(today.getDate() - (HEAT_DAYS - 1));
+        const first = new Date(today);
+        first.setDate(today.getDate() - (HEAT_DAYS - 1));
+        const from = localKey(first);
+        const byDay = new Map(daily.filter(entry => entry.day >= from && entry.day <= layout).map(entry => [entry.day, entry]));
+        const start = new Date(first);
         start.setDate(start.getDate() - start.getDay());
         const weeks = Math.ceil((Math.round((today - start) / 86_400_000) + 1) / 7);
         const values = [...byDay.values()].map(entry => entry.tokens).filter(value => numeric(value) && value > 0).sort((a, b) => a - b);
@@ -1282,12 +1284,12 @@
           for (let weekday = 0; weekday < 7; weekday++) {
             const date = new Date(start);
             date.setDate(start.getDate() + week * 7 + weekday);
-            const future = date > today;
+            const outside = date < first || date > today;
             const entry = byDay.get(localKey(date));
-            const tokens = future ? 0 : (numeric(entry?.tokens) ? entry.tokens : 0);
-            if (!future && tokens > 0) { activeDays += 1; total += tokens; }
+            const tokens = numeric(entry?.tokens) ? entry.tokens : 0;
+            if (tokens > 0) { activeDays += 1; total += tokens; }
             const cell = rebuild ? document.createElement('span') : heatCells[cells.length];
-            const style = `heat-cell lv${levelOf(tokens)}${future ? ' future' : ''}`;
+            const style = `heat-cell lv${levelOf(tokens)}${outside ? ' outside' : ''}`;
             const requests = numeric(entry?.requests) ? entry.requests : 0;
             if (cell.className !== style) cell.className = style;
             if (rebuild || cell.dataset.tokens !== String(tokens) || cell.dataset.requests !== String(requests)) {
@@ -1299,7 +1301,7 @@
                 : t('heatmap-day-empty', cell.dataset.label));
             }
             cells.push(cell);
-            if (rebuild && weekday === 0 && !future && date.getMonth() !== lastMonth) {
+            if (rebuild && !outside && (weekday === 0 || localKey(date) === from) && date.getMonth() !== lastMonth) {
               lastMonth = date.getMonth();
               const label = document.createElement('span');
               label.textContent = locale.date(date, { month: 'short' });
@@ -1313,7 +1315,7 @@
           grid.replaceChildren(...cells);
           months.replaceChildren(...labels);
         }
-        byId('heat-total').textContent = usageSummary ? t('yearly-usage-total', formatMillionTokens(total), number(activeDays)) : t('calculating-usage');
+        byId('heat-total').textContent = usageSummary ? t('recent-usage-total', formatMillionTokens(total), number(activeDays)) : t('calculating-usage');
       }
       const heatTip = byId('heat-tip');
       function showHeatTip(cell) {
@@ -2009,10 +2011,20 @@
       function renderUploadResult(snapshot) {
         renderToolbarTime(element('sync-result'), snapshot?.lastSyncAt);
         const failure = element('sync-error'), record = snapshot?.lastUpload;
-        const failed = Number.isFinite(record?.at) && !['accepted', 'initialized', 'duplicate'].includes(record.code);
-        const error = failed ? t('last-sync-failed', shortClock(record.at), messageFor(record.code) ?? t('sync-failure-unknown')) : '';
+        const successes = ['accepted', 'initialized', 'duplicate'];
+        const dailyFailed = Number.isFinite(record?.at) && !record.rollingOnly && !successes.includes(record.code);
+        const problem = snapshot?.rollingProblem;
+        let error = '';
+        if (dailyFailed) {
+          const reason = messageFor(record.code) ?? t('sync-failure-unknown');
+          error = successes.includes(record.rollingCode) ? t('rolling-upload-succeeded-daily-failed', reason)
+            : t('last-sync-failed', shortClock(record.at), reason);
+        } else if (problem) {
+          const reason = messageFor(problem) ?? t('sync-failure-unknown');
+          error = t(record?.rollingOnly ? 'rolling-upload-failed' : 'daily-upload-succeeded-rolling-failed', reason);
+        }
         if (failure.textContent !== error) failure.textContent = error;
-        failure.hidden = !failed;
+        failure.hidden = !error;
       }
 
       function render(code = messageCode) {

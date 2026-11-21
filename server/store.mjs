@@ -3,6 +3,7 @@ import { leaderboardDay, leaderboardDayStart, MAX_WINDOW_DAYS } from '../src/usa
 import { validInstallationId } from '../src/leaderboard-installation.mjs';
 import { RECENT_STATS_MS, SPEED_WINDOW_MS, SPEED_MIN_DELTA, qualifyingSpeed, validSubmissionStats } from '../src/leaderboard-stats.mjs';
 import { openHourlyRankings } from './hourly-rankings.mjs';
+import { openSourceUploads } from './source-uploads.mjs';
 
 const TEN_MINUTES = 10 * 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
@@ -107,6 +108,9 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
   const get = (sql, ...values) => db.prepare(sql).get(...values);
   const all = (sql, ...values) => db.prepare(sql).all(...values);
   const run = (sql, ...values) => db.prepare(sql).run(...values);
+  const sources = readOnly ? null : openSourceUploads(db, {
+    get, all, run, nextUpload, uploadGate, invalidUpload, saveDaily: saveSourceDaily, replaceLegacyDaily
+  });
   const administrator = () => get('SELECT account FROM administrator WHERE slot=1')?.account;
   const audit = (actor, action, target, now) =>
     run('INSERT INTO audit(account, action, target, at) VALUES (?, ?, ?, ?)', actor, action, target, now);
@@ -183,8 +187,9 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     const legacy = get('SELECT MAX(submitted_at) AS at FROM scores WHERE day IN (?, ?) AND account=?',
       leaderboardDay(now), leaderboardDay(now - UPLOAD_INTERVAL), account);
     const initialization = get('SELECT uploaded_at FROM score_initializations WHERE account=?', account);
+    const sourceWrite = get('SELECT at FROM source_write_clock WHERE account=?', account);
     const next = Math.max(updated?.updated_at ?? -Infinity, legacy?.at ?? -Infinity,
-      initialization?.uploaded_at ?? -Infinity) + UPLOAD_INTERVAL;
+      initialization?.uploaded_at ?? -Infinity, sourceWrite?.at ?? -Infinity) + UPLOAD_INTERVAL;
     return next > now ? next : null;
   }
 
@@ -329,7 +334,29 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
       ON CONFLICT(day, account, installation_id) DO UPDATE SET tokens=excluded.tokens`, day, account, installationId, tokens);
   }
 
+  function saveSourceDaily(account, source, day, tokens, now) {
+    const previous = readScore(account, day);
+    if (previous === undefined && !tokens) return;
+    if (previous === undefined) run('INSERT INTO scores VALUES (?, ?, 0, ?)', day, account, now);
+    if (tokens) saveInstallationScore(day, account, source, tokens);
+    else run('DELETE FROM installation_scores WHERE day=? AND account=? AND installation_id=?', day, account, source);
+    const { tokens: sum } = get('SELECT TOTAL(tokens) AS tokens FROM installation_scores WHERE day=? AND account=?', day, account);
+    if (!sum) run('DELETE FROM scores WHERE day=? AND account=?', day, account);
+    else {
+      const safe = Math.min(Number.MAX_SAFE_INTEGER, sum);
+      run('UPDATE scores SET tokens=? WHERE day=? AND account=?', safe, day, account);
+      if (safe === previous?.tokens) return;
+    }
+    run(`INSERT INTO score_updates VALUES (?, ?, ?) ON CONFLICT(day, account) DO UPDATE SET updated_at=excluded.updated_at`,
+      day, account, now);
+  }
+
+  function replaceLegacyDaily(account, fromDay) {
+    run('DELETE FROM scores WHERE account=? AND day>=? AND tokens IS NOT NULL', account, fromDay);
+  }
+
   function submit(account, input, now, maxTokens) {
+    if (sources.active(account)) return 'upgrade_required';
     const { day: requestedDay, installationId, tokens, requestId, stats } = input;
     const day = leaderboardDay(now);
     let changed = false;
@@ -360,6 +387,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
       if (stats !== undefined) run('INSERT INTO submission_stats VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         account, requestId, day, now, stats.deltaTokens, stats.avgTps, stats.topModel, stats.topCli);
       changed = true;
+      sources.changeLegacy(account);
       return recordAttempt(account, day, input, 'accepted', now);
     });
     if (changed) {
@@ -370,6 +398,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
   }
 
   function initializeHistory(account, input, now, maxTokens) {
+    if (sources.active(account)) return 'upgrade_required';
     const { day: requestedDay, installationId, scores, requestId } = input;
     const day = leaderboardDay(now);
     let inserted = 0;
@@ -390,6 +419,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
         inserted += added;
       }
       run('INSERT INTO score_initializations VALUES (?, ?)', account, inserted ? now : null);
+      if (inserted) sources.changeLegacy(account);
       return recordAttempt(account, day, input, 'accepted', now);
     });
     if (inserted) rankingRevision++;
@@ -433,6 +463,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
       run('DELETE FROM installation_scores WHERE 1=1' + filter, ...params);
       run('UPDATE scores SET tokens=NULL WHERE day>=?' + filter, first, ...params);
       run('DELETE FROM scores WHERE day<?' + filter, first, ...params);
+      sources.adminChanged();
       audit(actor, account ? 'delete' : 'clear', [day || 'all', account].filter(Boolean).join('/'), now);
     });
     rankingRevision++;
@@ -468,6 +499,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     const first = leaderboardDay(now - (MAX_WINDOW_DAYS - 1) * DAY);
     transaction(() => {
       run('DELETE FROM sessions WHERE expires<=?', now);
+      sources.prune(now);
       run('DELETE FROM attempts WHERE day<?', day);
       run('DELETE FROM locks WHERE day<?', day);
       run('DELETE FROM installation_scores WHERE day<?', first);
@@ -483,9 +515,28 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     const account = session(sessionDigest, 'plugin', receivedAt);
     if (!account) return { code: 'login_required' };
     if (account.banned) return { code: 'banned', username: account.username };
+    if (kind === 'sources') {
+      const { changed, ...result } = sources.upload(account.id, input, receivedAt, maxTokens, account.username);
+      if (changed) {
+        rankingRevision++;
+        const { stats, statsId } = input;
+        if (validInstallationId(statsId) && validSubmissionStats(stats)) {
+          const inserted = run('INSERT OR IGNORE INTO submission_stats VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            account.id, statsId, leaderboardDay(receivedAt), receivedAt, stats.deltaTokens, stats.avgTps, stats.topModel, stats.topCli);
+          if (inserted.changes && qualifyingSpeed(stats)) speedRevision++;
+        }
+      }
+      return { ...result, username: account.username, ...status(account.id, receivedAt) };
+    }
+    if (sources.active(account.id)) return { code: 'upgrade_required', username: account.username };
     if (kind === 'rolling' || kind === 'hourly') {
       if (kind === 'hourly') hourly.settle(receivedAt);
-      return hourly.submit(account.id, input, receivedAt, maxTokens, kind === 'rolling');
+      const last = kind === 'rolling'
+        ? get('SELECT version FROM rolling_uploads WHERE account=? AND installation_id=?', account.id, input.installationId ?? null)
+        : get('SELECT version FROM hourly_uploads WHERE account=? AND installation_id=?', account.id, input.installationId ?? null);
+      const result = hourly.submit(account.id, input, receivedAt, maxTokens, kind === 'rolling');
+      if (result.code === 'accepted' && result.version !== last?.version) sources.changeLegacy(account.id);
+      return result;
     }
     const code = kind === 'history' ? initializeHistory(account.id, input, receivedAt, maxTokens) :
       submit(account.id, input, receivedAt, maxTokens);

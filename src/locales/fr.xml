@@ -45,8 +45,8 @@
   <message id="model-speed-list">Vitesse moyenne par modèle, du plus rapide au plus lent</message>
   <message id="empty-model-speeds">Aucun modèle n’a assez de requêtes sur cette période</message>
   <message id="usage-heatmap">Carte thermique d’utilisation</message>
-  <message id="heatmap-description">Utilisation quotidienne sur un an (M, cache inclus)</message>
-  <message id="heatmap-label">Carte thermique de l’utilisation quotidienne sur un an (M)</message>
+  <message id="heatmap-description">Utilisation quotidienne sur les 30 derniers jours (M, cache inclus)</message>
+  <message id="heatmap-label">Carte thermique de l’utilisation quotidienne sur les 30 derniers jours (M)</message>
   <message id="heatmap-less">Moins</message>
   <message id="heatmap-more">Plus</message>
   <message id="initial-recent-requests">Canal actuel · Requêtes récentes : 0</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">Autres modèles omis : {0}</message>
   <message id="model-speed-insufficient-samples">Modèles avec trop peu de requêtes pour être classés : {0}</message>
   <message id="usage-unavailable">Statistiques d’utilisation temporairement indisponibles</message>
-  <message id="yearly-usage-total">Sur un an : {0} · Jours actifs : {1}</message>
+  <message id="recent-usage-total">Sur les 30 derniers jours : {0} · Jours actifs : {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Requêtes : {2}</message>
   <message id="heatmap-day-empty">{0} · Aucune utilisation enregistrée</message>
   <message id="current-channel">Canal actuel</message>
@@ -251,6 +251,9 @@
   <message id="language-name">Français</message>
   <message id="last-sync-time">Dernière synchronisation</message>
   <message id="last-sync-failed">Échec de l’envoi à {0} · {1}</message>
+  <message id="rolling-upload-failed">Échec de la synchronisation du classement glissant · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">L’utilisation du jour a été envoyée. Échec de la synchronisation du classement glissant · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">Le classement glissant est synchronisé. Échec de l’envoi de l’utilisation du jour · {0}</message>
   <message id="sync-failure-unknown">Cause indisponible</message>
   <message id="data-upload">Envoi des données</message>
   <message id="upload-now">Envoyer maintenant</message>

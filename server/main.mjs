@@ -20,7 +20,8 @@ const server = createLeaderboardServer({
   baseUrl: env.LEADERBOARD_BASE_URL ?? `http://127.0.0.1:${port}`,
   clientId: env.GITHUB_CLIENT_ID,
   clientSecret: env.GITHUB_CLIENT_SECRET,
-  adminEmail: env.LEADERBOARD_ADMIN_EMAIL?.trim()
+  adminEmail: env.LEADERBOARD_ADMIN_EMAIL?.trim(),
+  trustedProxyIps: env.LEADERBOARD_TRUSTED_PROXY_IPS?.split(',').map(address => address.trim()).filter(Boolean)
 });
 server.listen(port, host, () => process.stdout.write(`榜单服务监听 ${host}:${port}。\n`));
 let hourlyTimer;

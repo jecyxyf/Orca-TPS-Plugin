@@ -45,8 +45,8 @@
   <message id="model-speed-list">Средняя скорость вывода по моделям, сначала самые быстрые</message>
   <message id="empty-model-speeds">За этот период ни у одной модели нет достаточного числа запросов</message>
   <message id="usage-heatmap">Тепловая карта расхода</message>
-  <message id="heatmap-description">Ежедневный расход за последний год (M, включая кэш)</message>
-  <message id="heatmap-label">Тепловая карта ежедневного расхода за последний год (M)</message>
+  <message id="heatmap-description">Ежедневный расход за последние 30 дней (M, включая кэш)</message>
+  <message id="heatmap-label">Тепловая карта ежедневного расхода за последние 30 дней (M)</message>
   <message id="heatmap-less">Меньше</message>
   <message id="heatmap-more">Больше</message>
   <message id="initial-recent-requests">Текущий канал · 0 недавних запросов</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">Другие скрытые модели · {0}</message>
   <message id="model-speed-insufficient-samples">Модели, у которых слишком мало запросов для рейтинга · {0}</message>
   <message id="usage-unavailable">Статистика расхода временно недоступна</message>
-  <message id="yearly-usage-total">За последний год · {0} · Дней с активностью · {1}</message>
+  <message id="recent-usage-total">За последние 30 дней · {0} · Дней с активностью · {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Запросы · {2}</message>
   <message id="heatmap-day-empty">{0} · Нет записей о расходе</message>
   <message id="current-channel">Текущий канал</message>
@@ -251,6 +251,9 @@
   <message id="language-name">Русский</message>
   <message id="last-sync-time">Последняя синхронизация</message>
   <message id="last-sync-failed">Ошибка загрузки в {0} · {1}</message>
+  <message id="rolling-upload-failed">Не удалось синхронизировать рейтинг за скользящий период · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">Данные за сегодня загружены. Не удалось синхронизировать рейтинг за скользящий период · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">Рейтинг за скользящий период синхронизирован. Не удалось загрузить данные за сегодня · {0}</message>
   <message id="sync-failure-unknown">Причина неизвестна</message>
   <message id="data-upload">Загрузка данных</message>
   <message id="upload-now">Загрузить сейчас</message>

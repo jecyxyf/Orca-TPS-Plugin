@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { setImmediate as yieldToRequests, setTimeout as delay } from 'node:timers/promises';
-import { configuredRoots, defaultRoots } from './data-paths.mjs';
+import { configuredRoots, defaultRoots, reportDiscoveryError } from './data-paths.mjs';
 import {
   SESSION_PROXY_DEDUP_WINDOW_SECONDS,
   antigravityNativeTimings,
@@ -64,8 +64,9 @@ function replayWarnings(warnings, cached) {
   for (const warning of cached?.warnings ?? []) warnings.add(warning);
 }
 
-async function info(file) {
-  try { return await stat(file); } catch { return null; }
+async function info(file, onUnavailable) {
+  try { return await stat(file); }
+  catch (error) { reportDiscoveryError(error, onUnavailable); return null; }
 }
 
 /**
@@ -351,10 +352,10 @@ async function advanceJsonl(key, candidate, budget, warnings, expectedSessionId,
 }
 
 /** Collect Claude subagent JSONL files at fixed depths matching CC Switch's collect_jsonl_files. */
-async function collectClaudeSubagentCandidates(mainPath, sessionId) {
+async function collectClaudeSubagentCandidates(mainPath, sessionId, onUnavailable) {
   if (!safeSegment(sessionId)) return [];
   const subagentsDir = path.join(path.dirname(mainPath), sessionId, 'subagents');
-  const dirStat = await info(subagentsDir);
+  const dirStat = await info(subagentsDir, onUnavailable);
   if (!dirStat?.isDirectory()) return [];
 
   const paths = [];
@@ -366,24 +367,26 @@ async function collectClaudeSubagentCandidates(mainPath, sessionId) {
       } else if (entry.isDirectory() && entry.name === 'workflows') {
         const workflowsDir = path.join(subagentsDir, 'workflows');
         let wfDirs = [];
-        try { wfDirs = await readdir(workflowsDir, { withFileTypes: true }); } catch { wfDirs = []; }
+        try { wfDirs = await readdir(workflowsDir, { withFileTypes: true }); }
+        catch (error) { reportDiscoveryError(error, onUnavailable); }
         for (const wfEntry of wfDirs.slice(0, 50)) {
           if (!wfEntry.isDirectory()) continue;
           const wfPath = path.join(workflowsDir, wfEntry.name);
           let wfFiles = [];
-          try { wfFiles = await readdir(wfPath, { withFileTypes: true }); } catch { wfFiles = []; }
+          try { wfFiles = await readdir(wfPath, { withFileTypes: true }); }
+          catch (error) { reportDiscoveryError(error, onUnavailable); }
           for (const f of wfFiles) {
             if (f.isFile() && /\.jsonl$/i.test(f.name)) paths.push(path.join(wfPath, f.name));
           }
         }
       }
     }
-  } catch { return []; }
+  } catch (error) { reportDiscoveryError(error, onUnavailable); return []; }
 
   const candidates = [];
   const seen = new Set();
   for (const file of paths) {
-    const candidate = await candidateFor('claude', file);
+    const candidate = await candidateFor('claude', file, onUnavailable);
     if (!candidate || seen.has(candidate.path)) continue;
     seen.add(candidate.path);
     candidates.push(candidate);
@@ -585,11 +588,12 @@ async function readCcSwitchProxyRows(dbPath, provider, sessionId, records) {
   finally { db?.close(); }
 }
 
-async function candidateFor(provider, file) {
+async function candidateFor(provider, file, onUnavailable) {
   if (typeof file !== 'string' || !file || file.includes('\0')) return null;
   let canonical;
-  try { canonical = await realpath(file); } catch { return null; }
-  const metadata = await info(canonical);
+  try { canonical = await realpath(file); }
+  catch (error) { reportDiscoveryError(error, onUnavailable); return null; }
+  const metadata = await info(canonical, onUnavailable);
   return metadata?.isFile() ? { provider, path: canonical, info: metadata } : null;
 }
 
@@ -989,8 +993,8 @@ export function createLiveSessionReader() {
 const USAGE_MAX_FILE_BYTES = 256 * 1024 * 1024, USAGE_MAX_UNITS = 20_000, USAGE_MAX_DIRECTORIES = 5_000;
 
 /** Every JSONL session file under a root that was written at or after cutoffMs; subagent folders are skipped. */
-async function walkRecentJsonl(root, cutoffMs) {
-  const rootStat = await info(root);
+async function walkRecentJsonl(root, cutoffMs, onUnavailable) {
+  const rootStat = await info(root, onUnavailable);
   if (!rootStat?.isDirectory()) return [];
   const found = [], queue = [root], seen = new Set();
   while (queue.length && seen.size < USAGE_MAX_DIRECTORIES) {
@@ -1001,13 +1005,13 @@ async function walkRecentJsonl(root, cutoffMs) {
       if (seen.has(canonical)) continue;
       seen.add(canonical);
       entries = await readdir(directory, { withFileTypes: true });
-    } catch { continue; }
+    } catch (error) { reportDiscoveryError(error, onUnavailable); continue; }
     for (const entry of entries) {
       const file = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         if (!skippedDirectories.has(entry.name.toLowerCase())) queue.push(file);
       } else if (entry.isFile() && /\.jsonl$/i.test(entry.name)) {
-        const metadata = await info(file);
+        const metadata = await info(file, onUnavailable);
         if (metadata?.isFile() && metadata.mtimeMs >= cutoffMs) found.push({ path: file, size: metadata.size, mtimeMs: metadata.mtimeMs });
       }
     }
@@ -1034,7 +1038,7 @@ async function streamCompleteText(file, onChunk, pace) {
   const decoder = new StringDecoder('utf8');
   let carry = '', read = 0;
   const metadata = await stat(file);
-  if (!metadata.size) return;
+  if (!metadata.size) return true;
   for await (const chunk of createReadStream(file, { highWaterMark: USAGE_CHUNK_BYTES, end: metadata.size - 1 })) {
     const text = carry + decoder.write(chunk), end = text.lastIndexOf('\n') + 1;
     if (end) await onChunk(text.slice(0, end));
@@ -1043,10 +1047,15 @@ async function streamCompleteText(file, onChunk, pace) {
     await pace(chunk.length);
   }
   if (read !== metadata.size) throw new Error('TPS usage file changed while reading');
+  if (carry.trim()) {
+    if (!parsedRow(carry)) return false;
+    await onChunk(carry + '\n');
+  }
+  return true;
 }
 
 async function streamJsonRows(file, onBatch, pace) {
-  await streamCompleteText(file, async text => {
+  return streamCompleteText(file, async text => {
     let batch = [];
     for (const line of text.split('\n')) {
       const row = parsedRow(line);
@@ -1091,6 +1100,7 @@ function rankedUsage(window) {
   const result = { ...window, totals: {} };
   if (window.includeRecent) Object.assign(result, { recent: [], recentFrom: Date.now() - RECENT_STATS_MS });
   if (window.includeUsageTimes) Object.assign(result, { usageByTime: {}, usageTimesFrom: leaderboardUsageTimesFrom(window.from) });
+  if (window.includeRecords) Object.assign(result, { records: [], recordFrom: window.recordFrom, complete: true });
   return result;
 }
 
@@ -1099,29 +1109,38 @@ function usageResult(days, rank) {
   const result = { days, leaderboardDays: rank.totals, leaderboardFrom: rank.from };
   if (rank.recent) result.recent = trimRecentRequests(rank.recent);
   if (rank.usageByTime) Object.assign(result, { leaderboardUsageByTime: rank.usageByTime, usageTimesFrom: rank.usageTimesFrom });
+  if (rank.records) Object.assign(result, { records: rank.records, complete: rank.complete });
   return result;
 }
 
 async function addCodexStreamRecords(days, file, minDay, leaderboardDays, pace = readPacer()) {
   const parser = createCodexParser(await codexSessionId(file), { limit: Infinity });
-  await streamJsonRows(file, batch => parser.feed(batch), pace);
+  const complete = await streamJsonRows(file, batch => parser.feed(batch), pace);
+  if (leaderboardDays?.records && !complete) leaderboardDays.complete = false;
   accumulateRecords(days, 'codex', parser.finish(), { minDay, leaderboardDays });
 }
 
 async function addFileRecords(days, provider, file, minDay, isSubagent, leaderboardDays, pace) {
-  const metadata = await info(file);
-  if (!metadata?.isFile()) return;
+  const metadata = await stat(file);
+  if (!metadata.isFile()) throw new Error(sourceMessage('notice.read-failed'));
   if (metadata.size > USAGE_MAX_FILE_BYTES) throw Object.assign(new Error(sourceMessage('notice.session-file-too-large')), { code: 'too_large' });
   const cursor = createJsonlCursor('', provider, '', { isSubagent, limit: Infinity });
-  await streamCompleteText(file, text => cursor.feed(text), pace);
+  const complete = await streamCompleteText(file, text => cursor.feed(text), pace);
+  if (leaderboardDays?.records && !complete) leaderboardDays.complete = false;
   accumulateRecords(days, provider, cursor.finish(), { minDay, leaderboardDays });
 }
 
-async function fileUsageUnit(provider, file, rankWindow) {
+async function fileUsageUnit(provider, file, rankWindow, onUnavailable) {
   // Claude keeps subagent calls in <session>/subagents; they belong to the parent session's unit.
+  let incomplete = false;
   const subagents = provider === 'claude'
-    ? (await collectClaudeSubagentCandidates(file.path, path.basename(file.path, '.jsonl'))).map(candidate => ({ path: candidate.path, size: candidate.info.size, mtimeMs: candidate.info.mtimeMs }))
+    ? (await collectClaudeSubagentCandidates(file.path, path.basename(file.path, '.jsonl'), () => { incomplete = true; }))
+      .map(candidate => ({ path: candidate.path, size: candidate.info.size, mtimeMs: candidate.info.mtimeMs }))
     : [];
+  if (incomplete) {
+    onUnavailable?.();
+    return null;
+  }
   const stamp = [identity(file.path), file.size, file.mtimeMs, ...subagents.map(item => `${item.size}:${item.mtimeMs}`)].join(':');
   return {
     // A switch between mirrored files replaces the same logical unit, including its retained counts.
@@ -1135,6 +1154,12 @@ async function fileUsageUnit(provider, file, rankWindow) {
       if (provider === 'codex') await addCodexStreamRecords(days, file.path, minDay, rank, pace);
       else await addFileRecords(days, provider, file.path, minDay, false, rank, pace);
       for (const item of subagents) await addFileRecords(days, 'claude', item.path, minDay, true, rank, pace);
+      if (rank?.records) {
+        for (const item of [file, ...subagents]) {
+          const current = await stat(item.path);
+          if (current.size !== item.size || current.mtimeMs !== item.mtimeMs) rank.complete = false;
+        }
+      }
       return usageResult(days, rank);
     }
   };
@@ -1169,12 +1194,10 @@ async function readOpenCodeSession(dbPath, v2, sessionId, rankWindow) {
 }
 
 /** One unit per OpenCode session updated since cutoffMs; the unit's stamp includes its message count. */
-async function openCodeUsageUnits(dbPath, cutoffMs, rankWindow) {
-  const database = await info(dbPath);
+async function openCodeUsageUnits(dbPath, cutoffMs, rankWindow, onUnavailable) {
+  const database = await info(dbPath, onUnavailable);
   if (!database?.isFile()) return [];
-  let DatabaseSync;
-  try { ({ DatabaseSync } = await import('node:sqlite')); }
-  catch { return []; }
+  const { DatabaseSync } = await import('node:sqlite');
   const units = [];
   let db;
   try {
@@ -1206,16 +1229,16 @@ async function openCodeUsageUnits(dbPath, cutoffMs, rankWindow) {
 }
 
 /** Antigravity: one unit per conversation whose transcript was written since cutoffMs; timing comes from its native store. */
-async function antigravityUsageUnits(brainRoot, cutoffMs, rankWindow) {
-  if (!(await info(brainRoot))?.isDirectory()) return [];
+async function antigravityUsageUnits(brainRoot, cutoffMs, rankWindow, onUnavailable) {
+  if (!(await info(brainRoot, onUnavailable))?.isDirectory()) return [];
   let entries;
   try { entries = await readdir(brainRoot, { withFileTypes: true }); }
-  catch { return []; }
+  catch (error) { reportDiscoveryError(error, onUnavailable); return []; }
   const units = [];
   for (const entry of entries.slice(0, USAGE_MAX_UNITS)) {
     if (!entry.isDirectory() || !safeSegment(entry.name)) continue;
     const transcript = path.join(brainRoot, entry.name, '.system_generated', 'logs', 'transcript.jsonl');
-    const metadata = await info(transcript);
+    const metadata = await info(transcript, onUnavailable);
     if (!metadata?.isFile() || metadata.mtimeMs < cutoffMs) continue;
     units.push({
       key: identity(`antigravity|${transcript}`),
@@ -1232,24 +1255,26 @@ async function readAntigravityUsage(transcript, conversationId, rankWindow) {
   const days = {}, notes = [], rank = rankedUsage(rankWindow);
   const native = await readAntigravityTimings(transcript, message => notes.push(message));
   const cursor = createJsonlCursor('', 'antigravity', '', { sessionId: conversationId, limit: Infinity });
-  await streamCompleteText(transcript, text => cursor.feed(text), readPacer());
+  const complete = await streamCompleteText(transcript, text => cursor.feed(text), readPacer());
+  if (rank?.records && !complete) rank.complete = false;
   accumulateRecords(days, 'antigravity', cursor.finish(native), { minDay: dayKeyAgo(Date.now(), HISTORY_DAYS - 1), leaderboardDays: rank });
   return usageResult(days, rank);
 }
 
 /** Descriptors for the usage index: Codex, Claude and Pi session files, OpenCode sessions, and Antigravity conversations. */
 export async function discoverUsageUnits(cutoffMs, options = {}) {
-  const roots = await configuredRoots(options.roots, options.includeDefaults !== false);
-  const { rankDay, rankFrom = rankDay, includeRecent = false, includeUsageTimes = false } = options;
+  const { rankDay, rankFrom = rankDay, includeRecent = false, includeUsageTimes = false, includeRecords = false, onUnavailable } = options;
+  const roots = await configuredRoots(options.roots, options.includeDefaults !== false, onUnavailable);
   const rankWindow = rankDay ? { from: rankFrom, start: leaderboardDayStart(rankFrom),
-    end: leaderboardDayStart(rankDay) + 86_400_000, includeRecent, includeUsageTimes } : undefined;
+    end: leaderboardDayStart(rankDay) + 86_400_000, includeRecent, includeUsageTimes, includeRecords, recordFrom: cutoffMs } :
+    includeRecords ? { includeRecords, recordFrom: cutoffMs } : undefined;
   // Mirrors are append-only transcripts. Keep the largest copy; use its modification time to break ties.
   // A sync can give a stale copy a newer mtime, so root order and mtime alone cannot identify the fullest log.
   const units = [];
   for (const provider of ['codex', 'claude', 'pi']) {
     const selected = new Map();
     for (const root of (roots[provider] ?? []).slice(0, 100)) {
-      for (const file of await walkRecentJsonl(root, cutoffMs)) {
+      for (const file of await walkRecentJsonl(root, cutoffMs, onUnavailable)) {
         const filename = path.basename(file.path), previous = selected.get(filename);
         if (!previous && units.length + selected.size >= USAGE_MAX_UNITS) continue;
         if (!previous || file.size > previous.size || (file.size === previous.size && file.mtimeMs > previous.mtimeMs)) {
@@ -1257,16 +1282,19 @@ export async function discoverUsageUnits(cutoffMs, options = {}) {
         }
       }
     }
-    for (const file of selected.values()) units.push(await fileUsageUnit(provider, file, rankWindow));
+    for (const file of selected.values()) {
+      const unit = await fileUsageUnit(provider, file, rankWindow, onUnavailable);
+      if (unit) units.push(unit);
+    }
   }
   for (const root of (roots.opencode ?? []).slice(0, 10)) {
-    try { units.push(...await openCodeUsageUnits(root, cutoffMs, rankWindow)); }
-    catch { options.onUnavailable?.(); }
+    try { units.push(...await openCodeUsageUnits(root, cutoffMs, rankWindow, onUnavailable)); }
+    catch { onUnavailable?.(); }
   }
   for (const root of (roots.antigravity ?? []).slice(0, 10)) {
-    units.push(...await antigravityUsageUnits(root, cutoffMs, rankWindow));
+    units.push(...await antigravityUsageUnits(root, cutoffMs, rankWindow, onUnavailable));
   }
-  for (const source of await hermesSources(roots.hermes, cutoffMs)) {
+  for (const source of await hermesSources(roots.hermes, cutoffMs, undefined, onUnavailable)) {
     units.push({
       key: identity(`hermes|${source.root}`),
       stamp: source.stamp,
@@ -1281,6 +1309,17 @@ export async function discoverUsageUnits(cutoffMs, options = {}) {
     });
   }
   return units;
+}
+
+export const USAGE_RECORD_PAGE_SIZE = 512;
+
+export function usageRecordPage(result, offset) {
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Array.isArray(result?.records) || offset > result.records.length) {
+    throw new Error('invalid usage records page');
+  }
+  const records = result.records.slice(offset, offset + USAGE_RECORD_PAGE_SIZE);
+  const next = offset + records.length;
+  return { records, nextOffset: next < result.records.length ? next : null, complete: result.complete === true };
 }
 
 /** Discover only configured provider roots. Optional includeDefaults:false isolates tests/custom scans. */

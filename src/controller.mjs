@@ -231,7 +231,7 @@ export function createTpsController(orca, {
       if (stopped) return { session: null, warnings: [] };
       const result = await readSession(requestedTarget, options);
       if (stopped || !matchesTarget(result.session, requestedTarget)) return result;
-      const saved = cache.set(id, result.session.records);
+      const saved = cache.set(id, result.session.records, { display: channel === key && !result.warnings?.length });
       return { ...result, cachedAt: saved.updatedAt, session: { ...result.session, records: saved.records } };
     })().finally(() => projectReads.delete(channel));
     projectReads.set(channel, pending);

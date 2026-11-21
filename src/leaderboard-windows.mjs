@@ -32,44 +32,56 @@ function validSnapshot({ cutoffAt, nextAt, boards } = {}) {
       validStatsLabel(row.topModel) && validStatsLabel(row.topCli));
 }
 
-export function createWindowViews({ storage, origin, request, now }) {
+export function createWindowViews({ storage, origin, request, now, panels, scope = () => origin }) {
   const cacheKey = 'leaderboard:ranking-snapshot';
-  let current, pending;
+  let current, currentScope, pending;
   const view = (snapshot, hours) => ({ ...snapshot.boards[hours], boards: snapshot.boards, updatedAt: snapshot.updatedAt });
-  function clear() { current = undefined; }
+  function clear() { current = currentScope = undefined; }
   function known(key) {
     return Object.values(current?.boards ?? {}).some(board => board.rows.some(row => row.username.toLowerCase() === key));
   }
   async function load(hours, signal) {
     if (signal.aborted) return null;
+    const requestedScope = scope();
+    if (requestedScope !== currentScope) clear();
     if (!current) {
-      const saved = await Promise.resolve().then(() => storage.get(cacheKey)).then(value =>
-        value ? JSON.parse(gunzipSync(Buffer.from(value, 'base64')).toString('utf8')) : null).catch(() => null);
-      if (signal.aborted || saved?.origin !== origin || !validTime(saved.updatedAt) || !validSnapshot(saved)) return null;
+      const saved = await Promise.resolve().then(async () => {
+        if (panels) return panels.readPanel('leaderboard', requestedScope)?.value;
+        const value = await storage.get(cacheKey);
+        return value ? JSON.parse(gunzipSync(Buffer.from(value, 'base64')).toString('utf8')) : null;
+      }).catch(() => null);
+      if (signal.aborted || requestedScope !== scope() || saved?.origin !== origin ||
+          !validTime(saved.updatedAt) || !validSnapshot(saved)) return null;
       current ??= saved;
+      currentScope = requestedScope;
     }
     return view(current, hours);
   }
 
-  async function download(signal) {
+  async function download(signal, requestedScope) {
     const reply = await request('/api/leaderboard/snapshot', { auth: false, signal, viewHeaders: true });
-    if (signal.aborted) return {};
+    if (signal.aborted || requestedScope !== scope()) return {};
     if (!validSnapshot(reply)) return { code: unavailable(reply) };
     const updatedAt = now();
     const { cutoffAt, nextAt, boards } = reply;
     const clockOffset = validTime(reply.serverTime) ? reply.serverTime - updatedAt : 0;
     const snapshot = { origin, cutoffAt, nextAt, boards: { ...boards, 0: { ...boards[0], clockOffset } }, updatedAt };
     current = snapshot;
-    await Promise.resolve().then(() => storage.set(cacheKey, gzipSync(JSON.stringify(snapshot)).toString('base64'))).catch(() => {});
+    currentScope = requestedScope;
+    await Promise.resolve().then(() => panels
+      ? panels.publishPanel('leaderboard', requestedScope, snapshot, updatedAt)
+      : storage.set(cacheKey, gzipSync(JSON.stringify(snapshot)).toString('base64'))).catch(() => {});
     return snapshot;
   }
 
   async function fetch(hours, force, signal) {
     if (!signal || signal.aborted) return {};
+    const requestedScope = scope();
+    if (requestedScope !== currentScope) clear();
     if (current && !force && now() < current.updatedAt + RANKING_REFRESH_MS) return view(current, hours);
-    if (pending?.signal !== signal) {
-      const job = { signal, promise: undefined };
-      job.promise = download(signal).finally(() => { if (pending === job) pending = undefined; });
+    if (pending?.signal !== signal || pending.scope !== requestedScope) {
+      const job = { signal, scope: requestedScope, promise: undefined };
+      job.promise = download(signal, requestedScope).finally(() => { if (pending === job) pending = undefined; });
       pending = job;
     }
     const snapshot = await pending.promise;

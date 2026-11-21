@@ -8,8 +8,9 @@ import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import { gunzipSync, gzip } from 'node:zlib';
 import { readOrcaProfile } from './active-conversation.mjs';
-import { normalizeComparePath } from './data.mjs';
+import { normalizeComparePath, USAGE_RECORD_PAGE_SIZE } from './data.mjs';
 import { COLLECTOR_FILES, MAX_RESPONSE_BASE64, USAGE_PAGE_SIZE, collectorCommand, remoteRecord } from './remote-collector.mjs';
+import { validInstallationId } from './leaderboard-installation.mjs';
 import { REMOTE_USAGE_PREFIX, leaderboardDayStart, leaderboardUsageTimesFrom, validLeaderboardUsageTimes } from './usage-summary.mjs';
 import { HOUR_MS, MAX_RECENT_REQUESTS, validRecentRequest } from './leaderboard-stats.mjs';
 
@@ -451,14 +452,15 @@ function validUsageDays(days) {
 
 export function createRemoteUsageReader(orca, {
   lookupSsh = readSshTargets, decode = decodeCollectorReply,
-  resolveHosts = resolveUsageHosts(lookupSsh), launch = launchSsh, t = sourceMessage, includeRecent = false, includeUsageTimes = false
+  resolveHosts = resolveUsageHosts(lookupSsh), launch = launchSsh, t = sourceMessage, includeRecent = false, includeUsageTimes = false,
+  includeUsageSources = false, includeRecords = false
 } = {}) {
   const lifetime = new AbortController();
   const connections = new Set();
   const signal = timeout => AbortSignal.any([lifetime.signal, AbortSignal.timeout(timeout)]);
 
   let currentScan;
-  async function openScan(route, scope, cutoffMs, timeZone, rankDay, rankFrom) {
+  async function openScan(route, legacyScope, cutoffMs, timeZone, rankDay, rankFrom) {
     await finish();
     const token = id(), startupSignal = signal(45_000);
     const files = await loadCollectorFiles();
@@ -468,16 +470,23 @@ export function createRemoteUsageReader(orca, {
     try {
       await connection.ready(startupSignal);
       const items = new Map();
-      let offset = 0;
+      let offset = 0, scope = legacyScope, sourceId;
       for (;;) {
         const page = await connection.exchange({
           ...(offset === 0 ? { files } : {}),
           usage: { type: 'list', cutoffMs, offset, timeZone, rankDay, rankFrom,
-            ...(includeRecent ? { includeRecent } : {}), ...(includeUsageTimes ? { includeUsageTimes } : {}) }
+            ...(includeRecent ? { includeRecent } : {}), ...(includeUsageTimes ? { includeUsageTimes } : {}),
+            ...(includeUsageSources ? { includeUsageSources } : {}), ...(includeRecords ? { includeRecords } : {}) }
         }, signal(45_000));
         if (!Array.isArray(page.items) || page.items.length > USAGE_PAGE_SIZE || typeof page.more !== 'boolean' ||
           (page.more && page.items.length !== USAGE_PAGE_SIZE)) {
           throw new RemoteReadError('read');
+        }
+        if (includeUsageSources) {
+          if (!validInstallationId(page.sourceId) ||
+              (offset && page.sourceId !== sourceId)) throw new RemoteReadError('read');
+          sourceId = page.sourceId;
+          scope = `${REMOTE_USAGE_PREFIX}${sourceId}:`;
         }
         for (const item of page.items) {
           if (typeof item.key !== 'string' || !usageKey.test(item.key) || typeof item.stamp !== 'string' || !usageKey.test(item.stamp) ||
@@ -490,7 +499,7 @@ export function createRemoteUsageReader(orca, {
         if (!page.more) break;
         offset += page.items.length;
       }
-      return { scope, connection, items };
+      return { scope, sourceId, connection, items, observedAt: Date.now() };
     } catch (error) {
       await close(connection);
       throw error;
@@ -498,13 +507,30 @@ export function createRemoteUsageReader(orca, {
 
   }
 
-  async function scanHost(route, scope, cutoffMs, timeZone, rankDay, rankFrom) {
-    const open = () => openScan(route, scope, cutoffMs, timeZone, rankDay, rankFrom);
+  async function scanHost(route, legacyScope, cutoffMs, timeZone, rankDay, rankFrom) {
+    const open = () => openScan(route, legacyScope, cutoffMs, timeZone, rankDay, rankFrom);
     const original = currentScan = await open();
-    return [...original.items.values()].map(item => ({ ...item, readMany }));
+    const { scope, sourceId, observedAt } = original;
+    return { scope, sourceId, observedAt, items: [...original.items.values()].map(item => ({
+      ...item, ...(includeRecords ? { deviceGuid: sourceId, readRecords: offset => readRecords(item, offset) } : { readMany })
+    })) };
+
+    async function readRecords(item, offset) {
+      const scan = currentScan?.scope === scope ? currentScan : (currentScan = await open());
+      if (scan.scope !== scope || scan.items.get(item.key)?.stamp !== item.stamp) throw new RemoteReadError('read');
+      const reply = await scan.connection.exchange({ usage: { type: 'records', key: item.key.slice(scope.length), offset } }, signal(90_000));
+      if (reply.sourceId !== sourceId || !Array.isArray(reply.records) || reply.records.length > USAGE_RECORD_PAGE_SIZE ||
+          typeof reply.complete !== 'boolean' || (reply.nextOffset !== null &&
+          (!reply.records.length || reply.nextOffset !== offset + reply.records.length)) ||
+          !reply.records.every(row => row && usageKey.test(row.id) && Number.isFinite(row.completedAt))) {
+        throw new RemoteReadError('read');
+      }
+      return reply;
+    }
 
     async function readMany(keys) {
       const scan = currentScan?.scope === scope ? currentScan : (currentScan = await open());
+      if (scan.scope !== scope) throw new RemoteReadError('read');
       const matching = keys.filter(key => scan.items.get(key)?.stamp === original.items.get(key)?.stamp);
       if (!matching.length) return new Map();
       const localKeys = matching.map(key => key.slice(scope.length));
@@ -532,6 +558,7 @@ export function createRemoteUsageReader(orca, {
 
   async function discover(cutoffMs, rankDay, rankFrom = rankDay) {
     const discovery = { descriptors: [], coveredRemoteScopes: new Set(), remoteComplete: true };
+    if (includeUsageSources) discovery.remoteSources = new Map();
     if (!orca.grantedCapabilities?.includes('workspace:read') || lifetime.signal.aborted) return discovery;
     let routes;
     try { routes = await resolveHosts(signal(15_000)); }
@@ -547,10 +574,16 @@ export function createRemoteUsageReader(orca, {
       if (!scopes.has(scope)) scopes.set(scope, route);
     }
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    for (const [scope, route] of scopes) {
+    for (const [legacyScope, route] of scopes) {
       if (lifetime.signal.aborted) break;
       try {
-        const items = await scanHost(route, scope, cutoffMs, timeZone, rankDay, rankFrom);
+        const { scope, sourceId, observedAt, items } = await scanHost(route, legacyScope, cutoffMs, timeZone, rankDay, rankFrom);
+        const previous = discovery.remoteSources?.get(scope);
+        if (previous) {
+          previous.legacyScopes.add(legacyScope);
+          continue;
+        }
+        discovery.remoteSources?.set(scope, { sourceId, observedAt, legacyScopes: new Set([legacyScope]) });
         discovery.coveredRemoteScopes.add(scope);
         for (const item of items) discovery.descriptors.push(item);
       } catch {

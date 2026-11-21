@@ -45,8 +45,8 @@
   <message id="model-speed-list">Kecepatan keluaran rata-rata per model, tercepat dahulu</message>
   <message id="empty-model-speeds">Tidak ada model dengan cukup permintaan dalam periode ini</message>
   <message id="usage-heatmap">Peta panas penggunaan</message>
-  <message id="heatmap-description">Penggunaan harian dalam setahun terakhir (M, termasuk cache)</message>
-  <message id="heatmap-label">Peta panas penggunaan harian selama setahun terakhir (M)</message>
+  <message id="heatmap-description">Penggunaan harian dalam 30 hari terakhir (M, termasuk cache)</message>
+  <message id="heatmap-label">Peta panas penggunaan harian selama 30 hari terakhir (M)</message>
   <message id="heatmap-less">Lebih sedikit</message>
   <message id="heatmap-more">Lebih banyak</message>
   <message id="initial-recent-requests">Kanal saat ini · Permintaan terbaru: 0</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">Model tambahan yang tidak ditampilkan: {0}</message>
   <message id="model-speed-insufficient-samples">Model dengan permintaan terlalu sedikit untuk diperingkat: {0}</message>
   <message id="usage-unavailable">Statistik penggunaan tidak tersedia untuk sementara</message>
-  <message id="yearly-usage-total">Setahun terakhir: {0} · Hari aktif: {1}</message>
+  <message id="recent-usage-total">30 hari terakhir: {0} · Hari aktif: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Permintaan: {2}</message>
   <message id="heatmap-day-empty">{0} · Tidak ada penggunaan tercatat</message>
   <message id="current-channel">Kanal saat ini</message>
@@ -251,6 +251,9 @@
   <message id="language-name">Bahasa Indonesia</message>
   <message id="last-sync-time">Sinkronisasi terakhir</message>
   <message id="last-sync-failed">Unggahan gagal pada {0} · {1}</message>
+  <message id="rolling-upload-failed">Sinkronisasi papan peringkat bergulir gagal · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">Penggunaan hari ini telah diunggah. Sinkronisasi papan peringkat bergulir gagal · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">Papan peringkat bergulir telah disinkronkan. Unggahan penggunaan hari ini gagal · {0}</message>
   <message id="sync-failure-unknown">Penyebab tidak tersedia</message>
   <message id="data-upload">Unggah data</message>
   <message id="upload-now">Unggah sekarang</message>

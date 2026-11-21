@@ -45,8 +45,8 @@
   <message id="model-speed-list">Average output speed by model, fastest first</message>
   <message id="empty-model-speeds">No models have enough requests in this period</message>
   <message id="usage-heatmap">Usage heatmap</message>
-  <message id="heatmap-description">Daily usage over the past year (M, including cache)</message>
-  <message id="heatmap-label">Daily usage heatmap for the past year (M)</message>
+  <message id="heatmap-description">Daily usage over the past 30 days (M, including cache)</message>
+  <message id="heatmap-label">Daily usage heatmap for the past 30 days (M)</message>
   <message id="heatmap-less">Less</message>
   <message id="heatmap-more">More</message>
   <message id="initial-recent-requests">Current channel · 0 recent requests</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">Additional models omitted: {0}</message>
   <message id="model-speed-insufficient-samples">Models with too few requests to rank: {0}</message>
   <message id="usage-unavailable">Usage stats are temporarily unavailable</message>
-  <message id="yearly-usage-total">Past year: {0} · Active days: {1}</message>
+  <message id="recent-usage-total">Past 30 days: {0} · Active days: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Requests: {2}</message>
   <message id="heatmap-day-empty">{0} · No recorded usage</message>
   <message id="current-channel">Current channel</message>
@@ -251,6 +251,9 @@
   <message id="language-name">English</message>
   <message id="last-sync-time">Last sync</message>
   <message id="last-sync-failed">Upload failed at {0} · {1}</message>
+  <message id="rolling-upload-failed">Rolling leaderboard sync failed · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">Today's usage was uploaded. Rolling leaderboard sync failed · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">Rolling leaderboard synced. Today's usage upload failed · {0}</message>
   <message id="sync-failure-unknown">Reason unavailable</message>
   <message id="data-upload">Data upload</message>
   <message id="upload-now">Upload now</message>

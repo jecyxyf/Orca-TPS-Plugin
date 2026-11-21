@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,9 +10,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createLeaderboardServer } from '../server/app.mjs';
 import { createLeaderboardJobs } from '../server/leaderboard-jobs.mjs';
 import { openLeaderboardStore } from '../server/store.mjs';
+import { openLocalUsageDb } from '../src/local-usage-db.mjs';
 import { startLeaderboard } from '../src/leaderboard.mjs';
 import { createSubmissionStats } from '../src/submission-stats.mjs';
-import { uploadUsageChanges } from '../src/usage-upload.mjs';
+import { createSourceUploader, uploadUsageChanges } from '../src/usage-upload.mjs';
 import { createWindowViews } from '../src/leaderboard-windows.mjs';
 import { HOUR_MS, RANKING_REFRESH_MS, SPEED_WINDOW_MS, USAGE_UPLOAD_BYTES, hourStart } from '../src/leaderboard-stats.mjs';
 import { createAvatarCache } from '../src/leaderboard-avatars.mjs';
@@ -116,6 +118,36 @@ async function fixture(t, names = ['alice', 'bob']) {
   });
   return { call, advance, login, get, submit, websiteLogin, authorizePlugin, form, endpoint, store, clock: () => clock };
 }
+
+test('rate limits use the visitor IP only when the connection comes from a trusted proxy', async t => {
+  const store = openLeaderboardStore(':memory:');
+  t.after(() => store.close());
+  const proxyIp = '172.18.0.1';
+  const server = createLeaderboardServer({ store, baseUrl: ORIGIN, now: () => START, trustedProxyIps: [proxyIp] });
+  const request = (remoteAddress, forwardedIp) => new Promise(resolve => {
+    let status;
+    server.emit('request', { method: 'GET', url: '/healthz', socket: { remoteAddress },
+      headers: { 'x-real-ip': forwardedIp } }, {
+      setHeader() {},
+      writeHead(code) { status = code; },
+      end() { resolve(status); }
+    });
+  });
+
+  for (let i = 0; i < 240; i++) assert.equal(await request(proxyIp, '2001:db8::1'), 200);
+  assert.equal(await request(proxyIp, '2001:0DB8:0:0:0:0:0:1'), 429, 'equivalent spellings share a limit');
+  assert.equal(await request(proxyIp, '192.0.2.10'), 200, 'another visitor on the same proxy has a separate limit');
+  assert.equal(await request('::ffff:172.18.0.1', '2001:db8::1'), 429, 'a mapped proxy address uses the same visitor limit');
+  assert.equal(await request('::ffff:127.0.0.1', '2001:db8::1'), 429, 'loopback proxies still use the visitor limit');
+
+  for (let i = 0; i < 240; i++) assert.equal(await request('172.18.0.2', '192.0.2.11'), 200);
+  assert.equal(await request('172.18.0.2', '192.0.2.12'), 429, 'an untrusted visitor cannot reset the limit with a header');
+
+  for (let i = 0; i < 240; i++) assert.equal(await request(proxyIp), 200);
+  assert.equal(await request(proxyIp, '192.0.2.11, 192.0.2.12'), 429, 'a list of addresses falls back to the peer limit');
+  assert.throws(() => createLeaderboardServer({ store, baseUrl: ORIGIN, trustedProxyIps: ['172.18.0.0/16'] }),
+    /LEADERBOARD_TRUSTED_PROXY_IPS/);
+});
 
 test('speed ranks cap at 20 and fill the gap when a faster upload expires', async t => {
   const { call, advance, clock, store } = await fixture(t);
@@ -297,6 +329,64 @@ test('rolling uploader retries the same bounded payload and marks coverage after
   assert.deepEqual(sent.at(-1).body.coverage, coverage);
 });
 
+test('a large legacy rolling receipt resumes after a lost response and an interrupted local save', async () => {
+  const now = START + 12 * HOUR_MS, coverage = [now - 720 * HOUR_MS, now];
+  const buckets = Array.from({ length: 32_000 }, (_, index) => {
+    const hash = createHash('sha256').update(String(index)).digest();
+    return [now - 1 - index * 65_000 - hash.readUInt16BE(0) % 1000, hash.readUInt32BE(2) + 1];
+  });
+  const saved = new Map(), sent = [], limit = 256 * 1024;
+  const identity = 'existing-account';
+  const key = 'leaderboard:rolling-upload:' + createHash('sha256').update(identity).digest('hex').slice(0, 24);
+  const encode = state => gzipSync(JSON.stringify(state)).toString('base64');
+  const acknowledged = buckets.slice(0, 10_000);
+  const initial = encode({ version: now - 1, acknowledged, coverage: null, pending: null });
+  assert.ok(Buffer.byteLength(JSON.stringify(initial)) < limit);
+  assert.ok(Buffer.byteLength(JSON.stringify(encode({ acknowledged: buckets }))) > limit);
+  saved.set(key, initial);
+  let publishError;
+  const storage = {
+    get: async name => saved.get(name),
+    set: async (name, value) => {
+      if (Buffer.byteLength(JSON.stringify(value)) > limit) throw new Error('storage value limit');
+      if (name === key && publishError === 'before') {
+        publishError = undefined;
+        throw new Error('interrupted receipt save');
+      }
+      saved.set(name, value);
+      if (name === key && publishError === 'after') {
+        publishError = undefined;
+        throw new Error('receipt saved without a response');
+      }
+    },
+    delete: async name => saved.delete(name)
+  };
+  const installationId = randomUUID();
+  const sync = () => uploadUsageChanges({ storage, identity, installationId, now, active: () => true,
+    readUsageTimes: async () => ({ buckets, coverage }),
+    send: async packet => {
+      sent.push(packet);
+      if (sent.length === 1) return { code: 'unavailable' };
+      if (sent.length === 2) publishError = 'before';
+      if (sent.length === 3) publishError = 'after';
+      return { code: 'accepted', version: packet.body.version };
+    } });
+  assert.equal(await sync(), 'unavailable');
+  const previousHead = saved.get(key);
+  const previousKeyCount = saved.size;
+  await assert.rejects(sync(), /interrupted receipt save/);
+  assert.deepEqual(saved.get(key), previousHead);
+  assert.equal(saved.size, previousKeyCount);
+  for (let attempts = 0; attempts < 20 && await sync() === 'accepted'; attempts++) { /* Drain all pending batches. */ }
+  assert.deepEqual(sent[1], sent[0]);
+  assert.deepEqual(sent[2], sent[0]);
+  assert.deepEqual(sent.slice(2).flatMap(packet => packet.body.buckets), buckets.slice(acknowledged.length));
+  assert.deepEqual(sent.at(-1).body.coverage, coverage);
+  assert.equal(await sync(), undefined);
+  assert.ok(saved.get(key).chunks > 1);
+  assert.equal(saved.size, saved.get(key).chunks + 1);
+});
+
 test('one upload carries the daily score and rolling data, and retrying it counts neither twice', async t => {
   const { call, login, clock } = await fixture(t);
   const token = await login();
@@ -316,6 +406,285 @@ test('one upload carries the daily score and rolling data, and retrying it count
   }
   const { boards } = await (await call('/api/leaderboard/snapshot')).json();
   for (const hours of [24, 168, 720]) assert.equal(boards[hours].rows[0].tokens, 1000);
+});
+
+test('format 2 counts shared SSH once and a stale writer cannot overwrite a staged replacement', async t => {
+  const { call, login, clock, advance } = await fixture(t);
+  const token = await login(), other = await login();
+  const a = randomUUID(), b = randomUUID(), ssh = randomUUID(), at = clock() - 30, span = 720 * HOUR_MS;
+  const packet = (reporterId, operations) => ({ format: 2, reporterId, requestId: randomUUID(), operations });
+  const send = async (body, credential = token) => (await call('/api/leaderboard/uploads', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${credential}` }, body: JSON.stringify(body) })).json();
+  const lease = () => ({ type: 'lease', sourceId: ssh, observedAt: clock() });
+  const row = (sourceId, sourceKind, tokens, leaseEpoch, revision = 1) => ({
+    type: 'update', sourceId, sourceKind, leaseEpoch, revision, daily: [{ day: TODAY, tokens }], buckets: [[at, tokens]]
+  });
+  const rank = async tokens => {
+    const daily = await (await call('/api/today')).json();
+    assert.equal(daily.rows[0].tokens, tokens);
+    const { boards } = await (await call('/api/leaderboard/snapshot')).json();
+    for (const hours of [24, 168, 720]) assert.equal(boards[hours].rows[0].tokens, tokens);
+  };
+  const first = packet(a, [lease(), row(a, 'local', 30), row(ssh, 'ssh', 100, 1)]);
+  const initial = await send(first);
+  assert.deepEqual(initial.results.map(item => item.code), ['accepted', 'accepted', 'accepted']);
+  assert.deepEqual((await send(first)).results, initial.results);
+  assert.equal((await send({ ...first, operations: [lease()] })).code, 'invalid');
+  advance(10_000);
+  const second = await send(packet(b, [lease(), row(b, 'local', 20)]));
+  assert.deepEqual(second.results.map(item => item.code), ['standby', 'accepted']);
+  await rank(150);
+  const separate = await send(packet(a, [lease(), row(ssh, 'ssh', 70, 1)]), other);
+  assert.deepEqual(separate.results.map(item => item.code), ['accepted', 'accepted']);
+  await rank(150);
+  advance(50_000);
+  const swap = await send(packet(b, [lease()]));
+  assert.equal(swap.results[0].baseline, true);
+  assert.equal(swap.results[0].leaseEpoch, 2);
+  const snapshotId = randomUUID(), coverage = [clock() - span, clock()];
+  const part = { ...row(ssh, 'ssh', 90, 2), type: 'baseline-part', purpose: 'handover', snapshotId,
+    coverage, partIndex: 0, partCount: 2 };
+  const commit = { type: 'baseline-commit', sourceId: ssh, snapshotId, coverage, leaseEpoch: 2 };
+  assert.equal((await send(packet(b, [part, commit]))).results[1].code, 'baseline_required');
+  await rank(150);
+  const rest = { ...part, partIndex: 1, daily: [], buckets: [] };
+  assert.equal((await send(packet(b, [rest, commit]))).results[1].code, 'accepted');
+  await rank(140);
+  advance(10_000);
+  assert.equal((await send(packet(a, [row(ssh, 'ssh', 800, 1, 100)]))).results[0].code, 'lease_expired');
+  assert.equal((await send(packet(a, [row(b, 'local', 100)]))).results[0].code, 'invalid');
+  assert.equal((await send(packet(a, [{ ...row(a, 'local', 50), ignored: 'a'.repeat(USAGE_UPLOAD_BYTES) }]))).code, 'invalid');
+  await rank(140);
+});
+
+test('format 3 accepts one source and resolves replays and GitHub renames by account ID', async t => {
+  const { call, login, clock, advance, store } = await fixture(t);
+  const token = await login();
+  const a = randomUUID(), b = randomUUID(), ssh = randomUUID(), at = clock() - 25;
+  const send = async body => (await call('/api/leaderboard/uploads', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body)
+  })).json();
+  const packet = (deviceGuid, operation, fields, username = 'alice') =>
+    ({ username, deviceGuid, data: { format: 3, operation, requestId: randomUUID(), ...fields } });
+  const update = (tokens, revision = 1) => ({ revision, daily: [{ day: TODAY, tokens }], buckets: [[at, tokens]] });
+  const old = packet(a, 'update', update(30));
+  assert.equal((await send(old)).results[0].code, 'accepted');
+  assert.equal((await send({ ...old, data: { ...old.data, buckets: [[at, 300]] } })).code, 'invalid');
+  assert.equal((await send(packet(a, 'update', { ...update(30), sourceId: ssh }))).code, 'invalid');
+  const status = await (await call('/api/today/status', { headers: { Authorization: `Bearer ${token}` } })).json();
+  assert.deepEqual([status.uploadFormat, status.accountId], [3, 1]);
+  advance(10_000);
+  assert.equal((await send(packet(b, 'update', update(20)))).results[0].code, 'accepted');
+  advance(10_000);
+  const grant = await send(packet(ssh, 'lease', { reporterGuid: a, observedAt: clock() }));
+  const leaseEpoch = grant.results[0].leaseEpoch;
+  assert.equal((await send(packet(ssh, 'update', { ...update(100), reporterGuid: a, leaseEpoch }))).results[0].code, 'accepted');
+  assert.equal((await send(packet(ssh, 'lease', { reporterGuid: b, observedAt: clock() }))).results[0].code, 'standby');
+  const { boards } = await (await call('/api/leaderboard/snapshot')).json();
+  for (const hours of [24, 168, 720]) assert.equal(boards[hours].rows[0].tokens, 150);
+  assert.equal(store.ranking(1, clock()).tokens, 150);
+  store.upsertAccount({ id: 1, login: 'alice-new' });
+  assert.equal((await send(old)).results[0].code, 'accepted');
+  assert.equal((await send(packet(a, 'update', update(50, 2)))).code, 'username_changed');
+  advance(10_000);
+  assert.equal((await send(packet(ssh, 'update', { ...update(130, 2), reporterGuid: a, leaseEpoch }, 'alice-new'))).results[0].code, 'accepted');
+  advance(10_000);
+  assert.equal((await send(packet(ssh, 'update', { ...update(900), reporterGuid: a, leaseEpoch }, 'alice-new'))).results[0].code, 'stale_version');
+  assert.equal(store.ranking(1, clock()).tokens, 180);
+  advance(40_000);
+  const next = (await send(packet(ssh, 'lease', { reporterGuid: b, observedAt: clock() }, 'alice-new'))).results[0];
+  assert.equal(next.baseline, true);
+  assert.ok(next.leaseEpoch > leaseEpoch);
+  const snapshotId = randomUUID();
+  const coverage = [clock() - 720 * HOUR_MS, clock()];
+  const baseline = { reporterGuid: b, leaseEpoch: next.leaseEpoch, snapshotId, coverage };
+  const part = { ...baseline, purpose: 'handover', partIndex: 0, partCount: 1, ...update(140) };
+  delete part.revision;
+  assert.equal((await send(packet(ssh, 'baseline-part', part, 'alice-new'))).results[0].code, 'accepted');
+  assert.equal(store.ranking(1, clock()).tokens, 180);
+  assert.equal((await send(packet(ssh, 'baseline-commit', baseline, 'alice-new'))).results[0].code, 'accepted');
+  advance(10_000);
+  assert.equal((await send(packet(ssh, 'update', { ...update(999, 500), reporterGuid: a, leaseEpoch }, 'alice-new'))).results[0].code, 'lease_expired');
+  assert.equal(store.ranking(1, clock()).tokens, 190);
+});
+
+test('source upload resumes a lost response and waits for both old devices before replacing mixed counts', async t => {
+  const { call, login, clock, advance } = await fixture(t);
+  const credential = await login();
+  const a = randomUUID(), b = randomUUID(), ssh = randomUUID(), at = clock() - 25;
+  async function post(route, body, requestId) {
+    return (await call(route, { method: 'POST', headers: { 'Content-Type': 'application/json',
+      Authorization: `Bearer ${credential}`, ...(requestId ? { 'idempotency-key': requestId } : {}) }, body: JSON.stringify(body) })).json();
+  }
+  for (const [installationId, tokens] of [[a, 130], [b, 120]]) {
+    const reply = await post('/api/leaderboard/uploads', {
+      daily: { requestId: randomUUID(), body: { day: TODAY, installationId, tokens } },
+      rolling: { requestId: randomUUID(), body: { installationId, version: 1, buckets: [[at, tokens]] } }
+    });
+    assert.equal(reply.daily.code, 'accepted');
+    advance(10_000);
+  }
+  const score = async () => (await (await call('/api/today')).json()).rows[0].tokens;
+  assert.equal(await score(), 250);
+  const view = (sourceId, sourceKind, tokens) => ({ sourceId, sourceKind, daily: [{ day: TODAY, tokens }],
+    buckets: [[at, tokens]], observedAt: clock(), coverage: [clock() - 720 * HOUR_MS, clock()] });
+  const stores = new Map([a, b].map(id => [id, new Map()]));
+  const uploader = id => createSourceUploader({
+    get: async key => stores.get(id).get(key), set: async (key, value) => stores.get(id).set(key, value),
+    delete: async key => stores.get(id).delete(key)
+  }, 'fixture/' + id, id);
+  let clientA = uploader(a), clientB = uploader(b), lost;
+  const read = id => async () => [view(id, 'local', id === a ? 30 : 20), view(ssh, 'ssh', 100)];
+  const run = async (client, id, send = body => post('/api/leaderboard/uploads', body)) => {
+    const result = await client({ now: clock(), read: read(id), send, active: () => true });
+    advance(10_000);
+    return result;
+  };
+  const missed = await run(clientA, a, async body => {
+    const response = await post('/api/leaderboard/uploads', body);
+    if (body.operations[0].type === 'migration-status') return response;
+    lost = body;
+    return { code: 'unavailable' };
+  });
+  assert.equal(missed.code, 'unavailable');
+  clientA = uploader(a);
+  await run(clientA, a, async body => {
+    assert.deepEqual(body, lost);
+    return post('/api/leaderboard/uploads', body);
+  });
+  await run(clientA, a);
+  assert.equal(await score(), 250);
+  await run(clientA, a);
+  assert.equal(await score(), 250);
+  for (let index = 0; index < 4 && await score() === 250; index++) await run(clientB, b);
+  assert.equal(await score(), 150);
+  const { boards } = await (await call('/api/leaderboard/snapshot')).json();
+  assert.equal(boards[24].rows[0].tokens, 150);
+  assert.equal((await post('/api/today/submit', { day: TODAY, installationId: a, tokens: 130 }, randomUUID())).code, 'upgrade_required');
+});
+
+test('source staging survives a server restart and rejects an outdated migration check', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'tps-migration-'));
+  const db = path.join(dir, 'test.sqlite'), id = randomUUID();
+  const now = START + HOUR_MS, at = now - 1000;
+  let store = openLeaderboardStore(db);
+  t.after(async () => {
+    store.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+  store.upsertAccount({ id: 1, login: 'alice' });
+  store.addSession('session', 1, 'plugin', now + HOUR_MS);
+  const send = (receivedAt, ...operations) => {
+    const requestId = randomUUID();
+    const [{ results }] = store.uploadBatch([{ kind: 'sources', sessionDigest: 'session', receivedAt,
+      input: { reporterId: id, requestId, fingerprint: requestId, operations } }], 1_000_000);
+    return results;
+  };
+  const old = (tokens, receivedAt) => {
+    const requestId = randomUUID();
+    return store.submit(1, { day: TODAY, installationId: id, tokens, requestId, fingerprint: requestId }, receivedAt, 1_000_000);
+  };
+  assert.equal(old(130, now), 'accepted');
+  const snapshotId = randomUUID();
+  const part = { type: 'baseline-part', purpose: 'migration', snapshotId, sourceId: id, sourceKind: 'local',
+    partCount: 2, partIndex: 0, coverage: [now + 10_000 - 720 * HOUR_MS, now + 10_000], daily: [{ day: TODAY, tokens: 130 }],
+    buckets: [[at, 130]] };
+  const [status] = send(now + 10_000, { type: 'migration-status' }, part);
+  store.close();
+  store = openLeaderboardStore(db);
+  assert.equal(send(now + 20_000, { type: 'migration-status' })[0].staged[0].received, 1);
+  assert.equal(send(now + 20_000, { ...part, partIndex: 1, daily: [], buckets: [] })[0].code, 'accepted');
+  assert.equal(old(140, now + 30_000), 'accepted');
+  const commit = { type: 'migration-commit', legacyVersions: status.legacyVersions, snapshots: [snapshotId] };
+  assert.equal(send(now + 40_000, commit)[0].code, 'migration_changed');
+  const [updated] = send(now + 40_000, { type: 'migration-status' });
+  assert.equal(send(now + 50_000, { ...commit, legacyVersions: updated.legacyVersions })[0].code, 'migration_pending');
+  assert.equal(store.ranking(1, now + 50_000).tokens, 140);
+  store.removeScores(1, { account: 1, day: TODAY }, now + 51_000);
+  assert.equal(send(now + 60_000, { ...commit, legacyVersions: updated.legacyVersions })[0].code, 'migration_changed');
+  const [afterRemoval] = send(now + 60_000, { type: 'migration-status' });
+  assert.equal(send(now + 70_000, { ...commit, legacyVersions: afterRemoval.legacyVersions })[0].code, 'accepted');
+  assert.equal(store.ranking(1, now + 70_000).tokens, null);
+  assert.deepEqual(store.hourly.rollingRanking(24, now + 70_000).rows, []);
+});
+
+test('the plugin negotiates source uploads and publishes data without sending its mixed total', async t => {
+  const api = await fixture(t);
+  const storage = new Map(), secrets = new Map(), calls = [];
+  let handler;
+  const sourceId = randomUUID();
+  const stop = startLeaderboard({
+    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value),
+      delete: async key => storage.delete(key) },
+    host: { has: () => true, call: async (method, { key, value }) => {
+      if (method === 'secrets.get') return { value: secrets.get(key) };
+      if (method === 'secrets.set') return secrets.set(key, value);
+    } },
+    grantedCapabilities: ['secrets:own'],
+    panels: { handle: (_, fn) => { handler = fn; return { dispose() {} }; } }
+  }, {
+    endpoint: api.endpoint, now: () => new Date(api.clock()),
+    readUsage: async () => ({ day: TODAY, tokens: 230 }),
+    readUsageSources: async id => [[id, 'local', 30], [sourceId, 'ssh', 100]].map(([sourceId, sourceKind, tokens]) => ({
+      sourceId, sourceKind, observedAt: api.clock(), coverage: [api.clock() - 720 * HOUR_MS, api.clock()],
+      daily: [{ day: TODAY, tokens }], buckets: [[START + 1000, tokens]]
+    })),
+    fetcher: async (url, options) => {
+      if (options.body) calls.push([url.pathname, JSON.parse(options.body)]);
+      return fetch(url, options);
+    }
+  });
+  t.after(() => stop());
+  await api.authorizePlugin((await handler({ action: 'login' })).loginUrl, 'alice');
+  assert.equal((await handler({ action: 'poll' })).code, 'signed_in');
+  await handler({ action: 'sync' });
+  api.advance(10_000);
+  await handler({ action: 'sync' });
+  assert.equal((await (await api.call('/api/today')).json()).rows[0].tokens, 130);
+  assert.ok(calls.some(([route, body]) => route === '/api/leaderboard/uploads' && body.format === 2));
+  assert.ok(calls.every(([route]) => route !== '/api/today/submit' && route !== '/api/history/init'));
+});
+
+test('the plugin uses format 3 with local SQLite and sends the two source GUIDs in separate requests', async t => {
+  const api = await fixture(t);
+  const db = openLocalUsageDb(':memory:'), storage = new Map(), secrets = new Map(), calls = [];
+  const own = randomUUID(), ssh = randomUUID();
+  let handler;
+  const stop = startLeaderboard({
+    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value) },
+    host: { has: () => true, call: async (method, { key, value }) => {
+      if (method === 'secrets.get') return { value: secrets.get(key) };
+      if (method === 'secrets.set') return secrets.set(key, value);
+    } },
+    grantedCapabilities: ['secrets:own'],
+    panels: { handle: (_, fn) => { handler = fn; return { dispose() {} }; } }
+  }, {
+    localDb: db, reporterGuid: own, endpoint: api.endpoint, now: () => new Date(api.clock()),
+    readUsage: async () => ({ day: TODAY, tokens: 130 }),
+    readUsageSources: async () => [[own, 'local', 30], [ssh, 'ssh', 100]].map(([sourceId, sourceKind, tokens]) => ({
+      sourceId, sourceKind, observedAt: api.clock(), coverage: [api.clock() - 720 * HOUR_MS, api.clock()],
+      daily: [{ day: TODAY, tokens }], buckets: [[START + 1000, tokens]]
+    })),
+    fetcher: async (url, options) => {
+      if (options.body && url.pathname === '/api/leaderboard/uploads') calls.push(JSON.parse(options.body));
+      return fetch(url, options);
+    }
+  });
+  t.after(async () => { await stop(); db.close(); });
+  await api.authorizePlugin((await handler({ action: 'login' })).loginUrl, 'alice');
+  assert.equal((await handler({ action: 'poll' })).code, 'signed_in');
+  for (let index = 0; index < 6 && api.store.ranking(1, api.clock()).tokens !== 130; index++) {
+    await handler({ action: 'sync' });
+    api.advance(10_000);
+  }
+  assert.equal(api.store.ranking(1, api.clock()).tokens, 130);
+  const packets = calls.filter(body => body.data?.format === 3);
+  const updates = packets.filter(body => body.data.operation === 'update');
+  assert.deepEqual(new Set(updates.map(body => body.deviceGuid)), new Set([own, ssh]));
+  assert.ok(packets.every(body => Object.keys(body).join() === 'username,deviceGuid,data' && body.username === 'alice'));
+  assert.equal(updates.find(body => body.deviceGuid === ssh).data.reporterGuid, own);
+  assert.equal(db.queue.next({ origin: api.endpoint, accountId: 1 }), undefined);
+  assert.ok([...storage.keys()].every(key => !key.startsWith('leaderboard:sources:')));
 });
 
 test('viewer receives every rolling window and the speed board in one download and retains it on failure', async t => {
@@ -1240,6 +1609,54 @@ test('manual sync uses the shared cooldown, coalesces clicks, and keeps the last
   t.mock.timers.tick(1000);
   await delay(10);
   assert.equal(uploads, 2);
+});
+
+test('a partial upload stays visible until the original rolling batch succeeds on its own', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let clock = START, handler;
+  const token = 'a'.repeat(43);
+  const account = { origin: ORIGIN, username: 'alice', session: createHash('sha256').update(token).digest('hex') };
+  const storage = new Map([['leaderboard:account', account],
+    ['leaderboard:history', { origin: ORIGIN, session: account.session }]]), requests = [];
+  const stop = startLeaderboard({
+    grantedCapabilities: ['secrets:own'],
+    host: { has: () => true, call: async () => ({ value: JSON.stringify({ origin: ORIGIN, token }) }) },
+    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value) },
+    panels: { handle: (_, fn) => { handler = fn; return { dispose() {} }; } }
+  }, {
+    endpoint: ORIGIN, now: () => new Date(clock),
+    readUsage: async () => ({ day: TODAY, tokens: 1_234 }),
+    readHistory: async () => ({ day: TODAY, ready: true, scores: [{ day: TODAY, tokens: 1_234 }] }),
+    readUsageTimes: async () => ({ buckets: [[START - 1000, 1_234]] }),
+    fetcher: async (url, options) => {
+      const body = JSON.parse(options.body);
+      requests.push({ route: url.pathname, body, requestId: options.headers['Idempotency-Key'] });
+      if (url.pathname === '/api/leaderboard/uploads') return Response.json({
+        daily: { code: 'accepted', day: TODAY, tokens: 1_234, username: 'alice', nextUploadAt: clock + 10_000 },
+        rolling: { code: 'unavailable' }
+      });
+      assert.equal(url.pathname, '/api/leaderboard/rolling-data');
+      return Response.json({ code: 'accepted', version: body.version });
+    }
+  });
+  t.after(stop);
+
+  const partial = await handler({ action: 'sync' });
+  assert.equal(partial.code, 'rolling_upload_failed');
+  assert.equal(partial.board.tokens, 1_234);
+  assert.equal(partial.rollingProblem, 'unavailable');
+  assert.equal(partial.lastSyncAt, null, 'the successful time only advances once both uploads finish');
+
+  clock += 10_000;
+  t.mock.timers.tick(1000);
+  for (let tries = 0; tries < 25 && (await handler({ action: 'session' })).lastSyncAt !== clock; tries++) await delay(5);
+  const repaired = await handler({ action: 'session' });
+  assert.equal(repaired.rollingProblem, null);
+  assert.equal(repaired.lastSyncAt, clock);
+  assert.equal(repaired.initializing, true, 'the rolling retry takes priority over history initialization');
+  assert.deepEqual(requests.map(item => item.route), ['/api/leaderboard/uploads', '/api/leaderboard/rolling-data']);
+  assert.deepEqual(requests[1].body, requests[0].body.rolling.body);
+  assert.equal(requests[1].requestId, requests[0].body.rolling.requestId);
 });
 
 test('the plugin shows the ranking while local usage is still loading', { timeout: 3000 }, async t => {

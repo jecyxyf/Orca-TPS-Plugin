@@ -45,8 +45,8 @@
   <message id="model-speed-list">ماڈل کے لحاظ سے اوسط آؤٹ پٹ رفتار، سب سے تیز پہلے</message>
   <message id="empty-model-speeds">اس مدت میں کسی ماڈل کی کافی درخواستیں نہیں ہیں</message>
   <message id="usage-heatmap">استعمال کا ہیٹ میپ</message>
-  <message id="heatmap-description">گزشتہ سال کا یومیہ استعمال (M، کیش سمیت)</message>
-  <message id="heatmap-label">گزشتہ سال کے یومیہ استعمال کا ہیٹ میپ (M)</message>
+  <message id="heatmap-description">گزشتہ 30 دن کا یومیہ استعمال (M، کیش سمیت)</message>
+  <message id="heatmap-label">گزشتہ 30 دن کے یومیہ استعمال کا ہیٹ میپ (M)</message>
   <message id="heatmap-less">کم</message>
   <message id="heatmap-more">زیادہ</message>
   <message id="initial-recent-requests">موجودہ چینل · حالیہ درخواستیں: ۰</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">فہرست سے خارج اضافی ماڈل: {0}</message>
   <message id="model-speed-insufficient-samples">درجہ بندی کے لیے کم درخواستوں والے ماڈل: {0}</message>
   <message id="usage-unavailable">استعمال کے اعداد و شمار عارضی طور پر دستیاب نہیں</message>
-  <message id="yearly-usage-total">گزشتہ سال: {0} · فعال دن: {1}</message>
+  <message id="recent-usage-total">گزشتہ 30 دن: {0} · فعال دن: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · درخواستیں: {2}</message>
   <message id="heatmap-day-empty">{0} · استعمال کا کوئی ریکارڈ نہیں</message>
   <message id="current-channel">موجودہ چینل</message>
@@ -251,6 +251,9 @@
   <message id="language-name">اردو</message>
   <message id="last-sync-time">آخری ہم آہنگی</message>
   <message id="last-sync-failed">{0} پر اپ لوڈ ناکام · {1}</message>
+  <message id="rolling-upload-failed">رولنگ لیڈر بورڈ کی ہم وقت سازی ناکام · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">آج کا استعمال اپ لوڈ ہو گیا۔ رولنگ لیڈر بورڈ کی ہم وقت سازی ناکام · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">رولنگ لیڈر بورڈ کی ہم وقت سازی مکمل۔ آج کا استعمال اپ لوڈ نہیں ہو سکا · {0}</message>
   <message id="sync-failure-unknown">وجہ دستیاب نہیں</message>
   <message id="data-upload">ڈیٹا اپ لوڈ</message>
   <message id="upload-now">ابھی اپ لوڈ کریں</message>

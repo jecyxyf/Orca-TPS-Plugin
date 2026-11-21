@@ -45,8 +45,8 @@
   <message id="model-speed-list">モデル別の平均出力速度（速い順）</message>
   <message id="empty-model-speeds">この期間にリクエスト数が十分なモデルはありません</message>
   <message id="usage-heatmap">使用量ヒートマップ</message>
-  <message id="heatmap-description">過去 1 年間の日別使用量（M、キャッシュを含む）</message>
-  <message id="heatmap-label">過去 1 年間の日別使用量ヒートマップ（M）</message>
+  <message id="heatmap-description">過去 30 日間の日別使用量（M、キャッシュを含む）</message>
+  <message id="heatmap-label">過去 30 日間の日別使用量ヒートマップ（M）</message>
   <message id="heatmap-less">少ない</message>
   <message id="heatmap-more">多い</message>
   <message id="initial-recent-requests">現在のチャンネル · 最近のリクエスト 0 件</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">表示されていないその他のモデル · {0}</message>
   <message id="model-speed-insufficient-samples">リクエスト数が少なくランキング対象外のモデル · {0}</message>
   <message id="usage-unavailable">使用量の統計を一時的に取得できません</message>
-  <message id="yearly-usage-total">過去 1 年 · {0} · 利用日数 · {1}</message>
+  <message id="recent-usage-total">過去 30 日間 · {0} · 利用日数 · {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · リクエスト数 · {2}</message>
   <message id="heatmap-day-empty">{0} · 使用量の記録なし</message>
   <message id="current-channel">現在のチャンネル</message>
@@ -251,6 +251,9 @@
   <message id="language-name">日本語</message>
   <message id="last-sync-time">最終同期</message>
   <message id="last-sync-failed">アップロード失敗 {0} · {1}</message>
+  <message id="rolling-upload-failed">ローリングランキングの同期に失敗しました · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">本日の使用量はアップロード済みです。ローリングランキングの同期に失敗しました · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">ローリングランキングは同期済みです。本日の使用量のアップロードに失敗しました · {0}</message>
   <message id="sync-failure-unknown">理由を取得できません</message>
   <message id="data-upload">データアップロード</message>
   <message id="upload-now">今すぐアップロード</message>

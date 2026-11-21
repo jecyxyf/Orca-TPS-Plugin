@@ -45,8 +45,8 @@
   <message id="model-speed-list">Velocidad media de salida por modelo, del más rápido al más lento</message>
   <message id="empty-model-speeds">Ningún modelo tiene suficientes solicitudes en este período</message>
   <message id="usage-heatmap">Mapa de calor de uso</message>
-  <message id="heatmap-description">Uso diario del último año (M, caché incluida)</message>
-  <message id="heatmap-label">Mapa de calor del uso diario del último año (M)</message>
+  <message id="heatmap-description">Uso diario de los últimos 30 días (M, caché incluida)</message>
+  <message id="heatmap-label">Mapa de calor del uso diario de los últimos 30 días (M)</message>
   <message id="heatmap-less">Menos</message>
   <message id="heatmap-more">Más</message>
   <message id="initial-recent-requests">Canal actual · Solicitudes recientes: 0</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">Modelos adicionales omitidos: {0}</message>
   <message id="model-speed-insufficient-samples">Modelos con pocas solicitudes para clasificar: {0}</message>
   <message id="usage-unavailable">Las estadísticas de uso no están disponibles temporalmente</message>
-  <message id="yearly-usage-total">Último año: {0} · Días activos: {1}</message>
+  <message id="recent-usage-total">Últimos 30 días: {0} · Días activos: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Solicitudes: {2}</message>
   <message id="heatmap-day-empty">{0} · Sin uso registrado</message>
   <message id="current-channel">Canal actual</message>
@@ -251,6 +251,9 @@
   <message id="language-name">Español</message>
   <message id="last-sync-time">Última sincronización</message>
   <message id="last-sync-failed">Error de subida a las {0} · {1}</message>
+  <message id="rolling-upload-failed">Error al sincronizar la clasificación por periodo móvil · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">Se subió el uso de hoy. Error al sincronizar la clasificación por periodo móvil · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">Clasificación por periodo móvil sincronizada. Error al subir el uso de hoy · {0}</message>
   <message id="sync-failure-unknown">Causa no disponible</message>
   <message id="data-upload">Subida de datos</message>
   <message id="upload-now">Subir ahora</message>

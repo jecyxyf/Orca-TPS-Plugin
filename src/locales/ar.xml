@@ -45,8 +45,8 @@
   <message id="model-speed-list">متوسط سرعة الإخراج حسب النموذج، من الأسرع إلى الأبطأ</message>
   <message id="empty-model-speeds">لا توجد نماذج لها طلبات كافية في هذه الفترة</message>
   <message id="usage-heatmap">خريطة الاستخدام الحرارية</message>
-  <message id="heatmap-description">الاستخدام اليومي خلال السنة الماضية (M، يشمل الذاكرة المؤقتة)</message>
-  <message id="heatmap-label">خريطة حرارية للاستخدام اليومي خلال السنة الماضية (M)</message>
+  <message id="heatmap-description">الاستخدام اليومي خلال آخر 30 يومًا (M، يشمل الذاكرة المؤقتة)</message>
+  <message id="heatmap-label">خريطة حرارية للاستخدام اليومي خلال آخر 30 يومًا (M)</message>
   <message id="heatmap-less">أقل</message>
   <message id="heatmap-more">أكثر</message>
   <message id="initial-recent-requests">القناة الحالية · الطلبات الأخيرة: 0</message>
@@ -97,7 +97,7 @@
   <message id="model-list-truncated">نماذج إضافية غير معروضة: {0}</message>
   <message id="model-speed-insufficient-samples">نماذج بطلبات غير كافية للترتيب: {0}</message>
   <message id="usage-unavailable">إحصاءات الاستخدام غير متاحة مؤقتًا</message>
-  <message id="yearly-usage-total">السنة الماضية: {0} · أيام النشاط: {1}</message>
+  <message id="recent-usage-total">آخر 30 يومًا: {0} · أيام النشاط: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · الطلبات: {2}</message>
   <message id="heatmap-day-empty">{0} · لا يوجد استخدام مسجّل</message>
   <message id="current-channel">القناة الحالية</message>
@@ -251,6 +251,9 @@
   <message id="language-name">العربية</message>
   <message id="last-sync-time">آخر مزامنة</message>
   <message id="last-sync-failed">فشل الرفع عند {0} · {1}</message>
+  <message id="rolling-upload-failed">تعذّرت مزامنة لوحة الصدارة للفترة المتحركة · {0}</message>
+  <message id="daily-upload-succeeded-rolling-failed">تم رفع استخدام اليوم. تعذّرت مزامنة لوحة الصدارة للفترة المتحركة · {0}</message>
+  <message id="rolling-upload-succeeded-daily-failed">تمت مزامنة لوحة الصدارة للفترة المتحركة. تعذّر رفع استخدام اليوم · {0}</message>
   <message id="sync-failure-unknown">السبب غير متاح</message>
   <message id="data-upload">رفع البيانات</message>
   <message id="upload-now">الرفع الآن</message>
