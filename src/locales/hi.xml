@@ -49,12 +49,10 @@
   <message id="heatmap-label">पिछले 30 दिनों का दैनिक उपयोग हीटमैप (M)</message>
   <message id="heatmap-less">कम</message>
   <message id="heatmap-more">ज़्यादा</message>
-  <message id="initial-recent-requests">मौजूदा चैनल · हाल के अनुरोध: 0</message>
   <message id="refresh-current">मौजूदा डेटा रीफ़्रेश करें</message>
   <message id="refresh">रीफ़्रेश करें</message>
   <message id="reading-conversation">मौजूदा बातचीत पढ़ रहे हैं…</message>
   <message id="per-request-speeds">हर अनुरोध की गति के रिकॉर्ड</message>
-  <message id="request-speed-note">गति में टूल का समय शामिल नहीं है। लॉग अनुमान (≈) के लिए कम से कम 200 Tokens आउटपुट और 1 सेकंड चाहिए। सटीक प्रॉक्सी गति में पहले टोकन की देरी नहीं जुड़ती और कम से कम 100 Tokens आउटपुट चाहिए।</message>
   <message id="subagent">सब-एजेंट</message>
   <message id="proxy">प्रॉक्सी</message>
   <message id="output">आउटपुट</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · कोई उपयोग दर्ज नहीं</message>
   <message id="current-channel">मौजूदा चैनल</message>
   <message id="current-conversation">मौजूदा बातचीत</message>
-  <message id="recent-requests">{0} · हाल के अनुरोध: {1}</message>
   <message id="updating-stats">आँकड़े अपडेट हो रहे हैं…</message>
   <message id="empty-current-records">इस चैनल में गिनने के लिए कोई अनुरोध नहीं है</message>
   <message id="updated-at">{0} पर अपडेट हुआ</message>

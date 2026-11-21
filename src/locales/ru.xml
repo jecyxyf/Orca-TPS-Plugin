@@ -49,12 +49,10 @@
   <message id="heatmap-label">Тепловая карта ежедневного расхода за последние 30 дней (M)</message>
   <message id="heatmap-less">Меньше</message>
   <message id="heatmap-more">Больше</message>
-  <message id="initial-recent-requests">Текущий канал · 0 недавних запросов</message>
   <message id="refresh-current">Обновить текущие данные</message>
   <message id="refresh">Обновить</message>
   <message id="reading-conversation">Читаем текущий диалог…</message>
   <message id="per-request-speeds">Скорость по запросам</message>
-  <message id="request-speed-note">При расчёте скорости не учитывается время работы инструментов. Для оценки по журналам (≈) нужно не менее 200 токенов вывода и 1 секунды на запрос. Точная скорость по данным прокси учитывает время после первого токена и требует не менее 100 токенов вывода.</message>
   <message id="subagent">Субагент</message>
   <message id="proxy">Прокси</message>
   <message id="output">Вывод</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · Нет записей о расходе</message>
   <message id="current-channel">Текущий канал</message>
   <message id="current-conversation">Текущий диалог</message>
-  <message id="recent-requests">{0} · Недавние запросы · {1}</message>
   <message id="updating-stats">Обновляем статистику…</message>
   <message id="empty-current-records">В этом канале нет запросов для подсчёта</message>
   <message id="updated-at">Обновлено в {0}</message>

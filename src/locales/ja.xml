@@ -49,12 +49,10 @@
   <message id="heatmap-label">過去 30 日間の日別使用量ヒートマップ（M）</message>
   <message id="heatmap-less">少ない</message>
   <message id="heatmap-more">多い</message>
-  <message id="initial-recent-requests">現在のチャンネル · 最近のリクエスト 0 件</message>
   <message id="refresh-current">現在のデータを更新</message>
   <message id="refresh">更新</message>
   <message id="reading-conversation">現在の会話を読み込み中…</message>
   <message id="per-request-speeds">リクエストごとの速度</message>
-  <message id="request-speed-note">リクエスト速度にはツールの実行時間を含みません。ログからの推定値（≈）には 200 Tokens 以上の出力と 1 秒以上のリクエスト時間が必要です。プロキシの実測値は最初のトークンまでの待ち時間を除き、100 Tokens 以上の出力が必要です。</message>
   <message id="subagent">サブエージェント</message>
   <message id="proxy">プロキシ</message>
   <message id="output">出力</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · 使用量の記録なし</message>
   <message id="current-channel">現在のチャンネル</message>
   <message id="current-conversation">現在の会話</message>
-  <message id="recent-requests">{0} · 最近のリクエスト · {1}</message>
   <message id="updating-stats">統計を更新中…</message>
   <message id="empty-current-records">このチャンネルには集計対象のリクエストがありません</message>
   <message id="updated-at">更新 {0}</message>

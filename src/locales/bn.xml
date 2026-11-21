@@ -49,12 +49,10 @@
   <message id="heatmap-label">গত ৩০ দিনের দৈনিক ব্যবহারের হিটম্যাপ (M)</message>
   <message id="heatmap-less">কম</message>
   <message id="heatmap-more">বেশি</message>
-  <message id="initial-recent-requests">বর্তমান চ্যানেল · সাম্প্রতিক অনুরোধ: ০</message>
   <message id="refresh-current">বর্তমান ডেটা রিফ্রেশ করুন</message>
   <message id="refresh">রিফ্রেশ করুন</message>
   <message id="reading-conversation">বর্তমান কথোপকথন পড়া হচ্ছে…</message>
   <message id="per-request-speeds">প্রতিটি অনুরোধের গতির রেকর্ড</message>
-  <message id="request-speed-note">গতির হিসাবে টুলের সময় ধরা হয় না। লগের অনুমানে (≈) অন্তত ২০০ Tokens আউটপুট ও ১ সেকেন্ড প্রয়োজন। প্রক্সির নির্ভুল গতিতে প্রথম টোকেনের অপেক্ষা বাদ যায় এবং অন্তত ১০০ Tokens আউটপুট লাগে।</message>
   <message id="subagent">সাব-এজেন্ট</message>
   <message id="proxy">প্রক্সি</message>
   <message id="output">আউটপুট</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · কোনো ব্যবহার রেকর্ড হয়নি</message>
   <message id="current-channel">বর্তমান চ্যানেল</message>
   <message id="current-conversation">বর্তমান কথোপকথন</message>
-  <message id="recent-requests">{0} · সাম্প্রতিক অনুরোধ: {1}</message>
   <message id="updating-stats">পরিসংখ্যান আপডেট হচ্ছে…</message>
   <message id="empty-current-records">এই চ্যানেলে গণনা করার মতো কোনো অনুরোধ নেই</message>
   <message id="updated-at">{0}-এ আপডেট হয়েছে</message>

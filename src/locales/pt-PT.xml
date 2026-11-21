@@ -49,12 +49,10 @@
   <message id="heatmap-label">Mapa de calor da utilização diária nos últimos 30 dias (M)</message>
   <message id="heatmap-less">Menos</message>
   <message id="heatmap-more">Mais</message>
-  <message id="initial-recent-requests">Canal atual · Pedidos recentes: 0</message>
   <message id="refresh-current">Atualizar dados atuais</message>
   <message id="refresh">Atualizar</message>
   <message id="reading-conversation">A ler a conversa atual…</message>
   <message id="per-request-speeds">Registos de velocidade por pedido</message>
-  <message id="request-speed-note">A velocidade exclui o tempo das ferramentas. As estimativas dos registos (≈) exigem pelo menos 200 Tokens de saída e 1 segundo de duração do pedido. A velocidade exata do proxy exclui a espera pelo primeiro token e exige pelo menos 100 Tokens de saída.</message>
   <message id="subagent">Subagente</message>
   <message id="proxy">Proxy</message>
   <message id="output">Saída</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · Sem utilização registada</message>
   <message id="current-channel">Canal atual</message>
   <message id="current-conversation">Conversa atual</message>
-  <message id="recent-requests">{0} · Pedidos recentes: {1}</message>
   <message id="updating-stats">A atualizar estatísticas…</message>
   <message id="empty-current-records">Não há pedidos para contar neste canal</message>
   <message id="updated-at">Atualizado às {0}</message>

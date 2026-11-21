@@ -49,12 +49,10 @@
   <message id="heatmap-label">Daily usage heatmap for the past 30 days (M)</message>
   <message id="heatmap-less">Less</message>
   <message id="heatmap-more">More</message>
-  <message id="initial-recent-requests">Current channel · 0 recent requests</message>
   <message id="refresh-current">Refresh current data</message>
   <message id="refresh">Refresh</message>
   <message id="reading-conversation">Reading the current conversation…</message>
   <message id="per-request-speeds">Per-request speed records</message>
-  <message id="request-speed-note">Request speed excludes tool time. Log estimates (≈) require at least 200 Tokens of output and 1 second of request time. Exact proxy speed excludes time to first token and requires at least 100 Tokens of output.</message>
   <message id="subagent">Subagent</message>
   <message id="proxy">Proxy</message>
   <message id="output">Output</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · No recorded usage</message>
   <message id="current-channel">Current channel</message>
   <message id="current-conversation">Current conversation</message>
-  <message id="recent-requests">{0} · Recent requests: {1}</message>
   <message id="updating-stats">Updating stats…</message>
   <message id="empty-current-records">This channel has no requests to count</message>
   <message id="updated-at">Updated {0}</message>

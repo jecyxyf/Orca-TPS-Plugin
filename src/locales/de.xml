@@ -49,12 +49,10 @@
   <message id="heatmap-label">Heatmap des täglichen Verbrauchs in den letzten 30 Tagen (M)</message>
   <message id="heatmap-less">Weniger</message>
   <message id="heatmap-more">Mehr</message>
-  <message id="initial-recent-requests">Aktueller Kanal · 0 aktuelle Anfragen</message>
   <message id="refresh-current">Aktuelle Daten aktualisieren</message>
   <message id="refresh">Aktualisieren</message>
   <message id="reading-conversation">Aktuelle Unterhaltung wird gelesen…</message>
   <message id="per-request-speeds">Geschwindigkeit je Anfrage</message>
-  <message id="request-speed-note">Die Anfragegeschwindigkeit lässt die Zeit für Werkzeuge außen vor. Schätzungen aus Protokollen (≈) erfordern mindestens 200 Tokens Ausgabe und 1 Sekunde Anfragedauer. Die exakte Proxy-Geschwindigkeit lässt die Wartezeit bis zum ersten Token außen vor und erfordert mindestens 100 Tokens Ausgabe.</message>
   <message id="subagent">Subagent</message>
   <message id="proxy">Proxy</message>
   <message id="output">Ausgabe</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · Kein Verbrauch erfasst</message>
   <message id="current-channel">Aktueller Kanal</message>
   <message id="current-conversation">Aktuelle Unterhaltung</message>
-  <message id="recent-requests">{0} · Aktuelle Anfragen · {1}</message>
   <message id="updating-stats">Statistik wird aktualisiert…</message>
   <message id="empty-current-records">Dieser Kanal enthält keine auswertbaren Anfragen</message>
   <message id="updated-at">Aktualisiert um {0}</message>

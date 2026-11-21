@@ -78,9 +78,10 @@
     }
     button { font: inherit; }
     .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .panel-summary { min-width: 0; }
     h1 { margin: 0; font-size: 18px; line-height: 1.4; letter-spacing: -.3px; font-weight: 750; }
     .title-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 32px; }
+    .panel-title { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+    .panel-logo { flex: none; width: 32px; height: 32px; border-radius: 6px; object-fit: contain; }
     .language-picker { position: relative; flex: 0 1 156px; min-width: 0; }
     .language-toggle, .language-option {
       display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 32px;
@@ -110,7 +111,7 @@
     .language-option { width: 100%; border-color: transparent; text-align: start; }
     .language-option:hover, .language-option[aria-pressed="true"] { background: var(--button-bg); color: var(--blue); }
     .language-message { margin: 4px 6px; color: var(--muted); overflow-wrap: anywhere; }
-    .summary { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+    .current-updated { margin: 0; color: var(--muted); font-size: 11px; }
     .refresh {
       display: inline-flex; align-items: center; justify-content: center; gap: 5px;
       flex-shrink: 0; min-height: 34px; padding: 7px 11px; border: 0; border-radius: 13px;
@@ -461,8 +462,6 @@
     .heat-legend .lv4 { background: var(--heat-4); }
     .heat-tip { position: absolute; z-index: 5; max-width: 240px; padding: 5px 8px; border-radius: 8px; background: var(--ink); color: var(--surface); font-size: 11px; line-height: 1.4; white-space: nowrap; pointer-events: none; transform: translate(-50%, -100%); box-shadow: var(--shadow); }
     .heat-tip[hidden] { display: none; }
-    .footer { margin: 15px 2px 0; color: var(--muted); font-size: 10px; line-height: 1.7; }
-    .footer p { margin: 0; }
     @media (max-width: 339px) {
       .metrics { gap: 6px; }
       .card-top { gap: 8px; }
@@ -500,7 +499,7 @@
 <body>
   <main id="panel" aria-labelledby="panel-title">
     <div class="title-bar" dir="ltr">
-      <h1 id="panel-title">TPS Plugin</h1>
+      <h1 class="panel-title" id="panel-title"><img class="panel-logo" src="panel-logo.png" alt="">TPS Plugin</h1>
       <div class="language-picker" id="language-picker" hidden>
         <button class="language-toggle" id="language-toggle" type="button" aria-expanded="false" aria-controls="language-menu">
           <img class="language-flag" id="language-flag" alt="">
@@ -690,7 +689,7 @@
     </section>
     <section class="panel-view" id="current-data" role="tabpanel" aria-labelledby="tab-current" tabindex="0" hidden>
       <div class="panel-header">
-        <p class="summary panel-summary" id="summary" data-localized-text><span data-i18n="initial-recent-requests"></span></p>
+        <p class="current-updated" id="updated" data-localized-text>—</p>
         <button class="refresh" id="refresh" data-testid="refresh" type="button" data-i18n-aria-label="refresh-current">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>
           <span><span data-i18n="refresh"></span></span>
@@ -704,10 +703,6 @@
         <span class="empty-icon" aria-hidden="true">🚀</span>
         <p class="empty-text" id="empty-text" data-localized-text></p>
       </div>
-      <footer class="footer">
-        <p><span data-i18n="request-speed-note"></span></p>
-        <p id="updated" data-localized-text hidden></p>
-      </footer>
     </section>
   </main>
 
@@ -936,7 +931,7 @@
     (() => {
       'use strict';
       const byId = id => document.getElementById(id);
-      const ui = Object.fromEntries(['current-data', 'summary', 'refresh', 'error', 'warnings', 'loading', 'records', 'empty', 'empty-text', 'updated', 'record-template'].map(id => [id, byId(id)]));
+      const ui = Object.fromEntries(['current-data', 'updated', 'refresh', 'error', 'warnings', 'loading', 'records', 'empty', 'empty-text', 'record-template'].map(id => [id, byId(id)]));
       const views = [...byId('panel-tabs').children];
       const lifetime = new AbortController();
       const bridge = window.orca?.plugin;
@@ -1349,10 +1344,8 @@
           .slice().sort((a, b) => (numeric(b.completedAt) ? b.completedAt : 0) - (numeric(a.completedAt) ? a.completedAt : 0)).slice(0, 100);
         const working = busy || Boolean(current?.loading);
         ui['current-data'].setAttribute('aria-busy', String(working));
-        const scopeLabel = current?.activeSession?.provider === 'channel'
-          ? (current.activeSession.title || t('current-channel'))
-          : t('current-conversation');
-        ui.summary.textContent = t('recent-requests', scopeLabel, number(records.length));
+        const updatedAt = current?.updatedAt;
+        ui.updated.textContent = date(updatedAt) ? t('updated-at', timeLabel(updatedAt)) : '—';
         ui.refresh.disabled = working || !bridge;
         ui.refresh.classList.toggle('is-busy', working);
         ui.error.hidden = !problem;
@@ -1380,8 +1373,6 @@
         ui.records.hidden = records.length === 0;
         ui.empty.hidden = records.length > 0 || working || Boolean(problem);
         ui['empty-text'].textContent = String(current?.emptyMessage || t('empty-current-records')).slice(0, 1000);
-        ui.updated.hidden = !date(current?.updatedAt);
-        ui.updated.textContent = t('updated-at', timeLabel(current?.updatedAt));
         if (resetScroll) {
           resetScroll = false;
           if (!ui['current-data'].hidden) window.scrollTo(0, 0);

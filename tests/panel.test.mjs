@@ -136,11 +136,20 @@ test('per-request card renders rocket icon, TPS value, and tokens/s unit on a si
   assert.match(cardTop?.['grid-template-columns'] ?? '', /\bauto\s*$/, '.card-top right column must size to single-line pill');
 });
 
-test('panel resolves per-record agent label from record.provider and shows channel title in summary', async () => {
+test('panel resolves per-record agent label from record.provider', async () => {
   const html = await readFile(panelPath, 'utf8');
   assert.match(html, /agentLabel\(\s*record\.provider\s*\)/, 'recordCard must pass record.provider to agentLabel');
   assert.match(html, /function\s+agentLabel\(\s*provider\s*\)/, 'agentLabel must accept per-record provider override');
-  assert.match(html, /activeSession\?\.provider\s*===\s*['"]channel['"]/, 'summary must display channel title when in channel mode');
+});
+
+test('the panel title has a bundled logo and Current Data shows the update time beside Refresh', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const logo = /<h1\b[^>]*\bid="panel-title"[^>]*>\s*<img\b[^>]*\bsrc="([^"]+)"[^>]*\balt=""[^>]*>\s*TPS Plugin/.exec(html);
+  assert.ok(logo, 'logo must be left of the title');
+  const png = await readFile(path.resolve(path.dirname(panelPath), logo[1]));
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.match(html, /<div class="panel-header">\s*<p\b[^>]*\bid="updated"[^>]*>—<\/p>\s*<button\b[^>]*\bid="refresh"/);
+  assert.doesNotMatch(html, /recent-requests|request-speed-note/);
 });
 
 test('today usage connects pulses at real timestamps and animates new points once', async () => {

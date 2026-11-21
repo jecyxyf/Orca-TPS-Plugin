@@ -49,12 +49,10 @@
   <message id="heatmap-label">Mappa di calore dell’uso giornaliero negli ultimi 30 giorni (M)</message>
   <message id="heatmap-less">Meno</message>
   <message id="heatmap-more">Più</message>
-  <message id="initial-recent-requests">Canale corrente · 0 richieste recenti</message>
   <message id="refresh-current">Aggiorna i dati attuali</message>
   <message id="refresh">Aggiorna</message>
   <message id="reading-conversation">Lettura della conversazione corrente…</message>
   <message id="per-request-speeds">Velocità per richiesta</message>
-  <message id="request-speed-note">La velocità della richiesta esclude il tempo di esecuzione degli strumenti. Le stime dai log (≈) richiedono almeno 200 Tokens di output e 1 secondo di durata. La velocità esatta del proxy esclude l’attesa del primo token e richiede almeno 100 Tokens di output.</message>
   <message id="subagent">Subagente</message>
   <message id="proxy">Proxy</message>
   <message id="output">Output</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · Nessun utilizzo registrato</message>
   <message id="current-channel">Canale corrente</message>
   <message id="current-conversation">Conversazione corrente</message>
-  <message id="recent-requests">{0} · Richieste recenti · {1}</message>
   <message id="updating-stats">Aggiornamento delle statistiche…</message>
   <message id="empty-current-records">Questo canale non contiene richieste da conteggiare</message>
   <message id="updated-at">Aggiornato alle {0}</message>

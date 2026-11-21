@@ -49,12 +49,10 @@
   <message id="heatmap-label">近 30 天每日用量热力图（M）</message>
   <message id="heatmap-less">少</message>
   <message id="heatmap-more">多</message>
-  <message id="initial-recent-requests">当前频道 · 最近 0 次请求</message>
   <message id="refresh-current">刷新当前数据</message>
   <message id="refresh">刷新</message>
   <message id="reading-conversation">正在读取当前对话…</message>
   <message id="per-request-speeds">单次请求速度记录</message>
-  <message id="request-speed-note">单次请求速度剔除工具耗时。日志估算需输出 ≥200 Tokens 且耗时 ≥1s（≈），代理精确速度扣首字需输出 ≥100 Tokens。</message>
   <message id="subagent">子代理</message>
   <message id="proxy">代理</message>
   <message id="output">输出</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · 无用量记录</message>
   <message id="current-channel">当前频道</message>
   <message id="current-conversation">当前对话</message>
-  <message id="recent-requests">{0} · 最近 {1} 次请求</message>
   <message id="updating-stats">正在更新统计…</message>
   <message id="empty-current-records">当前频道还没有可统计的请求记录</message>
   <message id="updated-at">更新于 {0}</message>

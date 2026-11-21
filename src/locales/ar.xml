@@ -49,12 +49,10 @@
   <message id="heatmap-label">خريطة حرارية للاستخدام اليومي خلال آخر 30 يومًا (M)</message>
   <message id="heatmap-less">أقل</message>
   <message id="heatmap-more">أكثر</message>
-  <message id="initial-recent-requests">القناة الحالية · الطلبات الأخيرة: 0</message>
   <message id="refresh-current">تحديث البيانات الحالية</message>
   <message id="refresh">تحديث</message>
   <message id="reading-conversation">جارٍ قراءة المحادثة الحالية…</message>
   <message id="per-request-speeds">سجلات السرعة لكل طلب</message>
-  <message id="request-speed-note">تستبعد السرعة وقت الأدوات. يتطلب تقدير السجل (≈) إخراج 200 Tokens على الأقل ومدة طلب لا تقل عن ثانية. تستبعد سرعة الوكيل الدقيقة انتظار أول رمز وتتطلب إخراج 100 Tokens على الأقل.</message>
   <message id="subagent">وكيل فرعي</message>
   <message id="proxy">الخادم الوكيل</message>
   <message id="output">المخرجات</message>
@@ -102,7 +100,6 @@
   <message id="heatmap-day-empty">{0} · لا يوجد استخدام مسجّل</message>
   <message id="current-channel">القناة الحالية</message>
   <message id="current-conversation">المحادثة الحالية</message>
-  <message id="recent-requests">{0} · الطلبات الأخيرة: {1}</message>
   <message id="updating-stats">جارٍ تحديث الإحصاءات…</message>
   <message id="empty-current-records">لا توجد طلبات لاحتسابها في هذه القناة</message>
   <message id="updated-at">آخر تحديث: {0}</message>
