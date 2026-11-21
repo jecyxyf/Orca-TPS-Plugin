@@ -688,7 +688,6 @@
             <strong class="war-value requests" id="war-requests" data-testid="war-requests">—</strong>
           </div>
         </div>
-        <p class="war-note" id="war-note" data-testid="war-note" data-localized-text hidden></p>
       </section>
       <section class="war" aria-labelledby="war-model-title">
         <h2 class="section-title" id="war-model-title"><span data-i18n="model-usage"></span></h2>
@@ -1143,7 +1142,7 @@
       function agentLabel(provider) {
         return AGENT_LABELS[provider || current?.activeSession?.provider] ?? '';
       }
-      let usageSummary = null, usageRange = 'today', usageMode = 'hourly', usageProblem = false, usageTimer = null;
+      let usageSummary = null, usageRange = 'today', usageMode = 'hourly', usageTimer = null;
       let usagePending, usageFrame, drawnUsage, drawnHeat, heatLayout, heatCells = [], usageRevision = 0;
       const usageGroup = byId('usage');
       const usageRangeTabs = usageGroup.querySelectorAll('[data-range]');
@@ -1204,15 +1203,6 @@
           renderSpeeds(range);
         }
         byId('war-empty').hidden = !range || list.length > 0;
-        const notes = [];
-        const progress = usageSummary?.progress;
-        if (usageProblem) notes.push(t('usage-unavailable'));
-        else if (!range || (usageMode === 'hourly' && usageSummary?.hourly?.ready === false && !progress?.total)) notes.push(t('calculating-usage'));
-        if (progress && progress.done < progress.total) notes.push(t('usage-backfill-progress', number(progress.done), number(progress.total)));
-        if (range && numeric(range.cacheHitRate)) notes.push(t('cache-hit-rate', percent(range.cacheHitRate, 1)));
-        if (range && numeric(range.hiddenRows) && range.hiddenRows > 0) notes.push(t('model-list-truncated', number(range.hiddenRows)));
-        byId('war-note').textContent = notes.join(' · ');
-        byId('war-note').hidden = notes.length === 0;
         renderHeatmap();
       }
       // 模型均速: mean per-request TPS per model over the selected window, fastest first; ranking comes from tps.summary.
@@ -1270,9 +1260,9 @@
         const requestedAt = usageRevision;
         try {
           const result = await bridge.request('tps.summary', undefined, { signal: lifetime.signal, timeoutMs: 30000 });
-          if (requestedAt === usageRevision) { usageSummary = result; usageProblem = false; }
+          if (requestedAt === usageRevision) usageSummary = result;
         } catch {
-          if (!disposed && requestedAt === usageRevision) usageProblem = true;
+          // Keep the last available stats if a refresh fails.
         } finally {
           usagePending = false;
         }
@@ -1491,7 +1481,6 @@
           if (disposed) return;
           usageRevision += 1;
           usageSummary = next;
-          usageProblem = false;
           scheduleUsage();
         }));
         if (typeof window.orca.on === 'function') {
