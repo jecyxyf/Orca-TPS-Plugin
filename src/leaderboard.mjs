@@ -3,8 +3,9 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { leaderboardDay, leaderboardDayStart } from './usage-summary.mjs';
 import { loadInstallationId } from './leaderboard-installation.mjs';
 import { createAvatarCache, githubLoginKey } from './leaderboard-avatars.mjs';
-import { validStatsLabel, validStatsPoint } from './leaderboard-stats.mjs';
+import { HOUR_MS, validStatsLabel, validStatsPoint } from './leaderboard-stats.mjs';
 import { createSourceUploader, createSqliteUploadStorage, uploadUsageChanges } from './usage-upload.mjs';
+import { createHourlySourceUploader } from './hourly-source-upload.mjs';
 import { createWindowViews } from './leaderboard-windows.mjs';
 
 const METHOD = 'tps.leaderboard';
@@ -49,7 +50,7 @@ function publicRows(rows, days, day) {
 }
 
 export function startLeaderboard(orca, {
-  readUsage, readHistory, readUsageTimes, readUsageSources, stats, localDb, reporterGuid, onUsername = () => {},
+  readUsage, readHistory, readUsageTimes, readUsageSources, readUsageHours, stats, localDb, reporterGuid, onUsername = () => {},
   endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
   fetcher = fetch, avatarFetcher = fetch, now = () => new Date()
 }) {
@@ -238,13 +239,14 @@ export function startLeaderboard(orca, {
   }
 
   async function request(path, { body, auth = true, credential = auth ? token : '', requestId, etag, acceptEtag = false,
-    viewHeaders = false, signal } = {}) {
+    viewHeaders = false, hourlySnapshot = false, signal } = {}) {
     try {
       const headers = { Accept: 'application/json' };
       if (credential) headers.Authorization = 'Bearer ' + credential;
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       if (requestId) headers['Idempotency-Key'] = requestId;
       if (etag) headers['If-None-Match'] = etag;
+      if (hourlySnapshot) headers['X-Orca-Snapshot-Schedule'] = 'hourly';
       const response = await fetcher(new URL(path, base), {
         method: body === undefined ? 'GET' : 'POST', headers, redirect: 'error',
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -481,7 +483,8 @@ export function startLeaderboard(orca, {
       if (username === status.username) saveAccount();
     }
     if (validUsername(status.username)) rememberUsername(status.username);
-    const format = status.uploadFormat === 3 && localDb && accountId ? 3 : status.uploadFormat >= 2 ? 2 : 1;
+    const format = status.hourlySourceUploads && readUsageHours && localDb && accountId ? 4 :
+      status.uploadFormat === 3 && localDb && accountId ? 3 : status.uploadFormat >= 2 ? 2 : 1;
     sourceCapability = { credential, format, until: time + 60_000 };
     return format;
   }
@@ -494,8 +497,11 @@ export function startLeaderboard(orca, {
     if (!login) return { code: 'usage_unready' };
     const identity = `${base.origin}/${accountId ?? login}/${id}`;
     if (sourceUploader?.identity !== identity || sourceUploader.format !== format) {
-      const storage = localDb ? createSqliteUploadStorage(localDb.queue, { origin: base.origin, accountId: accountId ?? login }) : orca.storage;
-      sourceUploader = { identity, format, upload: createSourceUploader(storage, identity, id, { format, username: () => username }) };
+      const storage = localDb ? createSqliteUploadStorage(localDb.queue, { origin: base.origin, accountId: accountId ?? login },
+        format === 4 ? 'pending-hourly' : 'pending') : orca.storage;
+      const upload = format === 4 ? createHourlySourceUploader(storage, id, () => username) :
+        createSourceUploader(storage, identity, id, { format, username: () => username });
+      sourceUploader = { identity, format, upload };
     }
     let options;
     let result;
@@ -504,14 +510,15 @@ export function startLeaderboard(orca, {
       if (format === 2 && stats && preview?.day === score.day && Number.isSafeInteger(preview.tokens) && preview.tokens > 0) {
         options = await stats.prepare(sessionKey(credential), score);
       }
-      result = await sourceUploader.upload({ now: time, read: readUsageSources, active,
+      result = await sourceUploader.upload({ now: time, read: format === 4 ? readUsageHours : readUsageSources, active,
         send: body => request('/api/leaderboard/uploads', { body, credential }), stats: options?.body.stats, statsId: options?.requestId,
-        prepareStats: format === 3 && stats ? source => stats.prepare(sessionKey(credential), score, source) : undefined });
+        prepareStats: format >= 3 && stats ? source => stats.prepare(sessionKey(credential), score, source) : undefined });
       if (stats && result.statsId && result.statsAccepted) await stats.settle({ requestId: result.statsId }, 'accepted');
     } catch {
       result = { code: 'unavailable' };
     }
     if (!active()) return { code: 'upload_disabled' };
+    if (result.code === 'upgrade_required' || result.code === 'migration_required') sourceCapability = null;
     retryRollingNext = false;
     localUploadAt = Math.max(time + UPLOAD_INTERVAL, result.nextUploadAt ?? 0);
     rememberUpload(result);
@@ -746,8 +753,9 @@ export function startLeaderboard(orca, {
       }
       const result = await windows.fetch(hours, payload.force === true, signal);
       if (signal.aborted) return {};
-      const { updatedAt, boards, code } = result;
-      return boards ? { boards, updatedAt } : { updatedAt: null, code: code ?? 'unavailable' };
+      const { updatedAt, boards, code, cutoffAt, nextAt } = result;
+      return boards ? { boards, updatedAt, ...(nextAt - cutoffAt === HOUR_MS ? { cutoffAt, nextAt } : {}) }
+        : { updatedAt: null, code: code ?? 'unavailable' };
     }
     if (payload?.action === 'cache') {
       await rankingPreferenceReady;

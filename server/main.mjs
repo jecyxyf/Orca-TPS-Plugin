@@ -3,7 +3,6 @@ import { dirname, resolve } from 'node:path';
 import { createLeaderboardServer } from './app.mjs';
 import { openLeaderboardStore } from './store.mjs';
 import { createLeaderboardJobs } from './leaderboard-jobs.mjs';
-import { HOUR_MS, hourStart } from '../src/leaderboard-stats.mjs';
 
 const env = process.env;
 const host = env.LEADERBOARD_HOST ?? '127.0.0.1';
@@ -14,7 +13,8 @@ mkdirSync(dirname(filename), { recursive: true, mode: 0o700 });
 const store = openLeaderboardStore(filename);
 const maxTokens = Number(env.LEADERBOARD_MAX_TOKENS ?? Number.MAX_SAFE_INTEGER);
 const log = message => process.stderr.write(message + '\n');
-const jobs = createLeaderboardJobs({ filename, maxTokens, onWrite: store.invalidateUploadCaches, log });
+const jobs = createLeaderboardJobs({ filename, maxTokens, readPublished: store.leaderboardData.latestResult,
+  onWrite: store.invalidateUploadCaches, log });
 const server = createLeaderboardServer({
   store, jobs, maxTokens, log,
   baseUrl: env.LEADERBOARD_BASE_URL ?? `http://127.0.0.1:${port}`,
@@ -24,20 +24,7 @@ const server = createLeaderboardServer({
   trustedProxyIps: env.LEADERBOARD_TRUSTED_PROXY_IPS?.split(',').map(address => address.trim()).filter(Boolean)
 });
 server.listen(port, host, () => process.stdout.write(`榜单服务监听 ${host}:${port}。\n`));
-let hourlyTimer;
-function settleHourly() {
-  const now = Date.now();
-  let next = hourStart(now) + HOUR_MS;
-  try { store.hourly.settle(now); }
-  catch (error) {
-    process.stderr.write(`榜单整点结算失败。${error.message}\n`);
-    next = Math.min(next, now + 10_000);
-  }
-  hourlyTimer = setTimeout(settleHourly, Math.max(0, next - Date.now()));
-}
-settleHourly();
 function stop() {
-  clearTimeout(hourlyTimer);
   server.close(() => { void jobs.close().finally(store.close); });
 }
 process.once('SIGINT', stop);

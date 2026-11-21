@@ -4,6 +4,12 @@ import { validInstallationId } from '../src/leaderboard-installation.mjs';
 
 const MAX_SPAN = RANKING_HOURS.at(-1) * HOUR_MS;
 const DAY = 24 * HOUR_MS;
+function coversHours(hours, start, end) {
+  for (let hour = start; hour < end; hour += HOUR_MS) {
+    if (!(hours.get(hour) >= hour + HOUR_MS)) return false;
+  }
+  return true;
+}
 
 export function openHourlyRankings(db, transaction, readOnly = false) {
   if (!readOnly) db.exec(`
@@ -67,6 +73,17 @@ export function openHourlyRankings(db, transaction, readOnly = false) {
       UNION SELECT account, installation_id FROM installation_scores WHERE day>=? AND day<=?
       UNION SELECT account, installation_id FROM rolling_uploads WHERE covered_until>?) devices
     LEFT JOIN rolling_uploads uploads USING (account, installation_id)`);
+  const activeHourly = db.prepare('SELECT account FROM source_accounts WHERE active=2');
+  const legacyHours = db.prepare(`SELECT h.account, a.username, h.hour_start AS at, h.tokens, h.submitted_at AS submittedAt,
+      u.covered_from, u.covered_until, h.installation_id FROM hourly_usage h JOIN accounts a ON a.id=h.account
+    LEFT JOIN hourly_uploads u USING (account, installation_id)
+    WHERE h.hour_start>=? AND h.hour_start<? AND a.banned=0 AND NOT EXISTS (
+      SELECT 1 FROM rolling_usage r WHERE r.account=h.account AND r.installation_id=h.installation_id
+        AND r.completed_at>=h.hour_start AND r.completed_at<h.hour_start+${HOUR_MS}
+    ) AND NOT EXISTS (
+      SELECT 1 FROM rolling_uploads r WHERE r.account=h.account AND r.installation_id=h.installation_id
+        AND r.covered_from<=h.hour_start AND r.covered_until>=h.hour_start+${HOUR_MS}
+    )`);
 
   function submit(account, { installationId, version, buckets, coverage, requestId, fingerprint }, now, maxTokens, rolling = false) {
     const cutoff = rolling ? now : hourStart(now);
@@ -121,11 +138,15 @@ export function openHourlyRankings(db, transaction, readOnly = false) {
         .run(leaderboardDay(cutoff - MAX_SPAN), leaderboardDay(cutoff), cutoff - MAX_SPAN);
       db.prepare(`INSERT INTO hourly_snapshot VALUES (1, ?, 1) ON CONFLICT(slot) DO UPDATE SET cutoff=excluded.cutoff, revision=1`)
         .run(cutoff);
-      db.prepare('DELETE FROM hourly_usage WHERE hour_start<?').run(cutoff - MAX_SPAN);
-      db.prepare('DELETE FROM rolling_usage WHERE completed_at<?').run(cutoff - MAX_SPAN);
-      db.prepare('DELETE FROM hourly_removed WHERE day<?').run(leaderboardDay(cutoff - MAX_SPAN));
+      prune(cutoff);
       return current.get();
     });
+  }
+
+  function prune(cutoff) {
+    db.prepare('DELETE FROM hourly_usage WHERE hour_start<?').run(cutoff - MAX_SPAN);
+    db.prepare('DELETE FROM rolling_usage WHERE completed_at<?').run(cutoff - MAX_SPAN);
+    db.prepare('DELETE FROM hourly_removed WHERE day<?').run(leaderboardDay(cutoff - MAX_SPAN));
   }
 
   function revision() { db.exec('UPDATE hourly_snapshot SET revision=revision+1'); }
@@ -174,8 +195,10 @@ export function openHourlyRankings(db, transaction, readOnly = false) {
       ? a.submittedAt - b.submittedAt || a.account - b.account : a.tokens > b.tokens ? -1 : 1)
       .slice(0, 100).map(({ account, username, tokens, submittedAt, points }, index) => {
         const devices = coverage.get(account) ?? [];
-        const covered = (start, end) => devices.length > 0 && devices.every(device => device.covered_from !== null &&
-          device.covered_from <= start && device.covered_until >= end - (end === cutoff ? currentLag : 0));
+        const covered = (start, end) => devices.length > 0 && devices.every(device => device.hours
+          ? coversHours(device.hours, start, end)
+          : device.covered_from !== null && device.covered_from <= start &&
+            device.covered_until >= end - (end === cutoff ? currentLag : 0));
         return { account, username, tokens: Number(tokens), submittedAt, rank: index + 1,
           complete: covered(windowStart, cutoff), ...(hours > 24 ? { daily: points.map((value, day) => {
             const at = windowStart + day * DAY;
@@ -201,5 +224,29 @@ export function openHourlyRankings(db, transaction, readOnly = false) {
     return { ...board, nextAt: cutoff + RANKING_REFRESH_MS };
   }
 
-  return { submit, settle, ranking, rollingRanking, remove, revision };
+  function publishedRankings(cutoff, hourRows) {
+    const oldest = cutoff - MAX_SPAN;
+    const switched = new Set(activeHourly.all().map(row => row.account));
+    const legacy = rollingRows.all(oldest, cutoff).filter(row => !switched.has(row.account));
+    const fallback = legacyHours.all(oldest, cutoff).filter(row => !switched.has(row.account));
+    const devices = new Map(rollingCoverage.all(oldest, cutoff, leaderboardDay(oldest), leaderboardDay(cutoff), oldest)
+      .filter(row => !switched.has(row.account)).map(row => [row.account + '/' + row.installation_id, row]));
+    for (const row of fallback) {
+      const id = row.account + '/' + row.installation_id;
+      if (!devices.get(id)?.covered_until) devices.set(id, row);
+    }
+    for (const row of hourRows) {
+      const id = row.account + '/' + row.installation_id;
+      let device = devices.get(id);
+      if (!device) devices.set(id, device = { account: row.account, hours: new Map() });
+      if (row.covered_until != null) device.hours.set(row.at, row.covered_until);
+    }
+    const rows = [...legacy, ...fallback, ...hourRows].filter(row => row.tokens > 0);
+    return Object.fromEntries(RANKING_HOURS.map(hours => [hours, {
+      ...buildRanking(hours, cutoff, rows.filter(row => row.at >= cutoff - hours * HOUR_MS), devices.values()),
+      nextAt: cutoff + HOUR_MS
+    }]));
+  }
+
+  return { submit, settle, ranking, rollingRanking, publishedRankings, prune, remove, revision };
 }

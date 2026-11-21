@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { isIP, SocketAddress } from 'node:net';
 import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
-import { RECENT_STATS_MS, RANKING_HOURS, USAGE_UPLOAD_BYTES } from '../src/leaderboard-stats.mjs';
+import { RECENT_STATS_MS, RANKING_HOURS, RANKING_REFRESH_MS, USAGE_UPLOAD_BYTES, hourStart } from '../src/leaderboard-stats.mjs';
 import { validInstallationId } from '../src/leaderboard-installation.mjs';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
 import { createRankingSnapshot, recentRankingRows, rollingBoard } from './ranking-snapshot.mjs';
@@ -17,13 +17,17 @@ const challengeOf = value => createHash('sha256').update(value).digest('base64ur
 const tokenPattern = /^[\w-]{43}$/;
 const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
 const statuses = { accepted: 201, initialized: 200, invalid: 400, duplicate: 409, removed: 409, upgrade_required: 409,
-  username_changed: 409, too_soon: 429, locked: 429, banned: 403, login_required: 401, stale_version: 409, unavailable: 503 };
+  username_changed: 409, too_soon: 429, locked: 429, banned: 403, login_required: 401, stale_version: 409, unavailable: 503,
+  migration_required: 409, rescan: 409, lease_expired: 409, standby: 200 };
 const validRequestId = id => typeof id === 'string' && /^[\w-]{16,128}$/.test(id);
 const sourceFields = new Map([
   ['lease', ['observedAt']],
   ['update', ['revision', 'leaseEpoch', 'coverage', 'daily', 'buckets']],
   ['baseline-part', ['leaseEpoch', 'coverage', 'snapshotId', 'partIndex', 'partCount', 'purpose', 'daily', 'buckets']],
   ['baseline-commit', ['leaseEpoch', 'coverage', 'snapshotId']]
+]);
+const hourlySourceFields = new Map([
+  ['lease', ['observedAt']], ['hourly-update', ['leaseEpoch', 'hours', 'sample']]
 ]);
 const feedback = { updated: '已保存。', rejected: '操作未执行，请检查输入。', forbidden: '该 GitHub 账号没有管理权限。', failed: 'GitHub 登录未完成，请重新登录。' };
 
@@ -126,7 +130,22 @@ export function createLeaderboardServer({
     return res.end(snapshot.body);
   }
 
+  let publishedPayload, publishedData;
+  function publishedSnapshot() {
+    const value = jobs.snapshot();
+    if (value !== publishedPayload) {
+      publishedPayload = value;
+      publishedData = value ? JSON.parse(value) : undefined;
+    }
+    return publishedData;
+  }
+
   function sendSpeedRanking(req, res, time) {
+    if (jobs?.hourly) {
+      const snapshot = publishedSnapshot();
+      if (!snapshot) return send(res, 503, { code: 'unavailable' });
+      return sendCached(req, res, cachedJson(snapshot.boards[0]));
+    }
     const revision = store.speedRevision();
     if (!publicSpeeds || publicSpeeds.revision !== revision || time >= publicSpeeds.expiresAt) {
       const { rows, expiresAt } = store.speedRanking(time);
@@ -146,6 +165,10 @@ export function createLeaderboardServer({
     const hours = rankingPeriod(url);
     if (!hours) return send(res, 400, { code: 'invalid' });
     res.setHeader('Date', new Date(time).toUTCString());
+    if (jobs?.hourly) {
+      const snapshot = publishedSnapshot();
+      return snapshot ? send(res, 200, snapshot.boards[hours]) : send(res, 503, { code: 'unavailable' });
+    }
     return send(res, 200, rollingBoard(store, hours, time));
   }
 
@@ -153,6 +176,17 @@ export function createLeaderboardServer({
     const hours = rankingPeriod(url);
     if (!hours) return send(res, 400, { code: 'invalid' });
     res.setHeader('Date', new Date(time).toUTCString());
+    if (jobs?.hourly) {
+      const value = publishedSnapshot();
+      if (!value) return send(res, 503, { code: 'unavailable' });
+      const snapshotId = `${value.cutoffAt}-${value.generatedAt}`;
+      const board = value.boards[hours];
+      if (!recent) return sendCached(req, res, cachedJson({ ...board, snapshotId }));
+      if (url.searchParams.get('snapshotId') !== snapshotId) return send(res, 409, { code: 'snapshot_expired' });
+      const rows = board.rows.map(row => ({ username: row.username, submittedAt: row.lastUploadAt,
+        topModel: row.recent.topModel, topCli: row.recent.topCli, ...(hours === 24 ? { points: row.recent.points } : {}) }));
+      return sendCached(req, res, cachedJson({ snapshotId, rows }));
+    }
     const settled = store.hourly.settle(time);
     const snapshotId = `${settled.cutoff}-${settled.revision}`;
     if (recent && url.searchParams.get('snapshotId') !== snapshotId) {
@@ -440,7 +474,7 @@ export function createLeaderboardServer({
     }
     const currentMinute = Math.floor(time / 60000);
     if (currentMinute !== minute) {
-      store.pruneRecent(time);
+      store.pruneRecent(jobs?.hourly ? hourStart(time) - 1 : time);
       requests.clear();
       for (const [key, login] of deviceLogins) if (login.expiresAt <= time) deviceLogins.delete(key);
       for (const [key, login] of browserLogins) if (login.expiresAt <= time) browserLogins.delete(key);
@@ -477,8 +511,19 @@ export function createLeaderboardServer({
     }
     if (!route.startsWith('/api/')) return send(res, 404, { code: 'not_found' });
     if (method === 'GET' && route === '/api/leaderboard/snapshot') {
-      const body = jobs ? jobs.snapshot() : JSON.stringify(createRankingSnapshot(store, () => time));
+      let body = jobs ? jobs.snapshot() : JSON.stringify(createRankingSnapshot(store, () => time));
+      if (body && jobs?.hourly && req.headers['x-orca-snapshot-schedule'] !== 'hourly') {
+        const snapshot = publishedSnapshot();
+        if (!snapshot) body = undefined;
+        else {
+          const nextAt = snapshot.cutoffAt + RANKING_REFRESH_MS;
+          const boards = { ...snapshot.boards };
+          for (const hours of RANKING_HOURS) boards[hours] = { ...boards[hours], nextAt };
+          body = JSON.stringify({ ...snapshot, nextAt, boards });
+        }
+      }
       res.setHeader('Cache-Control', 'no-store');
+      if (jobs?.hourly) res.setHeader('Vary', 'X-Orca-Snapshot-Schedule');
       if (!body) return send(res, 503, { code: 'unavailable' });
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       return res.end(body);
@@ -512,17 +557,23 @@ export function createLeaderboardServer({
       const raw = await readBody(req, USAGE_UPLOAD_BYTES + 4608);
       const body = parseJson(raw);
       const receivedAt = now();
-      if (body?.data?.format === 3) {
+      if ([3, 4].includes(body?.data?.format)) {
         const { username, deviceGuid, data } = body;
-        const { operation, requestId, reporterGuid = deviceGuid, stats, statsId, ...fields } = data;
-        delete fields.format;
-        const allowed = sourceFields.get(operation);
+        const { format, operation, requestId, reporterGuid = deviceGuid, stats, statsId, ...fields } = data;
+        const allowed = (format === 4 ? hourlySourceFields : sourceFields).get(operation);
         if (req.headers['content-type']?.split(';')[0] !== 'application/json' || Buffer.byteLength(raw) > USAGE_UPLOAD_BYTES ||
             Object.keys(body).length !== 3 ||
             typeof username !== 'string' || !/^[a-z\d-]{1,39}$/i.test(username) ||
             !validInstallationId(deviceGuid) || !validInstallationId(reporterGuid) || !validRequestId(requestId) ||
             !allowed || Object.keys(fields).some(field => !allowed.includes(field))) {
           return send(res, 400, { code: 'invalid' });
+        }
+        if (format === 4) {
+          const [result] = await recordUploads([{ kind: 'hourly-source', sessionDigest, receivedAt, input: {
+            username, sourceId: deviceGuid, reporterId: reporterGuid, operation, requestId, ...fields,
+            fingerprint: digest(raw)
+          } }]);
+          return send(res, statuses[result.code] ?? 400, result);
         }
         const [result] = await recordUploads([{ kind: 'sources', sessionDigest, receivedAt, input: {
           username, reporterId: reporterGuid, requestId, stats, statsId, fingerprint: digest(raw), operations: [{
@@ -564,7 +615,8 @@ export function createLeaderboardServer({
       return send(res, statuses[result.code], result);
     }
     if (method === 'GET' && route === '/api/today/status') {
-      return send(res, 200, { ...store.status(account.id, time), username: account.username, accountId: account.id, uploadFormat: 3 });
+      return send(res, 200, { ...store.status(account.id, time), username: account.username, accountId: account.id, uploadFormat: 3,
+        hourlySourceUploads: store.canUseHourlySources(account.id, time) });
     }
     if (method === 'GET' && route === '/api/history/status') {
       return send(res, 200, { initialized: store.historyInitialized(account.id), ...store.status(account.id, time) });

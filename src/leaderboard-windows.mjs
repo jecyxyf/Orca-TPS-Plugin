@@ -25,7 +25,9 @@ function validRecent({ lastUploadAt, recent }) {
 
 function validSnapshot({ cutoffAt, nextAt, boards } = {}) {
   const speedRows = boards?.[0]?.rows;
-  return isUsageTime(cutoffAt) && nextAt === cutoffAt + RANKING_REFRESH_MS && Object.keys(boards ?? {}).length === 4 &&
+  const interval = nextAt - cutoffAt;
+  return isUsageTime(cutoffAt) && (interval === RANKING_REFRESH_MS || (interval === HOUR_MS && cutoffAt % HOUR_MS === 0)) &&
+    Object.keys(boards ?? {}).length === 4 &&
     RANKING_HOURS.every(hours => validWindow(boards?.[hours], hours, cutoffAt, nextAt)) &&
     validRows(speedRows) && speedRows.every(row => Number.isFinite(row.avgTps) && row.avgTps > 0 &&
       (row.deltaTokens === undefined || (Number.isSafeInteger(row.deltaTokens) && row.deltaTokens > SPEED_MIN_DELTA)) &&
@@ -35,7 +37,8 @@ function validSnapshot({ cutoffAt, nextAt, boards } = {}) {
 export function createWindowViews({ storage, origin, request, now, panels, scope = () => origin }) {
   const cacheKey = 'leaderboard:ranking-snapshot';
   let current, currentScope, pending;
-  const view = (snapshot, hours) => ({ ...snapshot.boards[hours], boards: snapshot.boards, updatedAt: snapshot.updatedAt });
+  const view = (snapshot, hours) => ({ ...snapshot.boards[hours], cutoffAt: snapshot.cutoffAt, nextAt: snapshot.nextAt,
+    boards: snapshot.boards, updatedAt: snapshot.updatedAt });
   function clear() { current = currentScope = undefined; }
   function known(key) {
     return Object.values(current?.boards ?? {}).some(board => board.rows.some(row => row.username.toLowerCase() === key));
@@ -59,7 +62,7 @@ export function createWindowViews({ storage, origin, request, now, panels, scope
   }
 
   async function download(signal, requestedScope) {
-    const reply = await request('/api/leaderboard/snapshot', { auth: false, signal, viewHeaders: true });
+    const reply = await request('/api/leaderboard/snapshot', { auth: false, signal, viewHeaders: true, hourlySnapshot: true });
     if (signal.aborted || requestedScope !== scope()) return {};
     if (!validSnapshot(reply)) return { code: unavailable(reply) };
     const updatedAt = now();
@@ -78,7 +81,12 @@ export function createWindowViews({ storage, origin, request, now, panels, scope
     if (!signal || signal.aborted) return {};
     const requestedScope = scope();
     if (requestedScope !== currentScope) clear();
-    if (current && !force && now() < current.updatedAt + RANKING_REFRESH_MS) return view(current, hours);
+    if (current && !force) {
+      const next = current.nextAt - (current.boards[0]?.clockOffset ?? 0);
+      const refresh = current.nextAt - current.cutoffAt === HOUR_MS && next > current.updatedAt
+        ? next : current.updatedAt + RANKING_REFRESH_MS;
+      if (now() < refresh) return view(current, hours);
+    }
     if (pending?.signal !== signal || pending.scope !== requestedScope) {
       const job = { signal, scope: requestedScope, promise: undefined };
       job.promise = download(signal, requestedScope).finally(() => { if (pending === job) pending = undefined; });

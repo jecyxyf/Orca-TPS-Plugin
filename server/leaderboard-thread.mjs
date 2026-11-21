@@ -1,14 +1,25 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { createRankingSnapshot } from './ranking-snapshot.mjs';
+import { createPublishedSnapshot, createRankingSnapshot } from './ranking-snapshot.mjs';
 import { openLeaderboardStore } from './store.mjs';
 
 const { filename, maxTokens, role } = workerData;
 const store = openLeaderboardStore(filename, { readOnly: role === 'rankings' });
 
-parentPort.on('message', ({ id, requests }) => {
+parentPort.on('message', ({ id, requests, cutoff, publish }) => {
   try {
+    if (publish) {
+      const { cutoffAt, generatedAt, body, revision } = publish;
+      parentPort.postMessage({ id, published: store.publishHourlyResult(cutoffAt, generatedAt, body, revision) });
+      return;
+    }
     if (role === 'rankings') {
-      parentPort.postMessage({ id, body: JSON.stringify(createRankingSnapshot(store)) });
+      if (cutoff === undefined) parentPort.postMessage({ id, body: JSON.stringify(createRankingSnapshot(store)) });
+      else {
+        const { snapshot, revision } = createPublishedSnapshot(store, cutoff, () => parentPort.postMessage({ id, opened: true }));
+        const generatedAt = Date.now();
+        parentPort.postMessage({ id, publish: { cutoffAt: cutoff, generatedAt, revision,
+          body: JSON.stringify({ ...snapshot, generatedAt }) } });
+      }
       return;
     }
     const responses = store.uploadBatch(requests.flat(), maxTokens);

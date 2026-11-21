@@ -76,7 +76,7 @@ export async function createSubmissionStats(storage, now = Date.now) {
       countLabel(tools, cli, completedAt);
     }
     const stats = { deltaTokens, avgTps: speeds ? avgTps : null, topModel: mostUsed(models), topCli: mostUsed(tools) };
-    const options = { requestId: randomUUID(), body: { ...score, stats } };
+    const options = { requestId: randomUUID(), sampledAt: time, body: { ...score, stats } };
     pending = { session, sourceId, createdAt: time, options, records: sent };
     await persist();
     return options;

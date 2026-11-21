@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { USAGE_RETENTION_MS } from './local-usage-db.mjs';
-import { HOUR_MS, MAX_RECENT_REQUESTS, RECENT_STATS_MS, validStatsLabel } from './leaderboard-stats.mjs';
+import { HOUR_MS, MAX_RECENT_REQUESTS, RECENT_STATS_MS, hourStart, validStatsLabel } from './leaderboard-stats.mjs';
 import { sourceMessage } from './locales.mjs';
 import { accumulateRecords, dailySeries, leaderboardDay, requestTokens, summarizeUsage } from './usage-summary.mjs';
 
@@ -62,7 +62,7 @@ export function createRecordUsageIndex({
     const at = now(), cutoff = at - USAGE_RETENTION_MS;
     const purged = db.prune(at);
     recordsChanged ||= purged > 0;
-    const view = await discover(Math.floor(cutoff / HOUR_MS) * HOUR_MS);
+    const view = await discover(Math.floor(cutoff / HOUR_MS) * HOUR_MS, at);
     signal?.throwIfAborted();
     scans.clear();
     complete = false;
@@ -111,15 +111,16 @@ export function createRecordUsageIndex({
     const done = item => successful.get(keyFor(item)) === item.stamp || current(item);
     const bySource = Map.groupBy(items, item => item.deviceGuid);
     const missing = id => (bySource.get(id) ?? []).filter(item => !done(item));
-    function scanned(id, observedAt) {
+    function scanned(id, observedAt, sourceTime) {
       const unread = missing(id);
       scans.set(id, {
         observedAt: unread.some(item => (retries.get(keyFor(item)) ?? 0) > at) ? undefined : observedAt,
-        coverage: unread.length ? undefined : [cutoff, at]
+        coverage: unread.length ? undefined : [cutoff, at],
+        sourceTime, sourceReadAt: view.sourceReadAt
       });
     }
-    if (view.localComplete) scanned(deviceGuid, at);
-    for (const source of view.remoteSources?.values() ?? []) scanned(source.sourceId, source.observedAt);
+    if (view.localComplete) scanned(deviceGuid, at, view.localSourceTime ?? at);
+    for (const source of view.remoteSources?.values() ?? []) scanned(source.sourceId, source.observedAt, source.sourceTime);
     complete = view.localComplete && view.remoteComplete && items.every(done) &&
       db.readSources().every(id => scans.has(id));
     progress = { done: items.filter(done).length, total: items.length };
@@ -157,8 +158,29 @@ export function createRecordUsageIndex({
     return { day: leaderboardDay(at), daily };
   }
 
+  function leaderboardHours(reporterId) {
+    return leaderboardSources(reporterId).flatMap(source => {
+      const scan = scans.get(source.sourceId);
+      if (!source.coverage || !Number.isSafeInteger(scan?.sourceTime)) return [];
+      const [from, to] = source.coverage, coveredUntil = Math.min(to, scan.sourceTime, scan.sourceReadAt ?? to);
+      const firstHour = Math.ceil(from / HOUR_MS) * HOUR_MS;
+      const totals = new Map();
+      for (const [at, tokens] of source.buckets) {
+        if (at < firstHour || at >= coveredUntil) continue;
+        const hour = hourStart(at);
+        totals.set(hour, sumTokens(totals.get(hour) ?? 0, tokens));
+      }
+      const hours = [];
+      for (let hour = firstHour; hour < coveredUntil; hour += HOUR_MS) {
+        hours.push({ hour, tokens: totals.get(hour) ?? 0, updatedAt: scan.sourceTime,
+          coveredUntil: Math.min(hour + HOUR_MS, coveredUntil) });
+      }
+      return [{ sourceId: source.sourceId, observedAt: scan.observedAt, hours }];
+    });
+  }
+
   return {
-    refresh, ready: initialize, summary: () => personal, hasBackfill: () => moreBackfill, leaderboardSources,
+    refresh, ready: initialize, summary: () => personal, hasBackfill: () => moreBackfill, leaderboardSources, leaderboardHours,
     canPublish: () => complete || updatedAt !== null && progress.done > 0,
     leaderboardUsage() {
       const { day, daily } = dayTotals();

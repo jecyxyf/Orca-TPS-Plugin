@@ -2121,7 +2121,9 @@
           if (signal.aborted) return;
           const updated = cacheRankings(result.boards, result.updatedAt);
           rankingProblem = updated ? undefined : result.code;
-          nextRankRefresh = (updated ? result.updatedAt : startedAt) + RANK_REFRESH_MS;
+          const next = result.nextAt - (result.boards?.[0]?.clockOffset ?? 0);
+          nextRankRefresh = updated && result.nextAt - result.cutoffAt === 3_600_000 && next > result.updatedAt
+            ? next : (updated ? result.updatedAt : startedAt) + RANK_REFRESH_MS;
           render();
           if (updated && rankDays === 1) animateToday = true;
         })().finally(() => {

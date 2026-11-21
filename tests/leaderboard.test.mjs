@@ -7,13 +7,16 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { createLeaderboardServer } from '../server/app.mjs';
 import { createLeaderboardJobs } from '../server/leaderboard-jobs.mjs';
 import { openLeaderboardStore } from '../server/store.mjs';
+import { createPublishedSnapshot } from '../server/ranking-snapshot.mjs';
 import { openLocalUsageDb } from '../src/local-usage-db.mjs';
 import { startLeaderboard } from '../src/leaderboard.mjs';
 import { createSubmissionStats } from '../src/submission-stats.mjs';
-import { createSourceUploader, uploadUsageChanges } from '../src/usage-upload.mjs';
+import { createSourceUploader, createSqliteUploadStorage, uploadUsageChanges } from '../src/usage-upload.mjs';
+import { createHourlySourceUploader } from '../src/hourly-source-upload.mjs';
 import { createWindowViews } from '../src/leaderboard-windows.mjs';
 import { HOUR_MS, RANKING_REFRESH_MS, SPEED_WINDOW_MS, USAGE_UPLOAD_BYTES, hourStart } from '../src/leaderboard-stats.mjs';
 import { createAvatarCache } from '../src/leaderboard-avatars.mjs';
@@ -406,6 +409,193 @@ test('one upload carries the daily score and rolling data, and retrying it count
   }
   const { boards } = await (await call('/api/leaderboard/snapshot')).json();
   for (const hours of [24, 168, 720]) assert.equal(boards[hours].rows[0].tokens, 1000);
+});
+
+test('hourly source batches write each changed hour once, preserve older data and publish four aligned boards', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'tps-hourly-source-'));
+  const filename = path.join(dir, 'test.sqlite'), store = openLeaderboardStore(filename);
+  const probe = new DatabaseSync(filename);
+  t.after(async () => { probe.close(); store.close(); await rm(dir, { recursive: true, force: true }); });
+  probe.exec(`CREATE TABLE write_probe(count INTEGER NOT NULL);
+    INSERT INTO write_probe VALUES (0);
+    CREATE TRIGGER hour_insert AFTER INSERT ON leaderboard_data WHEN NEW.hour_start>0
+      BEGIN UPDATE write_probe SET count=count+1; END;
+    CREATE TRIGGER hour_update AFTER UPDATE ON leaderboard_data WHEN NEW.hour_start>0
+      BEGIN UPDATE write_probe SET count=count+1; END;`);
+  const cutoff = START + 2 * HOUR_MS, hour = cutoff - HOUR_MS;
+  const a = randomUUID(), b = randomUUID(), remote = randomUUID();
+  store.upsertAccount({ id: 1, login: 'alice' });
+  store.addSession('session', 1, 'plugin', cutoff + 2 * HOUR_MS);
+  const entry = (receivedAt, reporterId, sourceId, fields) => ({ kind: 'hourly-source', sessionDigest: 'session', receivedAt,
+    input: { username: 'alice', reporterId, sourceId, requestId: randomUUID(), fingerprint: 'test', ...fields } });
+  const send = (...entries) => store.uploadBatch(entries, 1_000_000);
+  const update = (receivedAt, reporter, source, tokens, fields = {}, at = hour) => entry(receivedAt, reporter, source, {
+    operation: 'hourly-update', hours: [{ hour: at, tokens, coveredUntil: at + HOUR_MS, updatedAt: receivedAt - 1 }], ...fields
+  });
+  const sample = (avgTps, at) => ({ id: randomUUID(), at, avgTps, deltaTokens: 700, topModel: 'model', topCli: 'codex' });
+  const at = cutoff + 10;
+  const first = update(at, a, a, 700, { sample: sample(110, cutoff - 30) });
+  const second = update(at + 1, a, a, 900, { sample: sample(95, cutoff - 20) });
+  assert.deepEqual(send(first, second).map(row => row.code), ['accepted', 'accepted']);
+  assert.equal(probe.prepare('SELECT count FROM write_probe').get().count, 1);
+  assert.equal(send(second, first)[0].code, 'accepted');
+  assert.equal(probe.prepare('SELECT count FROM write_probe').get().count, 1);
+  const earlierHour = cutoff - 3 * HOUR_MS;
+  const later = at + 10_100;
+  assert.equal(send(update(later, a, a, 50, {}, earlierHour))[0].tokens, 900);
+  const lease = time => ({ operation: 'lease', observedAt: time });
+  assert.equal(send(entry(at, a, remote, lease(at)))[0].leaseEpoch, 1);
+  assert.equal(send(entry(at + 1, b, remote, lease(at + 1)))[0].code, 'standby');
+  const remoteAt = later + 10_100;
+  assert.equal(send(update(remoteAt, a, remote, 100, { leaseEpoch: 1 }))[0].code, 'accepted');
+  const takeover = at + 60_100;
+  assert.equal(send(entry(takeover, b, remote, lease(takeover)))[0].leaseEpoch, 2);
+  assert.equal(send(update(takeover, a, remote, 800, { leaseEpoch: 1 }))[0].code, 'lease_expired');
+  assert.equal(send(update(takeover, b, remote, 60, { leaseEpoch: 2,
+    hours: [{ hour, tokens: 60, updatedAt: takeover, coveredUntil: hour + HOUR_MS - 1 }] }))[0].code, 'rescan');
+  assert.equal(send(update(takeover + 1, b, remote, 200, { leaseEpoch: 2 }))[0].code, 'accepted');
+  const { snapshot, revision } = createPublishedSnapshot(store, cutoff);
+  assert.equal(snapshot.nextAt, cutoff + HOUR_MS);
+  assert.deepEqual([24, 168, 720].map(window => snapshot.boards[window].rows[0].tokens), [1150, 1150, 1150]);
+  assert.equal(snapshot.boards[0].rows[0].avgTps, 110);
+  assert.ok(store.publishHourlyResult(cutoff, takeover, JSON.stringify(snapshot), revision));
+  const reader = openLeaderboardStore(filename, { readOnly: true });
+  try { assert.deepEqual(JSON.parse(reader.leaderboardData.latestResult()), snapshot); }
+  finally { reader.close(); }
+  store.removeScores(1, { day: TODAY, account: 1 }, takeover + 1);
+  assert.equal(store.leaderboardData.latestResult(), undefined);
+  assert.equal(store.publishHourlyResult(cutoff, takeover + 2, JSON.stringify(snapshot), revision), false);
+});
+
+test('hourly migration imports verified source totals once and leaves mixed uploads on the old path', t => {
+  const store = openLeaderboardStore(':memory:');
+  t.after(() => store.close());
+  const now = START + HOUR_MS + 10_000, source = randomUUID();
+  const send = (kind, sessionDigest, receivedAt, input) => store.uploadBatch([{ kind, sessionDigest, receivedAt,
+    input: { requestId: randomUUID(), fingerprint: 'test', ...input } }], 1_000_000)[0];
+  store.upsertAccount({ id: 1, login: 'alice' });
+  store.upsertAccount({ id: 2, login: 'bob' });
+  store.addSession('alice', 1, 'plugin', now + HOUR_MS);
+  store.addSession('bob', 2, 'plugin', now + HOUR_MS);
+  const rolling = { reporterId: source, operations: [{ type: 'update', sourceId: source, sourceKind: 'local', revision: 1,
+    coverage: [START, now], daily: [{ day: TODAY, tokens: 150 }], buckets: [[START + 25, 100], [START + 38, 50]] }] };
+  assert.equal(send('sources', 'alice', now, rolling).results[0].code, 'accepted');
+  assert.equal(store.canUseHourlySources(1, now), true);
+  const changedAt = now + 11_000, changedHour = hourStart(changedAt);
+  const update = username => ({ username, sourceId: source, reporterId: source, operation: 'hourly-update',
+    hours: [{ hour: changedHour, updatedAt: changedAt, coveredUntil: changedAt, tokens: 20 }] });
+  assert.equal(send('daily', 'bob', now, { day: TODAY, tokens: 60, installationId: source }).code, 'accepted');
+  assert.equal(store.canUseHourlySources(2, now), false);
+  assert.equal(send('hourly-source', 'bob', changedAt, update('bob')).code, 'migration_required');
+  assert.equal(send('hourly-source', 'alice', changedAt, update('alice')).tokens, 170);
+  assert.equal(send('sources', 'alice', changedAt + 11_000, rolling).code, 'upgrade_required');
+  assert.equal(createPublishedSnapshot(store, changedHour).snapshot.boards[24].rows[0].tokens, 150);
+  assert.equal(store.ranking(2, changedAt).tokens, 60);
+});
+
+test('the scheduled hourly publication excludes the next batch until it has pinned its read', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'tps-hourly-publication-'));
+  const filename = path.join(dir, 'test.sqlite'), store = openLeaderboardStore(filename);
+  const cutoff = START + 3 * HOUR_MS, hour = cutoff - 2 * HOUR_MS;
+  let clock = cutoff - 30;
+  const jobs = createLeaderboardJobs({ filename, maxTokens: 1_000_000,
+    now: () => clock, readPublished: store.leaderboardData.latestResult });
+  t.after(async () => { await jobs.close(); store.close(); await rm(dir, { recursive: true, force: true }); });
+  store.upsertAccount({ id: 1, login: 'alice' });
+  store.upsertAccount({ id: 2, login: 'bob' });
+  store.addSession('alice', 1, 'plugin', cutoff + HOUR_MS);
+  store.addSession('bob', 2, 'plugin', cutoff + HOUR_MS);
+  const entry = (username, receivedAt, tokens) => {
+    const id = randomUUID();
+    return { kind: 'hourly-source', sessionDigest: username, receivedAt, input: {
+      username, requestId: randomUUID(), fingerprint: 'test', sourceId: id, reporterId: id,
+      operation: 'hourly-update', hours: [{ hour, coveredUntil: hour + HOUR_MS, updatedAt: receivedAt, tokens }]
+    } };
+  };
+  const before = jobs.submit([entry('alice', cutoff - 1, 700)]);
+  const after = jobs.submit([entry('bob', cutoff, 900)]);
+  clock = cutoff;
+  assert.equal((await before)[0].code, 'accepted');
+  for (let i = 0; i < 160; i++) {
+    if (JSON.parse(jobs.snapshot() ?? 'null')?.cutoffAt === cutoff) break;
+    await delay(20);
+  }
+  const published = JSON.parse(jobs.snapshot());
+  assert.equal(published.cutoffAt, cutoff);
+  assert.deepEqual(published.boards[24].rows.map(row => row.tokens), [700]);
+  clock += 2_001;
+  assert.equal((await after)[0].code, 'accepted');
+  assert.equal(store.status(2, clock).tokens, 900);
+  assert.deepEqual(JSON.parse(jobs.snapshot()).boards[24].rows.map(row => row.tokens), [700]);
+});
+
+test('the format 4 uploader keeps failed packets and their clock values across a restart', async t => {
+  const api = await fixture(t);
+  const local = openLocalUsageDb(':memory:');
+  t.after(() => local.close());
+  const reporter = randomUUID();
+  const credential = await api.login();
+  const upload = createHourlySourceUploader(createSqliteUploadStorage(local.queue,
+    { origin: api.endpoint, accountId: 1 }, 'pending-hourly'), reporter, () => 'alice');
+  api.advance(10_000);
+  const at = api.clock(), hour = hourStart(at);
+  const read = async () => [{ sourceId: reporter, hours: [{ hour, tokens: 700, updatedAt: at, coveredUntil: at }] }];
+  const send = async body => (await (await api.call('/api/leaderboard/uploads', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${credential}` }, body: JSON.stringify(body)
+  })).json());
+  let sent;
+  const first = await upload({ now: at, active: () => true, read, send: async body => {
+    sent = body;
+    assert.equal((await send(body)).code, 'accepted');
+    return { code: 'unavailable' };
+  } });
+  assert.equal(first.code, 'unavailable');
+  const restart = createHourlySourceUploader(createSqliteUploadStorage(local.queue,
+    { origin: api.endpoint, accountId: 1 }, 'pending-hourly'), reporter, () => 'alice');
+  api.advance(11_000);
+  const replay = await restart({ now: api.clock(), active: () => true, read, send: async body => {
+    assert.deepEqual(body, sent);
+    return send(body);
+  } });
+  assert.equal(replay.code, 'accepted');
+  assert.equal(replay.tokens, 700);
+  assert.equal(local.queue.next({ origin: api.endpoint, accountId: 1 }, 'pending-hourly'), undefined);
+});
+
+test('the plugin selects hourly uploads when the server and local usage index support them', async t => {
+  const api = await fixture(t);
+  const db = openLocalUsageDb(':memory:'), storage = new Map(), secrets = new Map(), packets = [];
+  const own = randomUUID();
+  let handler;
+  const stop = startLeaderboard({
+    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value),
+      delete: async key => storage.delete(key) },
+    host: { has: () => true, call: async (method, { key, value }) => {
+      if (method === 'secrets.get') return { value: secrets.get(key) };
+      if (method === 'secrets.set') return secrets.set(key, value);
+    } },
+    grantedCapabilities: ['secrets:own'],
+    panels: { handle: (_, fn) => { handler = fn; return { dispose() {} }; } }
+  }, {
+    localDb: db, reporterGuid: own, endpoint: api.endpoint, now: () => new Date(api.clock()),
+    readUsage: async () => ({ day: TODAY, tokens: 700 }),
+    readUsageSources: async () => { throw new Error('unexpected compatibility upload'); },
+    readUsageHours: async () => [{ sourceId: own, hours: [{ hour: hourStart(api.clock()), tokens: 700,
+      updatedAt: api.clock(), coveredUntil: api.clock() }] }],
+    fetcher: async (url, options) => {
+      if (options.body && url.pathname === '/api/leaderboard/uploads') packets.push(JSON.parse(options.body));
+      return fetch(url, options);
+    }
+  });
+  t.after(async () => { await stop(); db.close(); });
+  await api.authorizePlugin((await handler({ action: 'login' })).loginUrl, 'alice');
+  assert.equal((await handler({ action: 'poll' })).code, 'signed_in');
+  api.advance(10_000);
+  assert.equal((await handler({ action: 'sync' })).code, 'accepted');
+  assert.equal(packets.length, 1);
+  assert.equal(packets[0].deviceGuid, own);
+  assert.equal(packets[0].data.format, 4);
+  assert.equal(api.store.status(1, api.clock()).tokens, 700);
 });
 
 test('format 2 counts shared SSH once and a stale writer cannot overwrite a staged replacement', async t => {

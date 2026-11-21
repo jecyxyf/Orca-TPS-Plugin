@@ -1,4 +1,4 @@
-import { RANKING_HOURS, RANKING_REFRESH_MS, RECENT_STATS_MS } from '../src/leaderboard-stats.mjs';
+import { HOUR_MS, RANKING_HOURS, RANKING_REFRESH_MS, RECENT_STATS_MS } from '../src/leaderboard-stats.mjs';
 
 export function recentRankingRows(store, hours, members, time) {
   const accounts = members.map(row => row.account);
@@ -13,8 +13,7 @@ export function recentRankingRows(store, hours, members, time) {
   return { rows, expiresAt };
 }
 
-export function rollingBoard(store, hours, cutoffAt) {
-  const board = store.hourly.rollingRanking(hours, cutoffAt);
+function withRecent(store, board, hours, cutoffAt) {
   const { rows: recent } = recentRankingRows(store, hours, board.rows, cutoffAt);
   const rows = board.rows.map(({ account, ...row }, index) => {
     const { submittedAt, topModel, topCli, points = [] } = recent[index];
@@ -23,11 +22,27 @@ export function rollingBoard(store, hours, cutoffAt) {
   return { ...board, rows };
 }
 
+export function rollingBoard(store, hours, cutoffAt) {
+  return withRecent(store, store.hourly.rollingRanking(hours, cutoffAt), hours, cutoffAt);
+}
+
 export function createRankingSnapshot(store, now = Date.now) {
   return store.readSnapshot(() => {
     const cutoffAt = now();
     const boards = Object.fromEntries(RANKING_HOURS.map(hours => [hours, rollingBoard(store, hours, cutoffAt)]));
     boards[0] = { rows: store.speedRanking(cutoffAt).rows };
     return { cutoffAt, nextAt: cutoffAt + RANKING_REFRESH_MS, boards };
+  });
+}
+
+export function createPublishedSnapshot(store, cutoffAt, opened = () => {}) {
+  return store.readSnapshot(() => {
+    const revision = store.readAdminRevision();
+    opened();
+    const data = store.leaderboardData.rows(cutoffAt - RANKING_HOURS.at(-1) * HOUR_MS, cutoffAt);
+    const boards = store.hourly.publishedRankings(cutoffAt, data);
+    for (const hours of RANKING_HOURS) boards[hours] = withRecent(store, boards[hours], hours, cutoffAt);
+    boards[0] = { rows: store.publishedSpeeds(cutoffAt) };
+    return { revision, snapshot: { cutoffAt, nextAt: cutoffAt + HOUR_MS, boards } };
   });
 }

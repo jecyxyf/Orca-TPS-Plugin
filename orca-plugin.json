@@ -4,7 +4,7 @@
   "id": "tps-plugin",
   "name": "TPS Plugin",
   "version": "1.6.5",
-  "description": "Track request speed and token usage in Orca, compare models, and explore rolling usage rankings and each user's best speed from the past 24 hours.",
+  "description": "Track request speed and token usage in Orca, compare models, and explore hourly rankings for recent usage and each user's best speed from the past 24 hours.",
   "author": {
     "name": "jecyxyf",
     "url": "https://github.com/jecyxyf"

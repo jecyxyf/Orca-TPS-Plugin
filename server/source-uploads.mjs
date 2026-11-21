@@ -7,9 +7,6 @@ const LEASE_MS = 60_000, CLOCK_SKEW = 60_000, MAX_PARTS = 256;
 
 export function openSourceUploads(db, { get, all, run, nextUpload, uploadGate, invalidUpload, saveDaily, replaceLegacyDaily }) {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS source_accounts (
-      account INTEGER PRIMARY KEY REFERENCES accounts(id), active INTEGER NOT NULL, version INTEGER NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS source_admin_revision (slot INTEGER PRIMARY KEY CHECK(slot=1), version INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS source_states (
       account INTEGER NOT NULL REFERENCES accounts(id), source TEXT NOT NULL, kind TEXT NOT NULL,
@@ -39,7 +36,19 @@ export function openSourceUploads(db, { get, all, run, nextUpload, uploadGate, i
   `);
 
   const accountState = account => get('SELECT * FROM source_accounts WHERE account=?', account);
-  const active = account => accountState(account)?.active === 1;
+  const active = account => (accountState(account)?.active ?? 0) >= 1;
+  const missingHourlyUsage = db.prepare(`WITH totals AS (
+    SELECT installation_id, date(completed_at/1000+28800,'unixepoch') AS day, TOTAL(tokens) AS tokens
+    FROM rolling_usage WHERE account=? AND completed_at>=? GROUP BY 1, 2
+  )
+  SELECT 1 FROM installation_scores s LEFT JOIN totals t USING (installation_id, day)
+  WHERE s.account=? AND s.day>=? AND s.tokens>COALESCE(t.tokens, 0) LIMIT 1`);
+  function canStartHourly(account, now) {
+    if (accountState(account)?.active === 2) return true;
+    if (!active(account)) return !legacyDevices(account, now).length;
+    const day = firstDay(now);
+    return !missingHourlyUsage.get(account, leaderboardDayStart(day), account, day);
+  }
   const changeLegacy = account => run(`INSERT INTO source_accounts VALUES (?, 0, 1)
     ON CONFLICT(account) DO UPDATE SET version=version+1`, account);
   const activate = account => run(`INSERT INTO source_accounts VALUES (?, 1, 0)
@@ -359,6 +368,10 @@ export function openSourceUploads(db, { get, all, run, nextUpload, uploadGate, i
 
   return {
     active, changeLegacy, upload,
+    hourlyActive: account => accountState(account)?.active === 2,
+    canStartHourly,
+    activateHourly: account => run(`INSERT INTO source_accounts VALUES (?, 2, 0)
+      ON CONFLICT(account) DO UPDATE SET active=2`, account),
     adminChanged: () => run(`INSERT INTO source_admin_revision VALUES (1, 1)
       ON CONFLICT(slot) DO UPDATE SET version=version+1`),
     prune(now) {

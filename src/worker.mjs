@@ -65,7 +65,7 @@ export default async function activate(orca) {
     budgetBytes: BACKFILL_BYTES,
     maxUnits: BACKFILL_UNITS,
     onRecentRequests: stats.observe,
-    async discover(cutoffMs) {
+    async discover(cutoffMs, sourceReadAt) {
       const interval = Date.now() < recentCollectionUntil ? RECENT_REFRESH_MS : DISCOVERY_MS;
       if (!discovery || discoveryKey !== cutoffMs || Date.now() - discoveryAt >= interval) {
         await history.finish();
@@ -74,7 +74,8 @@ export default async function activate(orca) {
         const descriptors = localUnits.descriptors.map(unit => ({
           ...unit, deviceGuid, readRecords: offset => compute.call('usageRecords', unit.key, unit.stamp, offset)
         }));
-        discovery = { ...remoteUnits, localComplete: localUnits.complete, descriptors: descriptors.concat(remoteUnits.descriptors) };
+        discovery = { ...remoteUnits, localComplete: localUnits.complete, localSourceTime: sourceReadAt, sourceReadAt,
+          descriptors: descriptors.concat(remoteUnits.descriptors) };
         discoveryAt = Date.now();
         discoveryKey = cutoffMs;
       }
@@ -119,6 +120,9 @@ export default async function activate(orca) {
       },
       async readUsageSources(reporterId) {
         return await index.ready() ? index.leaderboardSources(reporterId) : [];
+      },
+      async readUsageHours(reporterId) {
+        return await index.ready() ? index.leaderboardHours(reporterId) : [];
       }
     });
   } catch { orca.log(language.t('notice.leaderboard-url-invalid')); }

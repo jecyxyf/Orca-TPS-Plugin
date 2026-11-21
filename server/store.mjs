@@ -4,6 +4,7 @@ import { validInstallationId } from '../src/leaderboard-installation.mjs';
 import { RECENT_STATS_MS, SPEED_WINDOW_MS, SPEED_MIN_DELTA, qualifyingSpeed, validSubmissionStats } from '../src/leaderboard-stats.mjs';
 import { openHourlyRankings } from './hourly-rankings.mjs';
 import { openSourceUploads } from './source-uploads.mjs';
+import { openLeaderboardData, validHourlySource } from './leaderboard-data.mjs';
 
 const TEN_MINUTES = 10 * 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
@@ -22,6 +23,9 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY, username TEXT NOT NULL, banned INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS source_accounts (
+      account INTEGER PRIMARY KEY REFERENCES accounts(id), active INTEGER NOT NULL, version INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS administrator (
       slot INTEGER PRIMARY KEY CHECK(slot=1), account INTEGER NOT NULL REFERENCES accounts(id)
@@ -103,24 +107,34 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
       writing = false;
     }
   }
-  const hourly = openHourlyRankings(db, transaction, readOnly);
-
   const get = (sql, ...values) => db.prepare(sql).get(...values);
   const all = (sql, ...values) => db.prepare(sql).all(...values);
   const run = (sql, ...values) => db.prepare(sql).run(...values);
+  const hourly = openHourlyRankings(db, transaction, readOnly);
   const sources = readOnly ? null : openSourceUploads(db, {
     get, all, run, nextUpload, uploadGate, invalidUpload, saveDaily: saveSourceDaily, replaceLegacyDaily
   });
+  const leaderboardData = openLeaderboardData(db, readOnly);
+  const removeOldWaiters = db.prepare('DELETE FROM source_write_waiters WHERE account=? AND seen<=?');
+  const firstWaiter = db.prepare('SELECT reporter FROM source_write_waiters WHERE account=? ORDER BY queued, reporter LIMIT 1');
+  const addWaiter = db.prepare(`INSERT INTO source_write_waiters VALUES (?, ?, ?, ?)
+    ON CONFLICT(account, reporter) DO UPDATE SET seen=excluded.seen`);
+  const clearWaiter = db.prepare('DELETE FROM source_write_waiters WHERE account=? AND reporter=?');
+  const adminRevision = db.prepare('SELECT version FROM source_admin_revision WHERE slot=1');
+  const readAdminRevision = () => adminRevision.get()?.version ?? 0;
+  function invalidateResults() {
+    sources.adminChanged();
+    leaderboardData.invalidateResults();
+  }
   const administrator = () => get('SELECT account FROM administrator WHERE slot=1')?.account;
   const audit = (actor, action, target, now) =>
     run('INSERT INTO audit(account, action, target, at) VALUES (?, ?, ?, ?)', actor, action, target, now);
   const periodRanks = db.prepare(`
     WITH totals AS (
-      SELECT scores.account, SUM(scores.tokens) AS tokens,
-        MAX(COALESCE(score_updates.updated_at, scores.submitted_at)) AS submittedAt
-      FROM scores LEFT JOIN score_updates USING (day, account)
-      WHERE scores.day BETWEEN ? AND ? AND scores.tokens IS NOT NULL
-      GROUP BY scores.account
+      SELECT account, SUM(tokens) AS tokens, MAX(uploaded_at) AS submittedAt
+      FROM leaderboard_daily_scores
+      WHERE day BETWEEN ? AND ? AND tokens IS NOT NULL
+      GROUP BY account
     ), ranked AS (
       SELECT *, ROW_NUMBER() OVER (ORDER BY tokens DESC, submittedAt, account) AS rank
       FROM totals
@@ -133,17 +147,21 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
   periodRanks.setReadBigInts(true);
 
   function upsertAccount({ id, login }) {
-    if (run(`INSERT INTO accounts(id, username) VALUES (?, ?) ON CONFLICT(id) DO UPDATE
-      SET username=excluded.username WHERE accounts.username<>excluded.username`, id, login).changes) {
-      rankingRevision++;
-      speedRevision++;
-      hourly.revision();
-    }
+    transaction(() => {
+      const old = get('SELECT username FROM accounts WHERE id=?', id);
+      if (run(`INSERT INTO accounts(id, username) VALUES (?, ?) ON CONFLICT(id) DO UPDATE
+        SET username=excluded.username WHERE accounts.username<>excluded.username`, id, login).changes) {
+        rankingRevision++;
+        speedRevision++;
+        hourly.revision();
+        if (old) invalidateResults();
+      }
+    });
   }
 
   const fastestSubmissions = db.prepare(`SELECT submission_stats.account, accounts.username,
         submitted_at AS submittedAt, avg_tps AS avgTps, delta_tokens AS deltaTokens,
-        top_model AS topModel, top_cli AS topCli
+        top_model AS topModel, top_cli AS topCli, request_id AS requestId
       FROM submission_stats JOIN accounts ON accounts.id=submission_stats.account
       WHERE delta_tokens>${SPEED_MIN_DELTA} AND avg_tps>0 AND submitted_at>? AND submitted_at<=? AND accounts.banned=0
       ORDER BY avg_tps DESC, submitted_at, account, request_id`);
@@ -151,7 +169,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
   function speedRanking(now) {
     const rows = [], accounts = new Set();
     let expiresAt = Infinity;
-    for (const { account, ...row } of fastestSubmissions.iterate(now - SPEED_WINDOW_MS, now)) {
+    for (const { account, requestId, ...row } of fastestSubmissions.iterate(now - SPEED_WINDOW_MS, now)) {
       if (accounts.has(account)) continue;
       accounts.add(account);
       rows.push({ ...row, rank: rows.length + 1 });
@@ -159,6 +177,21 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
       if (rows.length === 20) break;
     }
     return { rows, expiresAt };
+  }
+
+  function publishedSpeeds(cutoff) {
+    const from = cutoff - SPEED_WINDOW_MS;
+    const candidates = [...fastestSubmissions.all(from - 1, cutoff - 1), ...leaderboardData.speeds(from, cutoff)];
+    candidates.sort((a, b) => b.avgTps - a.avgTps || a.submittedAt - b.submittedAt || a.account - b.account ||
+      (a.requestId < b.requestId ? -1 : a.requestId > b.requestId ? 1 : 0));
+    const rows = [], accounts = new Set();
+    for (const { account, requestId, ...row } of candidates) {
+      if (accounts.has(account)) continue;
+      accounts.add(account);
+      rows.push({ ...row, rank: rows.length + 1 });
+      if (rows.length === 20) break;
+    }
+    return rows;
   }
 
   function bindAdministrator(account) {
@@ -175,11 +208,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
   }
 
   function readScore(account, day) {
-    return get(`
-      SELECT scores.tokens, scores.submitted_at, COALESCE(score_updates.updated_at, scores.submitted_at) AS uploaded_at
-      FROM scores LEFT JOIN score_updates USING (day, account)
-      WHERE scores.day=? AND scores.account=?
-    `, day, account);
+    return get('SELECT tokens, submitted_at, uploaded_at FROM leaderboard_daily_scores WHERE day=? AND account=?', day, account);
   }
 
   function nextUpload(account, now) {
@@ -218,15 +247,13 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
         rows: rankingRows(rows.slice(0, 100), now, includeRecent, includeDaily ? { startDay, day } : null) };
     }
     const rows = all(`
-      SELECT accounts.username, scores.account, scores.tokens,
-        COALESCE(score_updates.updated_at, scores.submitted_at) AS submittedAt
-      FROM scores JOIN accounts ON accounts.id=scores.account
-      LEFT JOIN score_updates USING (day, account)
+      SELECT accounts.username, scores.account, scores.tokens, scores.uploaded_at AS submittedAt
+      FROM leaderboard_daily_scores scores JOIN accounts ON accounts.id=scores.account
       WHERE scores.day=? AND scores.tokens IS NOT NULL
       ORDER BY scores.tokens DESC, scores.submitted_at, scores.account LIMIT 100
     `, state.day).map((row, index) => ({ ...row, rank: index + 1, mine: row.account === account }));
     const rank = score?.tokens == null ? null : 1 + get(`
-      SELECT COUNT(*) AS count FROM scores WHERE day=? AND (
+      SELECT COUNT(*) AS count FROM leaderboard_daily_scores WHERE day=? AND (
         tokens>? OR (tokens=? AND (submitted_at<? OR (submitted_at=? AND account<?)))
       )
     `, day, score.tokens, score.tokens, score.submitted_at, score.submitted_at, account).count;
@@ -237,15 +264,24 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     const recent = new Map();
     if (accounts.length) {
       const placeholders = accounts.map(() => '?').join(',');
-      for (const { account, topModel, topCli, ...point } of all(`
+      const points = all(`
         SELECT account, submitted_at AS submittedAt, delta_tokens AS deltaTokens, avg_tps AS avgTps,
           top_model AS topModel, top_cli AS topCli
         FROM submission_stats WHERE account IN (${placeholders})
           AND submitted_at>? AND submitted_at<=?
-        ORDER BY submitted_at`, ...accounts, now - RECENT_STATS_MS, now)) {
+        ORDER BY submitted_at`, ...accounts, now - RECENT_STATS_MS, now);
+      for (const { account, recent } of leaderboardData.recent(accounts, now)) {
+        for (const { at, deltaTokens, avgTps, topModel, topCli } of JSON.parse(recent)) {
+          if (at > now - RECENT_STATS_MS && at <= now) points.push({ account, submittedAt: at, deltaTokens, avgTps, topModel, topCli });
+        }
+      }
+      for (const { account, topModel, topCli, ...point } of points.sort((a, b) => a.submittedAt - b.submittedAt)) {
         const entry = recent.get(account) ?? { points: [] };
         if (latestOnly) entry.points[0] = point;
-        else entry.points.push(point);
+        else {
+          entry.points.push(point);
+          if (entry.points.length > 30) entry.points.shift();
+        }
         entry.topModel = topModel;
         entry.topCli = topCli;
         recent.set(account, entry);
@@ -257,8 +293,12 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
   function latestUploads(accounts) {
     if (!accounts.length) return new Map();
     const placeholders = accounts.map(() => '?').join(',');
-    return new Map(all(`SELECT account, MAX(updated_at) AS time FROM score_updates
+    const times = new Map(all(`SELECT account, MAX(updated_at) AS time FROM score_updates
       WHERE account IN (${placeholders}) GROUP BY account`, ...accounts).map(({ account, time }) => [account, time]));
+    for (const { account, time } of leaderboardData.latestUploads(accounts)) {
+      if (time != null) times.set(account, Math.max(times.get(account) ?? 0, time));
+    }
+    return times;
   }
 
   function rankingRows(rows, now, includeRecent, dailyWindow = null) {
@@ -268,7 +308,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     if (dailyWindow && rows.length) {
       const placeholders = accounts.map(() => '?').join(',');
       for (const { account, ...point } of all(`
-        SELECT account, day, tokens FROM scores WHERE account IN (${placeholders})
+        SELECT account, day, tokens FROM leaderboard_daily_scores WHERE account IN (${placeholders})
           AND day BETWEEN ? AND ? AND tokens IS NOT NULL ORDER BY day`, ...accounts, dailyWindow.startDay, dailyWindow.day)) {
         const points = daily.get(account) ?? [];
         points.push(point);
@@ -431,6 +471,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     if (!changed.changes) return false;
     speedRevision++;
     hourly.revision();
+    invalidateResults();
     run(`INSERT INTO ban_reasons(account, reason) VALUES (?, ?)
       ON CONFLICT(account) DO UPDATE SET reason=excluded.reason`, account, reason);
     return true;
@@ -445,6 +486,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
       if (!banned) {
         speedRevision++;
         hourly.revision();
+        invalidateResults();
         run('DELETE FROM upload_attempt_clock WHERE account=?', account);
         run('DELETE FROM installation_upload_clock WHERE account=?', account);
       }
@@ -459,11 +501,12 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     const params = [...(day ? [day] : []), ...(account ? [account] : [])];
     transaction(() => {
       hourly.remove({ day, account });
+      leaderboardData.remove({ day, account });
       run('DELETE FROM submission_stats WHERE 1=1' + filter, ...params);
       run('DELETE FROM installation_scores WHERE 1=1' + filter, ...params);
       run('UPDATE scores SET tokens=NULL WHERE day>=?' + filter, first, ...params);
       run('DELETE FROM scores WHERE day<?' + filter, first, ...params);
-      sources.adminChanged();
+      invalidateResults();
       audit(actor, account ? 'delete' : 'clear', [day || 'all', account].filter(Boolean).join('/'), now);
     });
     rankingRevision++;
@@ -473,8 +516,8 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
   function adminView(day, search, currentDay = day) {
     return {
       scores: all(`
-        SELECT scores.account, username, scores.tokens, COALESCE(score_updates.updated_at, scores.submitted_at) AS submittedAt
-        FROM scores JOIN accounts ON accounts.id=scores.account LEFT JOIN score_updates USING (day, account)
+        SELECT scores.account, username, scores.tokens, scores.uploaded_at AS submittedAt
+        FROM leaderboard_daily_scores scores JOIN accounts ON accounts.id=scores.account
         WHERE scores.day=? AND scores.tokens IS NOT NULL AND instr(lower(username), lower(?))>0
         ORDER BY scores.tokens DESC, scores.submitted_at, scores.account LIMIT 500
       `, day, search),
@@ -516,6 +559,7 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
     if (!account) return { code: 'login_required' };
     if (account.banned) return { code: 'banned', username: account.username };
     if (kind === 'sources') {
+      if (sources.hourlyActive(account.id)) return { code: 'upgrade_required', username: account.username };
       const { changed, ...result } = sources.upload(account.id, input, receivedAt, maxTokens, account.username);
       if (changed) {
         rankingRevision++;
@@ -545,7 +589,71 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
 
   function uploadBatch(entries, maxTokens) {
     if (!entries.length) return [];
-    return transaction(() => entries.map(entry => applyUpload(entry, maxTokens)));
+    return transaction(() => {
+      const hourlyEntries = [];
+      const results = entries.map((entry, index) => {
+        if (entry.kind !== 'hourly-source') return applyUpload(entry, maxTokens);
+        const { sessionDigest, input, receivedAt } = entry;
+        const account = session(sessionDigest, 'plugin', receivedAt);
+        if (!account) return { code: 'login_required' };
+        if (account.banned) return { code: 'banned', username: account.username };
+        if (typeof input.username !== 'string' || input.username.toLowerCase() !== account.username.toLowerCase()) {
+          return { code: 'username_changed', username: account.username };
+        }
+        if (get('SELECT 1 FROM locks WHERE day=? AND account=?', leaderboardDay(receivedAt), account.id)) return { code: 'locked' };
+        if (!validHourlySource(input, receivedAt, maxTokens)) {
+          const day = leaderboardDay(receivedAt);
+          const identity = { requestId: 'hours:' + input.requestId, fingerprint: input.fingerprint, installationId: input.reporterId };
+          return { code: uploadGate(account.id, day, identity, receivedAt) ?? invalidUpload(account.id, day, identity, receivedAt) };
+        }
+        hourlyEntries.push({ ...entry, account: account.id, username: account.username, index });
+      });
+      const modes = new Map();
+      const uploads = hourlyEntries.filter(({ account, receivedAt, index }) => {
+        if (!modes.has(account)) {
+          const ready = sources.hourlyActive(account) || sources.canStartHourly(account, receivedAt);
+          if (ready && !sources.hourlyActive(account)) {
+            leaderboardData.importAccount(account, receivedAt);
+            sources.activateHourly(account);
+          }
+          modes.set(account, ready);
+        }
+        if (modes.get(account)) return true;
+        results[index] = { code: 'migration_required' };
+        return false;
+      });
+      if (!uploads.length) return results;
+      const saved = leaderboardData.writeBatch(uploads, ({ account, receivedAt, input }) => {
+        const day = leaderboardDay(receivedAt);
+        const { reporterId } = input;
+        removeOldWaiters.run(account, receivedAt - 30_000);
+        const waiting = firstWaiter.get(account);
+        const next = nextUpload(account, receivedAt) ??
+          (waiting && waiting.reporter !== reporterId ? receivedAt + 1000 : null);
+        if (next) {
+          addWaiter.run(account, reporterId, receivedAt, receivedAt);
+          return { code: 'too_soon', nextUploadAt: next };
+        }
+        clearWaiter.run(account, reporterId);
+        const blocked = uploadGate(account, day, { ...input, installationId: input.reporterId }, receivedAt);
+        return blocked ? { code: blocked } : null;
+      });
+      const changed = new Map();
+      for (const [index, result] of saved.entries()) {
+        if (result.changed) {
+          const { account, receivedAt } = uploads[index];
+          changed.set(account, Math.max(changed.get(account) ?? 0, receivedAt));
+        }
+      }
+      for (const [account, at] of changed) run(`INSERT INTO source_write_clock VALUES (?, ?)
+        ON CONFLICT(account) DO UPDATE SET at=excluded.at`, account, at);
+      if (changed.size) { rankingRevision++; speedRevision++; }
+      for (const [index, { changed: _changed, ...result }] of saved.entries()) {
+        const upload = uploads[index];
+        results[upload.index] = { ...status(upload.account, upload.receivedAt), ...result, username: upload.username };
+      }
+      return results;
+    });
   }
 
   function readSnapshot(work) {
@@ -560,7 +668,17 @@ export function openLeaderboardStore(filename, { readOnly = false } = {}) {
 
   return {
     upsertAccount, bindAdministrator, administrator, session, status, ranking, submit, historyInitialized, initializeHistory,
-    setBan, removeScores, adminView, prune, uploadBatch, readSnapshot,
+    setBan, removeScores, adminView, prune, uploadBatch, readSnapshot, leaderboardData, readAdminRevision, publishedSpeeds,
+    canUseHourlySources: (account, now) => sources.canStartHourly(account, now),
+    publishHourlyResult(cutoff, generatedAt, payload, revision) {
+      return transaction(() => {
+        if (readAdminRevision() !== revision) return false;
+        leaderboardData.persistResult(cutoff, generatedAt, payload);
+        leaderboardData.prune(cutoff);
+        hourly.prune(cutoff);
+        return true;
+      });
+    },
     invalidateUploadCaches() { rankingRevision++; speedRevision++; },
     rankingRevision: () => rankingRevision, speedRanking, speedRevision: () => speedRevision, hourly, recentRows, latestUploads,
     pruneRecent: now => {

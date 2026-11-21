@@ -110,7 +110,7 @@ export function openLocalUsageDb(filename) {
     state=excluded.state, value=excluded.value, updated_at=excluded.updated_at`);
   const removeState = db.prepare('DELETE FROM upload_queue WHERE origin=? AND account_id=? AND device_guid=? AND request_id=?');
   const nextPacket = db.prepare(`SELECT device_guid AS deviceGuid, request_id AS requestId, value FROM upload_queue
-    WHERE origin=? AND account_id=? AND state='pending' ORDER BY updated_at, request_id LIMIT 1`);
+    WHERE origin=? AND account_id=? AND state=? ORDER BY updated_at, request_id LIMIT 1`);
   const pruneQueue = db.prepare('DELETE FROM upload_queue WHERE updated_at<?');
 
   function shape(row) {
@@ -175,8 +175,8 @@ export function openLocalUsageDb(filename) {
       putState.run(...scopeParams(scope, key), state, encode(value), now);
     },
     remove(scope, key) { removeState.run(...scopeParams(scope, key)); },
-    next({ origin, accountId }) {
-      const row = nextPacket.get(origin, String(accountId));
+    next({ origin, accountId }, state = 'pending') {
+      const row = nextPacket.get(origin, String(accountId), state);
       return row && { ...row, value: decode(row.value) };
     },
     atomic,

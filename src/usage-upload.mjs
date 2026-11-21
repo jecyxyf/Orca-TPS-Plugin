@@ -45,7 +45,7 @@ async function writeReceipt(storage, key, receipt) {
   if (previous?.chunks) await Promise.allSettled(receiptChunks(key, previous).map(chunk => storage.delete(chunk)));
 }
 
-export function createSqliteUploadStorage(queue, scope) {
+export function createSqliteUploadStorage(queue, scope, pendingState = 'pending') {
   const packetScope = pending => ({ ...scope, deviceGuid: pending.body.deviceGuid ??
     pending.body.operations?.[0]?.sourceId ?? pending.body.reporterId });
   const packetId = pending => pending.body.data?.requestId ?? pending.body.requestId;
@@ -56,8 +56,8 @@ export function createSqliteUploadStorage(queue, scope) {
     readReceipt: key => queue.read(scope, key),
     writeReceipt: (key, value) => queue.write(scope, key, value),
     journal: {
-      load: () => queue.next(scope)?.value,
-      save: (pending, now) => queue.write(packetScope(pending), packetId(pending), pending, { state: 'pending', now }),
+      load: () => queue.next(scope, pendingState)?.value,
+      save: (pending, now) => queue.write(packetScope(pending), packetId(pending), pending, { state: pendingState, now }),
       finish(pending, updates, result, now) {
         return queue.atomic(() => {
           for (const [key, receipt] of updates) queue.write(scope, key, receipt, { now });

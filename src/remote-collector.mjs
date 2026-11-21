@@ -89,7 +89,7 @@ export async function collectRemoteChannel(request, { cwd = process.cwd(), load 
 }
 
 export function createRemoteUsageScan(discover = discoverUsageUnits) {
-  let units, descriptors, sourceId, recordRead;
+  let units, descriptors, sourceId, sourceTime, recordRead;
   return async request => {
     if (request.type === 'list') {
       const { offset, cutoffMs, timeZone, rankDay, rankFrom = rankDay } = request;
@@ -107,6 +107,7 @@ export function createRemoteUsageScan(discover = discoverUsageUnits) {
         // when the machine that owns the logs has another system time zone.
         new Intl.DateTimeFormat('en', { timeZone });
         process.env.TZ = timeZone;
+        sourceTime = Date.now();
         let complete = true;
         const discovered = await discover(cutoffMs, { rankDay, rankFrom, includeRecent: request.includeRecent === true,
           ...(request.includeUsageTimes === true ? { includeUsageTimes: true } : {}),
@@ -122,7 +123,7 @@ export function createRemoteUsageScan(discover = discoverUsageUnits) {
       }
       if (!descriptors || offset > descriptors.length) throw new Error('scan');
       const items = descriptors.slice(offset, offset + USAGE_PAGE_SIZE);
-      return { items, more: offset + items.length < descriptors.length, ...(sourceId ? { sourceId } : {}) };
+      return { items, more: offset + items.length < descriptors.length, ...(sourceId ? { sourceId, sourceTime } : {}) };
     }
     if (request.type === 'records') {
       const unit = units?.get(request.key);
