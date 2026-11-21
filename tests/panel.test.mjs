@@ -142,13 +142,18 @@ test('panel resolves per-record agent label from record.provider', async () => {
   assert.match(html, /function\s+agentLabel\(\s*provider\s*\)/, 'agentLabel must accept per-record provider override');
 });
 
-test('the panel title has a bundled logo and Current Data shows the update time beside Refresh', async () => {
+test('the panel title has a logo and Current Data shows the update time beside an icon-only refresh button', async () => {
   const html = await readFile(panelPath, 'utf8');
   const logo = /<h1\b[^>]*\bid="panel-title"[^>]*>\s*<img\b[^>]*\bsrc="([^"]+)"[^>]*\balt=""[^>]*>\s*TPS Plugin/.exec(html);
   assert.ok(logo, 'logo must be left of the title');
   const png = await readFile(path.resolve(path.dirname(panelPath), logo[1]));
   assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
   assert.match(html, /<div class="panel-header">\s*<p\b[^>]*\bid="updated"[^>]*>—<\/p>\s*<button\b[^>]*\bid="refresh"/);
+  const refresh = /<button\b[^>]*\bid="refresh"[^>]*>[\s\S]*?<\/button>/.exec(html)?.[0];
+  assert.ok(refresh);
+  assert.match(refresh, /data-i18n-title="refresh"/);
+  assert.match(refresh, /data-i18n-aria-label="refresh-current"/);
+  assert.match(refresh, />\s*<svg\b[^>]*\baria-hidden="true"[^>]*>[\s\S]*?<\/svg>\s*<\/button>$/);
   assert.doesNotMatch(html, /recent-requests|request-speed-note/);
 });
 

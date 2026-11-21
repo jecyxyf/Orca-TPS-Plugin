@@ -118,6 +118,8 @@
       background: var(--button-bg); color: var(--blue); font-size: 12px; font-weight: 650; cursor: pointer;
     }
     .refresh svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .current-refresh { width: 34px; padding: 0; }
+    .current-refresh svg { width: 16px; height: 16px; }
     .refresh:hover:not(:disabled) { filter: brightness(.96); }
     .refresh:active:not(:disabled) { transform: translateY(1px); }
     .refresh:disabled { cursor: default; opacity: .6; }
@@ -690,9 +692,8 @@
     <section class="panel-view" id="current-data" role="tabpanel" aria-labelledby="tab-current" tabindex="0" hidden>
       <div class="panel-header">
         <p class="current-updated" id="updated" data-localized-text>—</p>
-        <button class="refresh" id="refresh" data-testid="refresh" type="button" data-i18n-aria-label="refresh-current">
+        <button class="refresh current-refresh" id="refresh" data-testid="refresh" type="button" data-i18n-title="refresh" data-i18n-aria-label="refresh-current">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>
-          <span><span data-i18n="refresh"></span></span>
         </button>
       </div>
       <div class="message message-error" id="error" data-testid="error" role="alert" data-localized-text hidden></div>
