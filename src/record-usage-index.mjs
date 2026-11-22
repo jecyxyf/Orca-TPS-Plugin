@@ -10,7 +10,7 @@ const importStamp = item => 'local-history:' + item.stamp;
 const RECENT_CAPTURE_LIMIT = 4096;
 
 export function createRecordUsageIndex({
-  db, deviceGuid, discover, now = Date.now, maxUnits, budgetBytes, username = () => null,
+  db, deviceGuid, discover, now = Date.now, maxUnits, budgetBytes,
   onRecentRequests, log = () => {}
 }) {
   const observed = new Map(), recentCaptures = new Set();
@@ -95,7 +95,7 @@ export function createRecordUsageIndex({
           signal?.throwIfAborted();
           if (!Array.isArray(page.records) || (page.nextOffset !== null &&
               (!page.records.length || page.nextOffset !== offset + page.records.length))) throw new Error('invalid usage records page');
-          for (const row of page.records) records.push({ ...row, username: username() });
+          for (const row of page.records) records.push(row);
           offset = page.nextOffset;
         } while (offset !== null);
         const added = db.appendRecords({ deviceGuid, records, now: at, logUnitKey: item.key, logStamp: importStamp(item) });
@@ -109,7 +109,7 @@ export function createRecordUsageIndex({
     progress = { done: cursor, total: history.length };
     if (cursor === history.length) {
       const importedAt = now();
-      const state = { ...collection, importedAt };
+      const state = { startedAt: collection.startedAt, importedAt };
       db.saveCollection(state, importedAt);
       collection = state;
       history = undefined;
@@ -141,8 +141,7 @@ export function createRecordUsageIndex({
     const cutoff = Math.max(from, personalRecordsCutoff(at));
     const candidates = records.filter(row => typeof row?.id === 'string' && row.id && typeof row.provider === 'string' &&
       row.completedAt >= cutoff && row.completedAt <= at && !recentCaptures.has(sourceId + '/' + row.id));
-    const account = username();
-    const added = db.appendRecords({ deviceGuid: sourceId, records: candidates.map(row => ({ ...row, username: account })), from, now: at });
+    const added = db.appendRecords({ deviceGuid: sourceId, records: candidates, from, now: at });
     for (const row of candidates) recentCaptures.add(sourceId + '/' + row.id);
     while (recentCaptures.size > RECENT_CAPTURE_LIMIT) recentCaptures.delete(recentCaptures.values().next().value);
     observed.set(sourceId, at);

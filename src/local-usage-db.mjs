@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { HOUR_MS } from './leaderboard-stats.mjs';
+import { validInstallationId } from './leaderboard-installation.mjs';
 import { localHourStart, MAX_WINDOW_DAYS, requestTokens } from './usage-summary.mjs';
 
 export const USAGE_RETENTION_MS = 720 * HOUR_MS;
@@ -12,12 +13,13 @@ export function personalRecordsCutoff(now) {
 }
 const PANELS = new Set(['current-data', 'usage', 'leaderboard']);
 const COLLECTION_KEY = 'usage-collection';
+const LOG_PREFIX = 'usage-log:';
+const SCHEMA_VERSION = 2;
 
 const metrics = [
   ['freshInputTokens', 'input_tokens'], ['outputTokens', 'output_tokens'],
   ['cacheReadTokens', 'cache_read_tokens'], ['cacheCreationTokens', 'cache_write_tokens'],
-  ['tokensPerSecond', 'tokens_per_second'], ['durationMs', 'duration_ms'],
-  ['firstTokenMs', 'first_token_ms'], ['generationMs', 'generation_ms'], ['cacheHitRate', 'cache_hit_rate']
+  ['tokensPerSecond', 'tokens_per_second']
 ];
 const string = (value, max = 256) => typeof value === 'string' ? value.slice(0, max) : null;
 
@@ -26,21 +28,17 @@ function sanitize(record) {
       typeof record.provider !== 'string') return null;
   const result = {
     id: record.id, completedAt: Math.trunc(record.completedAt), provider: string(record.provider, 32),
-    model: string(record.model, 128), username: string(record.username, 39), workspaceKey: string(record.workspaceKey),
-    dataSource: string(record.dataSource, 32), isEstimatedSpeed: record.isEstimatedSpeed === true,
-    isSubagent: record.isSubagent === true
+    model: string(record.model, 128), isEstimatedSpeed: record.isEstimatedSpeed === true
   };
   for (const [key] of metrics) result[key] = Number.isFinite(record[key]) && record[key] >= 0 ? record[key] : null;
-  result.tokens = requestTokens(result);
   return result;
 }
 
 const recordFields = [
-  ['id', 'record_id'], ['completedAt', 'completed_at'], ['username', 'username'], ['provider', 'harness'],
-  ['model', 'model'], ['tokens', 'tokens'], ['workspaceKey', 'workspace_key'], ['dataSource', 'data_source'],
-  ['isEstimatedSpeed', 'estimated'], ['isSubagent', 'subagent'], ...metrics
+  ['id', 'record_id'], ['completedAt', 'completed_at'], ['provider', 'harness'],
+  ['model', 'model'], ['isEstimatedSpeed', 'estimated'], ...metrics
 ];
-const recordColumns = recordFields.map(([, column]) => column);
+const columns = ['device_guid', 'log_unit_key', 'updated_at', ...recordFields.map(([, column]) => column)];
 const recordSelect = recordFields.map(([key, column]) => `${column} AS ${key}`).join(', ');
 const fingerprint = record => JSON.stringify(recordFields.map(([key]) => record[key]));
 const recordValues = record => recordFields.map(([key]) => typeof record[key] === 'boolean' ? Number(record[key]) : record[key]);
@@ -51,23 +49,17 @@ export function openLocalUsageDb(filename) {
   if (filename !== ':memory:') mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(filename, { enableExtensionLoading: false });
   try {
-    db.exec('PRAGMA busy_timeout=3000; PRAGMA trusted_schema=OFF;');
+    db.exec('PRAGMA busy_timeout=3000; PRAGMA trusted_schema=OFF; PRAGMA journal_mode=WAL; BEGIN IMMEDIATE;');
     const { user_version: version } = db.prepare('PRAGMA user_version').get();
-    if (version > 1) throw new Error('unsupported local usage database version');
+    if (version > SCHEMA_VERSION) throw new Error('unsupported local usage database version');
+    if (version === 1) db.exec('ALTER TABLE usage_records RENAME TO usage_records_v1');
     db.exec(`
-      PRAGMA journal_mode=WAL;
-      BEGIN IMMEDIATE;
       CREATE TABLE IF NOT EXISTS usage_records (
-        device_guid TEXT NOT NULL, record_id TEXT NOT NULL, completed_at INTEGER NOT NULL, username TEXT,
-        harness TEXT NOT NULL, model TEXT, tokens INTEGER NOT NULL, workspace_key TEXT, data_source TEXT,
-        estimated INTEGER NOT NULL, subagent INTEGER NOT NULL, input_tokens INTEGER, output_tokens INTEGER,
-        cache_read_tokens INTEGER, cache_write_tokens INTEGER, tokens_per_second REAL, duration_ms REAL,
-        first_token_ms REAL, generation_ms REAL, cache_hit_rate REAL, log_unit_key TEXT NOT NULL,
-        log_stamp TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(device_guid, record_id)
+        device_guid TEXT NOT NULL, record_id TEXT NOT NULL, completed_at INTEGER NOT NULL,
+        harness TEXT NOT NULL, model TEXT, estimated INTEGER NOT NULL, input_tokens INTEGER, output_tokens INTEGER,
+        cache_read_tokens INTEGER, cache_write_tokens INTEGER, tokens_per_second REAL, log_unit_key TEXT NOT NULL,
+        updated_at INTEGER NOT NULL, PRIMARY KEY(device_guid, record_id)
       );
-      CREATE INDEX IF NOT EXISTS usage_records_time ON usage_records(completed_at);
-      CREATE INDEX IF NOT EXISTS usage_records_source_time ON usage_records(device_guid, completed_at);
-      CREATE INDEX IF NOT EXISTS usage_records_log ON usage_records(device_guid, log_unit_key);
       CREATE TABLE IF NOT EXISTS panel_cache (
         panel TEXT PRIMARY KEY, current_scope TEXT NOT NULL, current_snapshot TEXT NOT NULL, current_at INTEGER NOT NULL,
         previous_scope TEXT, previous_snapshot TEXT, previous_at INTEGER
@@ -78,10 +70,35 @@ export function openLocalUsageDb(filename) {
         PRIMARY KEY(origin, account_id, device_guid, request_id)
       );
       CREATE INDEX IF NOT EXISTS upload_queue_scope ON upload_queue(origin, account_id, state, updated_at);
+    `);
+    if (version === 1) db.exec(`
+      INSERT INTO usage_records (${columns.join(', ')}) SELECT ${columns.join(', ')} FROM usage_records_v1;
+      INSERT INTO panel_cache (panel, current_scope, current_snapshot, current_at)
+      SELECT '${LOG_PREFIX}' || device_guid || '/' || log_unit_key, device_guid, json_quote(log_stamp), updated_at
+      FROM (
+        SELECT device_guid, log_unit_key, log_stamp, updated_at, ROW_NUMBER() OVER (
+          PARTITION BY device_guid, log_unit_key ORDER BY updated_at DESC, rowid DESC
+        ) AS rank FROM usage_records_v1
+      ) WHERE rank = 1;
+      DROP TABLE usage_records_v1;
+      UPDATE panel_cache SET previous_scope=NULL, previous_snapshot=NULL, previous_at=NULL WHERE panel='${COLLECTION_KEY}';
+      DELETE FROM upload_queue WHERE state='confirmed';
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS usage_records_time ON usage_records(completed_at);
+      CREATE INDEX IF NOT EXISTS usage_records_source_time ON usage_records(device_guid, completed_at);
+      CREATE INDEX IF NOT EXISTS usage_records_log ON usage_records(device_guid, log_unit_key);
       ${version === 0 ? "INSERT OR IGNORE INTO panel_cache(panel, current_scope, current_snapshot, current_at) VALUES ('usage-collection', 'desktop', 'null', 0);" : ''}
-      PRAGMA user_version=1;
+      PRAGMA user_version=${SCHEMA_VERSION};
       COMMIT;
     `);
+    if (version === 1) {
+      try { db.exec('VACUUM; PRAGMA wal_checkpoint(TRUNCATE);'); }
+      catch (error) {
+        // Pending readers or limited disk space can leave reusable pages in the migrated file.
+        if (![5, 6, 13].includes(error.errcode & 0xff)) throw error;
+      }
+    }
   } catch (error) {
     db.close();
     throw error;
@@ -99,17 +116,23 @@ export function openLocalUsageDb(filename) {
     }
   }
   const selectLog = db.prepare(`SELECT ${recordSelect} FROM usage_records WHERE device_guid=? AND log_unit_key=?`);
-  const readLogStamp = db.prepare('SELECT log_unit_key, log_stamp FROM usage_records WHERE device_guid=? GROUP BY log_unit_key');
+  const readLogStamps = db.prepare(`SELECT substr(panel, length(?) + 1) AS log_key, current_snapshot
+    FROM panel_cache WHERE panel GLOB ? AND current_scope=?`);
+  const pruneLogStamps = db.prepare(`DELETE FROM panel_cache WHERE panel GLOB '${LOG_PREFIX}*'
+    AND NOT EXISTS (SELECT 1 FROM usage_records WHERE device_guid=current_scope
+      AND log_unit_key=substr(panel, length('${LOG_PREFIX}' || current_scope || '/') + 1))`);
   const deleteRecord = db.prepare('DELETE FROM usage_records WHERE device_guid=? AND record_id=?');
   const expiredRecords = db.prepare('DELETE FROM usage_records WHERE completed_at<?');
   const listSources = db.prepare('SELECT DISTINCT device_guid AS deviceGuid FROM usage_records WHERE completed_at>=?');
-  const columns = ['device_guid', 'log_unit_key', 'log_stamp', 'updated_at', ...recordColumns];
   const upsertRecord = db.prepare(`INSERT INTO usage_records(${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})
     ON CONFLICT(device_guid, record_id) DO UPDATE SET ${columns.slice(2).map(column => `${column}=excluded.${column}`).join(', ')}`);
   const insertRecord = db.prepare(`INSERT INTO usage_records(${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})
     ON CONFLICT(device_guid, record_id) DO NOTHING`);
-  const updateStamp = db.prepare('UPDATE usage_records SET log_stamp=?, updated_at=? WHERE device_guid=? AND log_unit_key=? AND log_stamp<>?');
+  const touchLog = db.prepare('UPDATE usage_records SET updated_at=? WHERE device_guid=? AND log_unit_key=?');
   const selectPanel = db.prepare('SELECT * FROM panel_cache WHERE panel=?');
+  const upsertState = db.prepare(`INSERT INTO panel_cache(panel, current_scope, current_snapshot, current_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(panel) DO UPDATE SET current_snapshot=excluded.current_snapshot, current_at=excluded.current_at WHERE
+    excluded.current_snapshot<>current_snapshot`);
   const upsertPanel = db.prepare(`INSERT INTO panel_cache(panel, current_scope, current_snapshot, current_at) VALUES (?, ?, ?, ?)
     ON CONFLICT(panel) DO UPDATE SET previous_scope=current_scope, previous_snapshot=current_snapshot, previous_at=current_at,
     current_scope=excluded.current_scope, current_snapshot=excluded.current_snapshot, current_at=excluded.current_at
@@ -124,17 +147,17 @@ export function openLocalUsageDb(filename) {
   const pruneQueue = db.prepare('DELETE FROM upload_queue WHERE updated_at<?');
 
   function shape(row) {
-    return { ...row, isEstimatedSpeed: row.isEstimatedSpeed !== 0, isSubagent: row.isSubagent !== 0 };
+    row.isEstimatedSpeed = row.isEstimatedSpeed !== 0;
+    row.tokens = requestTokens(row);
+    return row;
   }
 
   function replaceLog({ deviceGuid, logUnitKey, logStamp, records, complete, now }) {
     if (!complete) return [];
     const cutoff = personalRecordsCutoff(now);
     return atomic(() => {
-      const old = new Map(selectLog.all(deviceGuid, logUnitKey).map(raw => {
-        const row = shape(raw);
-        return [row.id, row];
-      }));
+      const logKey = `${LOG_PREFIX}${deviceGuid}/${logUnitKey}`;
+      const old = new Map(selectLog.all(deviceGuid, logUnitKey).map(row => [row.id, shape(row)]));
       const incoming = new Map();
       for (const row of records) {
         const record = sanitize(row);
@@ -148,13 +171,16 @@ export function openLocalUsageDb(filename) {
       }
       for (const [id, record] of incoming) {
         const previous = old.get(id);
-        if (previous?.username) record.username = previous.username;
         if (previous && fingerprint(previous) === fingerprint(record)) continue;
-        upsertRecord.run(deviceGuid, logUnitKey, logStamp, now, ...recordValues(record));
+        upsertRecord.run(deviceGuid, logUnitKey, now, ...recordValues(record));
         if (previous) affected.add(previous.completedAt);
         affected.add(record.completedAt);
       }
-      updateStamp.run(logStamp, now, deviceGuid, logUnitKey, logStamp);
+      if (incoming.size && decode(selectPanel.get(logKey)?.current_snapshot) !== logStamp) {
+        touchLog.run(now, deviceGuid, logUnitKey);
+        upsertState.run(logKey, deviceGuid, encode(logStamp), now);
+      }
+      pruneLogStamps.run();
       return [...affected].sort((a, b) => a - b);
     });
   }
@@ -169,7 +195,8 @@ export function openLocalUsageDb(filename) {
     if (!incoming.length) return 0;
     return atomic(() => {
       let inserted = 0;
-      for (const record of incoming) inserted += Number(insertRecord.run(deviceGuid, logUnitKey, logStamp, now, ...recordValues(record)).changes);
+      for (const record of incoming) inserted += Number(insertRecord.run(deviceGuid, logUnitKey, now, ...recordValues(record)).changes);
+      if (inserted) upsertState.run(`${LOG_PREFIX}${deviceGuid}/${logUnitKey}`, deviceGuid, encode(logStamp), now);
       return inserted;
     });
   }
@@ -180,18 +207,25 @@ export function openLocalUsageDb(filename) {
       ORDER BY completed_at, record_id`).all(from, to, ...(deviceGuid ? [deviceGuid] : [])).map(shape);
   }
 
-  function loadCollection(now) {
+  function readCollection(now) {
     const row = selectPanel.get(COLLECTION_KEY);
-    const stored = decode(row?.current_snapshot);
-    if (stored) return stored;
-    // An older database already contains the previous collector's history.
-    const state = { startedAt: now, importedAt: row ? null : now };
-    saveCollection(state, now);
-    return state;
+    // A missing row identifies a database that already contains the previous collector's history.
+    return decode(row?.current_snapshot) ?? { startedAt: now, importedAt: row ? null : now };
+  }
+
+  function loadCollection(now, deviceGuid) {
+    return atomic(() => {
+      const state = readCollection(now);
+      if (validInstallationId(deviceGuid) && !validInstallationId(state.deviceGuid)) state.deviceGuid = deviceGuid;
+      upsertState.run(COLLECTION_KEY, 'desktop', encode(state), now);
+      return state;
+    });
   }
 
   function saveCollection(state, now) {
-    upsertPanel.run(COLLECTION_KEY, 'desktop', encode(state), now);
+    atomic(() => {
+      upsertState.run(COLLECTION_KEY, 'desktop', encode({ ...readCollection(now), ...state }), now);
+    });
   }
 
   function readPanel(panel, scope, { previous = false } = {}) {
@@ -225,10 +259,18 @@ export function openLocalUsageDb(filename) {
   return {
     replaceLog, appendRecords, readRecords, loadCollection, saveCollection,
     readSources: (from = 0) => listSources.all(from).map(row => row.deviceGuid),
-    readLogVersions: deviceGuid => new Map(readLogStamp.all(deviceGuid).map(row => [row.log_unit_key, row.log_stamp])),
+    readLogVersions(deviceGuid) {
+      const prefix = `${LOG_PREFIX}${deviceGuid}/`;
+      return new Map(readLogStamps.all(prefix, `${prefix}*`, deviceGuid)
+        .map(row => [row.log_key, decode(row.current_snapshot)]));
+    },
     prune(now) {
-      queue.prune(now - USAGE_RETENTION_MS);
-      return Number(expiredRecords.run(personalRecordsCutoff(now)).changes);
+      return atomic(() => {
+        queue.prune(now - USAGE_RETENTION_MS);
+        const removed = Number(expiredRecords.run(personalRecordsCutoff(now)).changes);
+        if (removed) pruneLogStamps.run();
+        return removed;
+      });
     },
     readPanel, publishPanel, queue, close: () => db.close()
   };

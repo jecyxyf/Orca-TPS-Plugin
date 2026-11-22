@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { parseEnv } from 'node:util';
 import { createLocalePreferences } from './locales.mjs';
@@ -11,7 +12,7 @@ import { createRecordUsageIndex } from './record-usage-index.mjs';
 import { openLocalUsageDb } from './local-usage-db.mjs';
 import { localUsageDatabasePath } from './data-paths.mjs';
 import { startLeaderboard } from './leaderboard.mjs';
-import { loadInstallationId } from './leaderboard-installation.mjs';
+import { INSTALLATION_KEY, validInstallationId } from './leaderboard-installation.mjs';
 import { createSqliteUploadStorage } from './usage-upload.mjs';
 import { createSubmissionStats } from './submission-stats.mjs';
 
@@ -26,8 +27,12 @@ let scheduledAt = 0;
 
 export default async function activate(orca) {
   await deactivate();
-  const deviceGuid = await loadInstallationId(orca.storage);
   const db = usageDb = openLocalUsageDb(localUsageDatabasePath());
+  let { deviceGuid } = db.loadCollection(Date.now());
+  if (!validInstallationId(deviceGuid)) {
+    const legacyGuid = await orca.storage.get(INSTALLATION_KEY);
+    ({ deviceGuid } = db.loadCollection(Date.now(), validInstallationId(legacyGuid) ? legacyGuid : randomUUID()));
+  }
   db.prune(Date.now());
   running = true;
   const language = locales = await createLocalePreferences(orca.storage);
@@ -45,9 +50,8 @@ export default async function activate(orca) {
   const channelCache = cache = createChannelCache(orca.storage, { panels: db });
   const stats = await createSubmissionStats(createSqliteUploadStorage(db.queue, { origin: 'local', accountId: deviceGuid }));
   usageAbort = new AbortController();
-  let username = null;
   const index = usage = createRecordUsageIndex({
-    db, deviceGuid, username: () => username,
+    db, deviceGuid,
     budgetBytes: BACKFILL_BYTES,
     maxUnits: BACKFILL_UNITS,
     onRecentRequests: stats.observe,
@@ -85,7 +89,7 @@ export default async function activate(orca) {
       return '';
     });
     stopLeaderboard = startLeaderboard(orca, {
-      localDb: db, reporterGuid: deviceGuid, onUsername: value => { username = value; },
+      localDb: db, reporterGuid: deviceGuid,
       endpoint: process.env.ORCA_TPS_LEADERBOARD_URL || parseEnv(localEnv).ORCA_TPS_LEADERBOARD_URL || undefined,
       stats,
       async readUsage() {

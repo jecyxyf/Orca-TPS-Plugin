@@ -80,7 +80,7 @@ export function createHourlySourceUploader(storage, reporterId, username) {
       }
       updates.set(receiptKey(deviceGuid), state);
     } else if (result.code === 'lease_expired') leases.delete(deviceGuid);
-    await storage.journal.finish(pending, updates, result, now);
+    await storage.journal.finish(pending, updates, now);
     return { ...result, ...(result.sampleAccepted ? { statsAccepted: true, statsId: data.sample?.id } : {}) };
   };
 }

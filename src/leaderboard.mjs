@@ -139,7 +139,10 @@ export function startLeaderboard(orca, {
     const cached = account.value;
     if (token && cached?.origin === base.origin && cached.session === sessionKey(token) && validUsername(cached.username)) {
       username = cached.username;
-      accountId = Number.isSafeInteger(cached.accountId) ? cached.accountId : undefined;
+      if (Number.isSafeInteger(cached.accountId) && cached.accountId > 0) {
+        localDb?.saveCollection({ githubUserId: cached.accountId }, now().getTime());
+        accountId = cached.accountId;
+      }
       onUsername(username);
       if (Number.isSafeInteger(cached.lastSyncAt) && cached.lastSyncAt >= 0 && cached.lastSyncAt <= now().getTime()) {
         lastSyncAt = cached.lastSyncAt;
@@ -479,6 +482,7 @@ export function startLeaderboard(orca, {
     }
     if (status.code && status.code !== 'not_found') return 0;
     if (Number.isSafeInteger(status.accountId) && status.accountId > 0 && accountId !== status.accountId) {
+      localDb?.saveCollection({ githubUserId: status.accountId }, time);
       accountId = status.accountId;
       if (username === status.username) saveAccount();
     }

@@ -58,10 +58,10 @@ export function createSqliteUploadStorage(queue, scope, pendingState = 'pending'
     journal: {
       load: () => queue.next(scope, pendingState)?.value,
       save: (pending, now) => queue.write(packetScope(pending), packetId(pending), pending, { state: pendingState, now }),
-      finish(pending, updates, result, now) {
+      finish(pending, updates, now) {
         return queue.atomic(() => {
           for (const [key, receipt] of updates) queue.write(scope, key, receipt, { now });
-          queue.write(packetScope(pending), packetId(pending), { code: result.code }, { state: 'confirmed', now });
+          queue.remove(packetScope(pending), packetId(pending));
         });
       }
     }
@@ -315,7 +315,7 @@ export function createSourceUploader(storage, identity, reporterId, { format = 2
     }
     if (!active()) return { code: 'upload_disabled' };
     if (journal && pending?.createdAt < now - SOURCE_SPAN) {
-      await journal.finish(pending, new Map(), { code: 'expired' }, now);
+      await journal.finish(pending, new Map(), now);
       pending = null;
     }
     if (!pending) {
@@ -427,7 +427,7 @@ export function createSourceUploader(storage, identity, reporterId, { format = 2
       }
     } else problem = response.code ?? 'unavailable';
     if (journal) {
-      await journal.finish(before, new Map([...updates].map(([id, value]) => [`${key}:${id}`, value])), response, now);
+      await journal.finish(before, new Map([...updates].map(([id, value]) => [`${key}:${id}`, value])), now);
       for (const [id, value] of updates) receipts.set(id, value);
     } else await storage.delete(key);
     pending = null;
