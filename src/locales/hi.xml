@@ -278,4 +278,8 @@
   <message id="leaderboard-cutoff">{0} तक (बीजिंग समय)</message>
   <message id="leaderboard-usage-incomplete">उपयोग का डेटा अधूरा है</message>
   <message id="leaderboard-server-update-required">ये रैंकिंग देखने के लिए लीडरबोर्ड सर्वर अपडेट करें।</message>
+  <message id="ranking-update-mode">रैंकिंग अपडेट करने का तरीका</message>
+  <message id="ranking-update-daily">दिन के अनुसार</message>
+  <message id="ranking-update-hourly">हर 24 घंटे में अपडेट</message>
+  <message id="ranking-recent-period">पिछले {0}</message>
 </messages>

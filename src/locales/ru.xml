@@ -278,4 +278,8 @@
   <message id="leaderboard-cutoff">По {0} (пекинское время)</message>
   <message id="leaderboard-usage-incomplete">Данные о расходе неполные</message>
   <message id="leaderboard-server-update-required">Обновите сервер рейтинга, чтобы увидеть эти результаты.</message>
+  <message id="ranking-update-mode">Способ обновления рейтинга</message>
+  <message id="ranking-update-daily">По дням</message>
+  <message id="ranking-update-hourly">Каждые 24 ч</message>
+  <message id="ranking-recent-period">За {0}</message>
 </messages>

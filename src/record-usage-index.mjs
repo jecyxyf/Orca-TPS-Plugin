@@ -203,8 +203,18 @@ export function createRecordUsageIndex({
 
   const initialized = () => collection != null && collection.importedAt !== null;
   const hasPendingHistory = () => (collection?.historyDays ?? 0) < HISTORY_DAYS;
+
+  function supplementalSummary(at, providers) {
+    const exclude = { deviceGuid, providers };
+    const days = Object.create(null);
+    accumulateRecords(days, undefined, db.iterateRecords({ from: usageCutoffMs(at), to: at + 1, exclude }));
+    const cutoffAt = localHourStart(at);
+    const hourly = db.iterateRecords({ from: cutoffAt - HISTORY_DAYS * 24 * HOUR_MS, to: cutoffAt, exclude });
+    return { windows: summarizeUsage([days], at), daily: dailySeries([days], at), hourly: summarizeHourlyUsage(hourly, cutoffAt) };
+  }
+
   return {
-    refresh, ready: initialize, observe, initialized, hasPendingHistory, summary: () => personal, leaderboardSources, leaderboardHours,
+    refresh, ready: initialize, observe, initialized, hasPendingHistory, summary: () => personal, supplementalSummary, leaderboardSources, leaderboardHours,
     canPublish: () => initialized() || progress.done > 0,
     leaderboardUsage() {
       const { day, daily } = dayTotals();

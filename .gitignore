@@ -6,3 +6,5 @@ Thumbs.db
 .env
 .env.*
 *.zip
+/native/bin/*/cc-switch-usage
+/native/bin/*/cc-switch-usage.exe

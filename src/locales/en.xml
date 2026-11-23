@@ -278,4 +278,8 @@
   <message id="leaderboard-cutoff">Through {0} (Beijing time)</message>
   <message id="leaderboard-usage-incomplete">Usage incomplete</message>
   <message id="leaderboard-server-update-required">Update the leaderboard server to view these rankings.</message>
+  <message id="ranking-update-mode">Ranking update method</message>
+  <message id="ranking-update-daily">Update by day</message>
+  <message id="ranking-update-hourly">Update every 24 h</message>
+  <message id="ranking-recent-period">Last {0}</message>
 </messages>

@@ -278,4 +278,8 @@
   <message id="leaderboard-cutoff">{0} পর্যন্ত (বেইজিং সময়)</message>
   <message id="leaderboard-usage-incomplete">ব্যবহারের তথ্য অসম্পূর্ণ</message>
   <message id="leaderboard-server-update-required">এই র‍্যাঙ্কিং দেখতে লিডারবোর্ড সার্ভার আপডেট করুন।</message>
+  <message id="ranking-update-mode">র‍্যাঙ্কিং হালনাগাদের পদ্ধতি</message>
+  <message id="ranking-update-daily">দিন অনুযায়ী</message>
+  <message id="ranking-update-hourly">প্রতি ২৪ ঘণ্টায় হালনাগাদ</message>
+  <message id="ranking-recent-period">গত {0}</message>
 </messages>

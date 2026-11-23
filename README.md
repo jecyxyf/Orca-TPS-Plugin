@@ -43,7 +43,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - Review usage and request counts for today, the last 7 or 30 days, or the past year. Today's summary also shows the highest generation speed for a single request.
 - Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
 - See daily activity over the past 365 days in the heatmap. Request statistics, panel snapshots, and pending uploads are stored in a local SQLite database. The plugin keeps a year of personal usage and fills in older days from local logs that are still available.
-- Usage history is cached locally and restored when Orca restarts.
+- The original CC Switch 4.0.25 engine scans and summarizes usage for its supported local sources. Personal Stats uses the last successful result while it refreshes.
 
 <p align="center">
   <a href="./assets/readme/en/personal-stats.png" title="View full-size screenshot">
@@ -79,6 +79,8 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 ## 5. Installation
 
 Use **Orca 1.4.251 or later** on Windows or Linux. To collect usage from an SSH workspace, the remote host needs **Node.js 22.13 or later with SQLite support**.
+
+The CC Switch usage helper is bundled for Windows x64. To build it on another platform, install Rust stable and the [CC Switch platform build prerequisites](https://github.com/farion1231/cc-switch/blob/v4.0.25/CONTRIBUTING.md), then run `npm run build:cc-switch-usage` in the plugin directory.
 
 ### Orca plugin directory
 

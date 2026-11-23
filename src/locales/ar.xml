@@ -278,4 +278,8 @@
   <message id="leaderboard-cutoff">حتى {0} (بتوقيت بكين)</message>
   <message id="leaderboard-usage-incomplete">بيانات الاستخدام غير مكتملة</message>
   <message id="leaderboard-server-update-required">حدّث خادم لوحة الصدارة لعرض هذا الترتيب.</message>
+  <message id="ranking-update-mode">طريقة تحديث الترتيب</message>
+  <message id="ranking-update-daily">حسب اليوم</message>
+  <message id="ranking-update-hourly">التحديث كل 24 ساعة</message>
+  <message id="ranking-recent-period">آخر {0}</message>
 </messages>

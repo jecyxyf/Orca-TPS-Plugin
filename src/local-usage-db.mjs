@@ -9,7 +9,7 @@ export const USAGE_RETENTION_MS = 720 * HOUR_MS;
 export function personalRecordsCutoff(now) {
   return Math.min(usageCutoffMs(now), localHourStart(now) - HISTORY_DAYS * 24 * HOUR_MS);
 }
-const PANELS = new Set(['current-data', 'usage', 'leaderboard']);
+const PANELS = new Set(['current-data', 'usage', 'usage-cc-switch', 'leaderboard']);
 const COLLECTION_KEY = 'usage-collection';
 const LOG_PREFIX = 'usage-log:';
 const SCHEMA_VERSION = 2;
@@ -209,9 +209,15 @@ export function openLocalUsageDb(filename) {
       ORDER BY completed_at, record_id`).all(from, to, ...(deviceGuid ? [deviceGuid] : [])).map(shape);
   }
 
-  function* iterateRecords({ from, to }) {
-    const select = db.prepare(`SELECT ${recordSelect} FROM usage_records WHERE completed_at>=? AND completed_at<?`);
-    for (const row of select.iterate(from, to)) yield shape(row);
+  function* iterateRecords({ from, to, exclude }) {
+    const args = [from, to];
+    let filter = '';
+    if (exclude?.providers.length) {
+      filter = ` AND (device_guid<>? OR harness NOT IN (${exclude.providers.map(() => '?').join(', ')}))`;
+      args.push(exclude.deviceGuid, ...exclude.providers);
+    }
+    const select = db.prepare(`SELECT ${recordSelect} FROM usage_records WHERE completed_at>=? AND completed_at<?${filter}`);
+    for (const row of select.iterate(...args)) yield shape(row);
   }
 
   function readCollection(now) {

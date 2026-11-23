@@ -278,4 +278,8 @@
   <message id="leaderboard-cutoff">截至北京时间 {0}</message>
   <message id="leaderboard-usage-incomplete">用量数据不完整</message>
   <message id="leaderboard-server-update-required">更新榜单服务端后即可查看。</message>
+  <message id="ranking-update-mode">排名更新方式</message>
+  <message id="ranking-update-daily">按天数更新</message>
+  <message id="ranking-update-hourly">按24小时更新</message>
+  <message id="ranking-recent-period">近{0}</message>
 </messages>

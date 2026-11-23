@@ -12,6 +12,7 @@ This plugin is licensed under the MIT License (see `LICENSE`).
    - Project: [farion1231/cc-switch](https://github.com/farion1231/cc-switch)
    - License: MIT License
    - Scope: Per-request latency & TTFT estimation rules, anti-noise output token thresholds (`>= 200` session-log / `>= 100` proxy), Codex `RequestTimer` boundary semantics, OpenCode `time.streamed` latency priority, Claude `parentUuid` chain traversal, and cross-source `±600s` proxy deduplication semantics reimplemented independently in clean JavaScript (`ESM`) with zero external npm dependencies.
+   - Personal Stats usage helper builds the upstream CC Switch 4.0.25 Rust library at commit `a3eafa408ae679db2e3401fca767ed2b89d9a2b2`. See [the upstream license](./native/CC-Switch-LICENSE).
 
 3. **Language Picker Flag Images**
    - Public-domain flag images from [Flagpedia](https://flagpedia.net/download).

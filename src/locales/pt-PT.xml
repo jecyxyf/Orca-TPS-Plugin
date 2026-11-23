@@ -278,4 +278,8 @@
   <message id="leaderboard-cutoff">Até {0} (hora de Pequim)</message>
   <message id="leaderboard-usage-incomplete">Dados de utilização incompletos</message>
   <message id="leaderboard-server-update-required">Atualize o servidor do classificação para ver estes resultados.</message>
+  <message id="ranking-update-mode">Modo de atualização da classificação</message>
+  <message id="ranking-update-daily">Por dia</message>
+  <message id="ranking-update-hourly">A cada 24 h</message>
+  <message id="ranking-recent-period">Últimas {0}</message>
 </messages>

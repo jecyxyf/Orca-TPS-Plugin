@@ -6,6 +6,7 @@ import { createComputation } from './computation.mjs';
 import { createTpsController } from './controller.mjs';
 import { createRemoteChannelReader } from './remote-channel.mjs';
 import { createChannelCache } from './channel-cache.mjs';
+import { CC_SWITCH_APPS, combineCcSwitchUsage, openCcSwitchUsage } from './cc-switch-usage.mjs';
 import { BACKFILL_BYTES, BACKFILL_UNITS, localHourStart } from './usage-summary.mjs';
 import { HOUR_MS } from './leaderboard-stats.mjs';
 import { createRecordUsageIndex } from './record-usage-index.mjs';
@@ -18,11 +19,13 @@ import { createSubmissionStats } from './submission-stats.mjs';
 
 const BACKFILL_DELAY_MS = 250, RETRY_DELAY_MS = 15_000, IDLE_DELAY_MS = 60_000, FIRST_DELAY_MS = 3_000;
 const CAPTURE_REFRESH_MS = 1000;
+const CC_SWITCH_REFRESH_MS = 60_000;
 const PANEL_VIEW_KEY = 'panel-view';
 const PANEL_VIEWS = new Set(['current-data', 'usage', 'leaderboard']);
 
 let controller, remote, computation, cache, usage, usageAbort, timer, handler, stopLeaderboard, stopPanelView, running = false;
 let locales, localeRegistration, usageDb;
+let ccSwitchEngine, officialUsage, nextCcSwitchRefresh = 0;
 let scheduledAt = 0;
 
 export default async function activate(orca) {
@@ -40,6 +43,10 @@ export default async function activate(orca) {
     ? language.response(true)
     : language.select(payload.code, () => { void controller?.refreshLocale(); }));
   stopPanelView = registerPanelView(orca, language.t);
+  officialUsage = db.readPanel('usage-cc-switch', 'desktop')?.value;
+  ccSwitchEngine = await openCcSwitchUsage().catch(error => {
+    orca.log(language.t('notice.usage-refresh-failed', error?.message ?? 'unknown'));
+  });
   const compute = computation = createComputation();
   const remoteOptions = {
     t: language.t,
@@ -62,7 +69,9 @@ export default async function activate(orca) {
     log: message => orca.log(language.notice(message))
   });
   let usageReady = false;
-  handler = orca.panels.handle('tps.summary', () => usageReady ? index.summary() : db.readPanel('usage', 'desktop')?.value ?? null);
+  handler = orca.panels.handle('tps.summary', () => officialUsage ?? (
+    usageReady ? index.summary() : db.readPanel('usage', 'desktop')?.value ?? null
+  ));
   await index.ready().then(() => {
     usageReady = true;
     if (usage === index) publishUsage(orca, index);
@@ -152,7 +161,7 @@ function publishUsage(orca, index) {
     try { usageDb?.publishPanel('usage', 'desktop', summary, summary.updatedAt); }
     catch { /* The live summary remains available. */ }
   }
-  try { orca.panels.post('tps.usage.changed', summary); }
+  try { orca.panels.post('tps.usage.changed', officialUsage ?? summary); }
   catch { /* The next panel request can still read the cached summary. */ }
 }
 
@@ -163,6 +172,24 @@ async function tick(orca) {
   let delay = RETRY_DELAY_MS;
   try {
     await index.refresh({ signal });
+    if (ccSwitchEngine && !signal.aborted && Date.now() >= nextCcSwitchRefresh) {
+      const at = Date.now();
+      nextCcSwitchRefresh = at + CC_SWITCH_REFRESH_MS;
+      try {
+        const official = await ccSwitchEngine.refresh(at, { signal });
+        if (!signal.aborted && usage === index) {
+          const summary = combineCcSwitchUsage(official, index.supplementalSummary(at, CC_SWITCH_APPS), index.summary());
+          officialUsage = summary;
+          try { usageDb?.publishPanel('usage-cc-switch', 'desktop', summary, at); }
+          catch { /* Keep the original result available in memory. */ }
+        }
+      } catch (error) {
+        if (!signal.aborted) {
+          nextCcSwitchRefresh = Date.now() + RETRY_DELAY_MS;
+          orca.log(locales.t('notice.usage-refresh-failed', error?.message ?? 'unknown'));
+        }
+      }
+    }
     if (!signal.aborted) publishUsage(orca, index);
     delay = index.hasPendingHistory() ? BACKFILL_DELAY_MS : IDLE_DELAY_MS;
   } catch (error) {
@@ -194,6 +221,10 @@ export async function deactivate() {
   controller = undefined;
   const index = usage;
   usage = undefined;
+  const engine = ccSwitchEngine;
+  ccSwitchEngine = undefined;
+  officialUsage = undefined;
+  nextCcSwitchRefresh = 0;
   usageAbort?.abort();
   usageAbort = undefined;
   const remoteReader = remote;
@@ -207,6 +238,6 @@ export async function deactivate() {
   usageDb = undefined;
   try {
     await Promise.all([remoteReader?.dispose(), channelCache?.flush(), panelViewWrite, languageWrite,
-      leaderboardWrite, index?.drained()]);
+      leaderboardWrite, index?.drained(), engine?.drained()]);
   } finally { db?.close(); }
 }

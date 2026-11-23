@@ -21,7 +21,7 @@ export const BACKFILL_UNITS = 8;
 export const MAX_WINDOW_DAYS = 30;
 export const HISTORY_DAYS = 365;
 export const WINDOWS = [['today', 1], ['week', 7], ['month', 30], ['year', HISTORY_DAYS]];
-const ROW_LIMIT = 30;
+export const ROW_LIMIT = 30;
 const SPEED_ROW_LIMIT = 10;
 // Per day, provider and model: requests, fresh input, output, cache read, cache write, then speed samples:
 // requests that had a per-request TPS, the sum of those TPS values, and how many were session-log estimates.

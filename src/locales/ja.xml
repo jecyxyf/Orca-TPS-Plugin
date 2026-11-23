@@ -278,4 +278,8 @@
   <message id="leaderboard-cutoff">{0} まで（北京時間）</message>
   <message id="leaderboard-usage-incomplete">使用量データが不完全です</message>
   <message id="leaderboard-server-update-required">このランキングを表示するにはサーバーを更新してください。</message>
+  <message id="ranking-update-mode">ランキングの更新方法</message>
+  <message id="ranking-update-daily">日単位で更新</message>
+  <message id="ranking-update-hourly">24時間ごとに更新</message>
+  <message id="ranking-recent-period">過去{0}</message>
 </messages>

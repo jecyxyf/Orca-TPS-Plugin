@@ -278,4 +278,8 @@
   <message id="leaderboard-cutoff">{0} تک (بیجنگ کا وقت)</message>
   <message id="leaderboard-usage-incomplete">استعمال کا ڈیٹا نامکمل ہے</message>
   <message id="leaderboard-server-update-required">یہ درجہ بندی دیکھنے کے لیے لیڈر بورڈ سرور اپ ڈیٹ کریں۔</message>
+  <message id="ranking-update-mode">درجہ بندی اپ ڈیٹ کرنے کا طریقہ</message>
+  <message id="ranking-update-daily">دن کے مطابق</message>
+  <message id="ranking-update-hourly">ہر ۲۴ گھنٹے بعد</message>
+  <message id="ranking-recent-period">گزشتہ {0}</message>
 </messages>

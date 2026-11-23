@@ -43,7 +43,7 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 - 查看今日、近 7 天、近 30 天和近一年的用量与请求数。今日还会显示单次请求的最大生成速度。
 - 按工具和模型查看用量，比较各模型的平均生成速度。用量以百万 Token（M）计，包含新输入、输出和缓存读写。
 - 用热力图查看近 365 天每天的用量。请求统计、界面快照和待传包保存在本机的 SQLite 数据库里。个人用量保留一年，仍在本机的旧日志会用于补齐历史。
-- 用量历史会缓存在本地，重启 Orca 后可恢复。
+- 本机受支持的来源使用 CC Switch 4.0.25 原版扫描和汇总。刷新期间，个人统计显示上一次成功的结果。
 
 <p align="center">
   <a href="./assets/readme/zh-CN/personal-stats.png" title="查看原图">
@@ -79,6 +79,8 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 ## 5. 安装指南
 
 Windows 和 Linux 需使用 **Orca 1.4.251 或更新版本**。采集 SSH 工作区的用量时，远程主机需要安装**支持 SQLite 的 Node.js 22.13 或更新版本**。
+
+Windows x64 随插件附带 CC Switch 用量组件。其他平台可安装 Rust stable 和 [CC Switch 构建依赖](https://github.com/farion1231/cc-switch/blob/v4.0.25/CONTRIBUTING.md)，再在插件目录运行 `npm run build:cc-switch-usage`。
 
 ### Orca 插件目录
 
