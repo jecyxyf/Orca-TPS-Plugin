@@ -45,6 +45,7 @@
   <message id="usage-update-hint-recommended">हम हर घंटे अपडेट करने की सलाह देते हैं।</message>
   <message id="total-usage">कुल उपयोग (कैश पढ़ना और लिखना शामिल)</message>
   <message id="request-count">अनुरोध</message>
+  <message id="max-speed">अधिकतम गति</message>
   <message id="model-usage">मॉडल के अनुसार उपयोग</message>
   <message id="usage-by-agent-model">एजेंट और मॉडल के अनुसार उपयोग</message>
   <message id="empty-usage">इस अवधि में कोई उपयोग नहीं</message>

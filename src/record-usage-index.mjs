@@ -3,7 +3,7 @@ import { personalRecordsCutoff, USAGE_RETENTION_MS } from './local-usage-db.mjs'
 import { HOUR_MS, MAX_RECENT_REQUESTS, RECENT_STATS_MS, hourStart, validStatsLabel } from './leaderboard-stats.mjs';
 import { validInstallationId } from './leaderboard-installation.mjs';
 import { sourceMessage } from './locales.mjs';
-import { accumulateRecords, dailySeries, leaderboardDay, localHourStart, requestTokens, summarizeHourlyUsage, summarizeUsage } from './usage-summary.mjs';
+import { accumulateRecords, dailySeries, leaderboardDay, localHourStart, maxRequestSpeed, requestTokens, summarizeHourlyUsage, summarizeUsage } from './usage-summary.mjs';
 
 const sumTokens = (a, b) => Math.min(Number.MAX_SAFE_INTEGER, a + b);
 const importStamp = item => 'local-history:' + item.stamp;
@@ -18,7 +18,8 @@ export function createRecordUsageIndex({
   let ready, refreshTail = Promise.resolve(), recordsChanged = true, totals, personal, hourly, updatedAt = null;
 
   function assemble(at) {
-    if (!recordsChanged && totals && totals.day === leaderboardDay(at) && at < totals.nextExpiry) return totals;
+    const day = leaderboardDay(at), localMidnight = new Date(at).setHours(0, 0, 0, 0);
+    if (!recordsChanged && totals && totals.day === day && totals.localMidnight === localMidnight && at < totals.nextExpiry) return totals;
     const leaderboardCutoff = at - USAGE_RETENTION_MS;
     const records = db.readRecords({ from: personalRecordsCutoff(at), to: at + 1 });
     const firstRankingRecord = records.find(row => row.completedAt >= leaderboardCutoff);
@@ -47,7 +48,7 @@ export function createRecordUsageIndex({
       }
     }
     for (const [key, items] of recent) onRecentRequests(key, items);
-    totals = { day: leaderboardDay(at), days, sources,
+    totals = { day, localMidnight, days, sources, maxSpeed: maxRequestSpeed(records, localMidnight),
       nextExpiry: firstRankingRecord ? firstRankingRecord.completedAt + USAGE_RETENTION_MS + 1 : Infinity };
     recordsChanged = false;
     return totals;
@@ -59,15 +60,17 @@ export function createRecordUsageIndex({
       const records = db.readRecords({ from: personalRecordsCutoff(at), to: cutoffAt });
       hourly = { cutoffAt, ready: imported, windows: summarizeHourlyUsage(records, cutoffAt) };
     }
-    const { days } = assemble(at);
-    personal = { updatedAt, progress, windows: summarizeUsage([days], at), daily: dailySeries([days], at), hourly };
+    const { days, maxSpeed } = assemble(at);
+    const windows = summarizeUsage([days], at);
+    windows.today.maxSpeed = maxSpeed;
+    personal = { updatedAt, progress, windows, daily: dailySeries([days], at), hourly };
   }
 
   const initialize = () => ready ??= Promise.resolve().then(() => {
     const at = now();
     collection = db.loadCollection(at);
     const cachedHour = db.readPanel('usage', 'desktop')?.value?.hourly;
-    if (cachedHour?.windows && cachedHour.cutoffAt === localHourStart(at)) hourly = cachedHour;
+    if (cachedHour?.cutoffAt === localHourStart(at) && Object.hasOwn(cachedHour.windows?.today ?? {}, 'maxSpeed')) hourly = cachedHour;
     snapshot(at);
     return true;
   });

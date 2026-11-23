@@ -45,6 +45,7 @@
   <message id="usage-update-hint-recommended">Рекомендуем обновлять данные каждый час.</message>
   <message id="total-usage">Общий расход (включая чтение и запись кэша)</message>
   <message id="request-count">Запросы</message>
+  <message id="max-speed">Максимальная скорость</message>
   <message id="model-usage">Расход по моделям</message>
   <message id="usage-by-agent-model">Расход по агентам и моделям</message>
   <message id="empty-usage">За этот период расхода нет</message>

@@ -45,6 +45,7 @@
   <message id="usage-update-hint-recommended">毎時更新をおすすめします。</message>
   <message id="total-usage">合計使用量（キャッシュの読み取りと書き込みを含む）</message>
   <message id="request-count">リクエスト数</message>
+  <message id="max-speed">最高速度</message>
   <message id="model-usage">モデル別使用量</message>
   <message id="usage-by-agent-model">エージェント・モデル別使用量</message>
   <message id="empty-usage">この期間に使用量はありません</message>

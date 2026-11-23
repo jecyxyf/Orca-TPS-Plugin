@@ -434,10 +434,14 @@
       background: var(--surface); color: var(--ink); box-shadow: 0 5px 18px rgb(0 0 0 / 15%); font-size: 11px; overflow-wrap: anywhere;
     }
     .war-mode-hint li + li { margin-top: 4px; }
-    .war-totals { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; }
-    .war-stat { min-width: 0; padding: 7px 9px; border-radius: 13px; background: var(--speed-bg); }
-    .war-label { display: block; color: var(--muted); font-size: 11px; }
-    .war-value { display: block; margin-top: 2px; font-size: 20px; line-height: 1.2; font-weight: 750; letter-spacing: -.3px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .war-totals { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 10px; }
+    .war-stat {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 8px;
+      min-width: 0; padding: 7px 9px; border-radius: 13px; background: var(--speed-bg);
+    }
+    .war-label, .war-value { font-size: 20px; line-height: 1.2; }
+    .war-label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .war-value { font-weight: 750; letter-spacing: -.3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .war-value.tokens { color: var(--blue); }
     .war-value.requests { color: var(--green); }
     .war-value small { margin-inline-start: 3px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0; }
@@ -506,7 +510,6 @@
       .ladder-toolbar-field svg { width: 12px; height: 12px; }
       .ladder-rows li { --ladder-row-gap: 6px; }
       .war-totals { gap: 6px; }
-      .war-value { font-size: 17px; }
       .ladder-total { padding-inline: 6px; font-size: 12px; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -680,12 +683,16 @@
         </div>
         <div class="war-totals">
           <div class="war-stat">
-            <span class="war-label"><span data-i18n="total-usage"></span></span>
+            <span class="war-label" data-i18n="total-usage" data-i18n-title="total-usage"></span>
             <strong class="war-value tokens" id="war-tokens" data-testid="war-tokens">—</strong>
           </div>
           <div class="war-stat">
-            <span class="war-label"><span data-i18n="request-count"></span></span>
+            <span class="war-label" data-i18n="request-count" data-i18n-title="request-count"></span>
             <strong class="war-value requests" id="war-requests" data-testid="war-requests">—</strong>
+          </div>
+          <div class="war-stat" id="war-max-speed-row">
+            <span class="war-label" data-i18n="max-speed" data-i18n-title="max-speed"></span>
+            <strong class="war-value"><span id="war-max-speed" data-testid="war-max-speed">—</span> <small id="war-max-speed-unit" hidden>tokens/s</small></strong>
           </div>
         </div>
       </section>
@@ -1194,6 +1201,12 @@
         }
         byId('war-tokens').textContent = range ? formatMillionTokens(range.tokens) : '—';
         byId('war-requests').textContent = range ? formatCount(range.requests) : '—';
+        const maxSpeed = range?.maxSpeed;
+        const hasMaxSpeed = Number.isFinite(maxSpeed?.tokensPerSecond) && maxSpeed.tokensPerSecond > 0;
+        byId('war-max-speed-row').hidden = usageRange !== 'today';
+        byId('war-max-speed').textContent = hasMaxSpeed
+          ? `${maxSpeed.estimated ? '≈' : ''}${speedText(maxSpeed.tokensPerSecond)}` : '—';
+        byId('war-max-speed-unit').hidden = !hasMaxSpeed;
         const list = Array.isArray(range?.rows) ? range.rows : [];
         const signature = JSON.stringify([usageRange, usageMode, list, range?.speeds]);
         if (signature !== drawnUsage) {

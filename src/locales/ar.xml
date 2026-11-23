@@ -45,6 +45,7 @@
   <message id="usage-update-hint-recommended">نوصي بالتحديث كل ساعة.</message>
   <message id="total-usage">إجمالي الاستخدام (يشمل القراءة من ذاكرة التخزين المؤقت والكتابة إليها)</message>
   <message id="request-count">الطلبات</message>
+  <message id="max-speed">السرعة القصوى</message>
   <message id="model-usage">الاستخدام حسب النموذج</message>
   <message id="usage-by-agent-model">الاستخدام حسب الوكيل والنموذج</message>
   <message id="empty-usage">لا يوجد استخدام في هذه الفترة</message>

@@ -206,11 +206,11 @@ test('personal hourly stats use the last local hour for all three periods and ho
     record('month edge', cutoff - 720 * HOUR_MS, 1),
     record('before week', cutoff - 168 * HOUR_MS - 1, 2),
     record('week edge', cutoff - 168 * HOUR_MS, 4),
-    record('before day', cutoff - 24 * HOUR_MS - 1, 8),
-    record('day edge', cutoff - 24 * HOUR_MS, 16),
-    record('before cutoff', cutoff - 1, 32),
-    record('at cutoff', cutoff, 64),
-    record('after cutoff', cutoff + 100, 128)
+    { ...record('before day', cutoff - 24 * HOUR_MS - 1, 8), tokensPerSecond: 1000 },
+    { ...record('day edge', cutoff - 24 * HOUR_MS, 16), tokensPerSecond: 160, isEstimatedSpeed: true },
+    { ...record('before cutoff', cutoff - 1, 32), tokensPerSecond: 120 },
+    { ...record('at cutoff', cutoff, 64), tokensPerSecond: 260, isEstimatedSpeed: true },
+    { ...record('after cutoff', cutoff + 100, 128), tokensPerSecond: 260 }
   ];
   const createIndex = () => createRecordUsageIndex({ db, deviceGuid: source, now: () => clock,
     discover: async () => assert.fail('a ready database must not rescan logs') });
@@ -223,14 +223,17 @@ test('personal hourly stats use the last local hour for all three periods and ho
     assert.equal(first.cutoffAt, cutoff);
     assert.equal(first.ready, true);
     assert.deepEqual(Object.values(first.windows).map(value => [value.tokens, value.requests]), [[48, 2], [60, 4], [63, 6]]);
+    assert.deepEqual(first.windows.today.maxSpeed, { tokensPerSecond: 160, estimated: true });
     assert.equal(index.summary().windows.today.tokens, 224);
+    assert.deepEqual(index.summary().windows.today.maxSpeed, { tokensPerSecond: 260, estimated: false });
     assert.ok(index.leaderboardSources()[0].buckets.every(([at]) => at >= clock - USAGE_RETENTION_MS));
 
     clock += 10 * 60_000;
-    assert.equal(index.observe(source, [record('read late', cutoff - 20, 256)]), true);
+    assert.equal(index.observe(source, [{ ...record('read late', cutoff - 20, 256), tokensPerSecond: 300, isEstimatedSpeed: true }]), true);
     await index.refresh();
     assert.strictEqual(index.summary().hourly, first);
     assert.equal(index.summary().windows.today.tokens, 480);
+    assert.deepEqual(index.summary().windows.today.maxSpeed, { tokensPerSecond: 300, estimated: true });
 
     db.publishPanel('usage', 'desktop', index.summary(), clock);
     const restarted = createIndex();
@@ -240,6 +243,14 @@ test('personal hourly stats use the last local hour for all three periods and ho
     await restarted.refresh();
     assert.equal(restarted.summary().hourly.cutoffAt, clock);
     assert.deepEqual(Object.values(restarted.summary().hourly.windows).map(value => value.tokens), [480, 504, 510]);
+    assert.deepEqual(restarted.summary().hourly.windows.today.maxSpeed, { tokensPerSecond: 300, estimated: true });
+
+    const legacy = structuredClone(restarted.summary());
+    delete legacy.hourly.windows.today.maxSpeed;
+    db.publishPanel('usage', 'desktop', legacy, clock);
+    const upgraded = createIndex();
+    await upgraded.ready();
+    assert.deepEqual(upgraded.summary().hourly, restarted.summary().hourly);
   } finally { db.close(); }
 });
 
@@ -250,15 +261,18 @@ test('personal date stats start a new day at local midnight while hourly stats k
   const index = createRecordUsageIndex({ db, deviceGuid: source, now: () => clock, maxUnits: 10, budgetBytes: 1000,
     discover: async () => [] });
   try {
-    db.replaceLog(reading([record('before midnight', clock)], { now: clock }));
+    db.replaceLog(reading([{ ...record('before midnight', clock), tokensPerSecond: 125 }], { now: clock }));
     await index.refresh();
     assert.equal(index.summary().windows.today.requests, 1);
+    assert.deepEqual(index.summary().windows.today.maxSpeed, { tokensPerSecond: 125, estimated: false });
     clock = midnight;
     await index.refresh();
     assert.equal(index.summary().windows.today.requests, 0);
+    assert.equal(index.summary().windows.today.maxSpeed, null);
     assert.equal(index.summary().windows.week.requests, 1);
     assert.equal(index.summary().hourly.cutoffAt, midnight);
     assert.equal(index.summary().hourly.windows.today.requests, 1);
+    assert.deepEqual(index.summary().hourly.windows.today.maxSpeed, { tokensPerSecond: 125, estimated: false });
   } finally { db.close(); }
 });
 

@@ -45,6 +45,7 @@
   <message id="usage-update-hint-recommended">Kami menyarankan pembaruan setiap jam.</message>
   <message id="total-usage">Total penggunaan (termasuk baca dan tulis cache)</message>
   <message id="request-count">Permintaan</message>
+  <message id="max-speed">Kecepatan maksimum</message>
   <message id="model-usage">Penggunaan per model</message>
   <message id="usage-by-agent-model">Penggunaan per agen dan model</message>
   <message id="empty-usage">Tidak ada penggunaan dalam periode ini</message>

@@ -157,8 +157,22 @@ export function summarizeHourlyUsage(records, cutoffAt) {
     const rows = records.filter(row => row.completedAt >= start && row.completedAt < cutoffAt);
     const days = Object.create(null);
     for (const [provider, items] of Map.groupBy(rows, row => row.provider)) accumulateRecords(days, provider, items);
-    return [name, summarizeGroups(Object.values(days))];
+    const summary = summarizeGroups(Object.values(days));
+    if (name === 'today') summary.maxSpeed = maxRequestSpeed(rows);
+    return [name, summary];
   }));
+}
+
+export function maxRequestSpeed(records, from = -Infinity) {
+  let fastest = null;
+  for (const { completedAt, tokensPerSecond, isEstimatedSpeed: estimated } of records) {
+    if (completedAt < from || !Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0) continue;
+    if (!fastest || tokensPerSecond > fastest.tokensPerSecond ||
+        (tokensPerSecond === fastest.tokensPerSecond && fastest.estimated && !estimated)) {
+      fastest = { tokensPerSecond, estimated: estimated === true };
+    }
+  }
+  return fastest;
 }
 
 function summarizeGroups(groups) {

@@ -45,6 +45,7 @@
   <message id="usage-update-hint-recommended">Wir empfehlen die stündliche Aktualisierung.</message>
   <message id="total-usage">Gesamtverbrauch (einschließlich Cache-Lese- und Schreibvorgängen)</message>
   <message id="request-count">Anfragen</message>
+  <message id="max-speed">Höchstgeschwindigkeit</message>
   <message id="model-usage">Verbrauch nach Modell</message>
   <message id="usage-by-agent-model">Verbrauch nach Agent und Modell</message>
   <message id="empty-usage">Kein Verbrauch in diesem Zeitraum</message>

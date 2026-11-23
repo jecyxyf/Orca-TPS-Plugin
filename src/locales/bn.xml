@@ -45,6 +45,7 @@
   <message id="usage-update-hint-recommended">প্রতি ঘণ্টায় হালনাগাদ বেছে নেওয়ার পরামর্শ দিই।</message>
   <message id="total-usage">মোট ব্যবহার (ক্যাশ পড়া ও লেখা সহ)</message>
   <message id="request-count">অনুরোধ</message>
+  <message id="max-speed">সর্বোচ্চ গতি</message>
   <message id="model-usage">মডেল অনুযায়ী ব্যবহার</message>
   <message id="usage-by-agent-model">এজেন্ট ও মডেল অনুযায়ী ব্যবহার</message>
   <message id="empty-usage">এই সময়ে কোনো ব্যবহার নেই</message>

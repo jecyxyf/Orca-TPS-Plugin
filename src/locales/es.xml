@@ -45,6 +45,7 @@
   <message id="usage-update-hint-recommended">Recomendamos actualizar cada hora.</message>
   <message id="total-usage">Uso total (incluye lecturas y escrituras de caché)</message>
   <message id="request-count">Solicitudes</message>
+  <message id="max-speed">Velocidad máxima</message>
   <message id="model-usage">Uso por modelo</message>
   <message id="usage-by-agent-model">Uso por agente y modelo</message>
   <message id="empty-usage">No hay uso en este período</message>

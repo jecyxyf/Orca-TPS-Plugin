@@ -45,6 +45,7 @@
   <message id="usage-update-hint-recommended">建议选择「按小时更新」。</message>
   <message id="total-usage">总用量（含缓存读写）</message>
   <message id="request-count">请求数</message>
+  <message id="max-speed">最大速度</message>
   <message id="model-usage">模型用量</message>
   <message id="usage-by-agent-model">按 agent 与模型的消耗</message>
   <message id="empty-usage">这段时间还没有用量记录</message>
