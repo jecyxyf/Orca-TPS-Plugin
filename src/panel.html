@@ -989,7 +989,11 @@
       };
     })();
     const t = locale.t;
-    const AGENT_LABELS = { codex: 'Codex CLI', claude: 'Claude Code', opencode: 'OpenCode', opencode2: 'OpenCode', pi: 'Pi Agent', antigravity: 'Antigravity CLI', hermes: 'Hermes Agent' };
+    const AGENT_LABELS = {
+      agy: 'Antigravity CLI', antigravity: 'Antigravity CLI', claude: 'Claude Code', 'claude-desktop': 'Claude Code',
+      codex: 'Codex CLI', dsh: 'DeepSeek Harness', gemini: 'Gemini CLI', grokbuild: 'Grok Build', hermes: 'Hermes Agent',
+      kimi: 'Kimi Code', mcode: 'MiniMax Code', omp: 'Oh My Pi', opencode: 'OpenCode', opencode2: 'OpenCode', pi: 'Pi Agent'
+    };
     function updateList(container, items, previous, keyOf, create) {
       const next = new Map();
       let position = container.firstChild;

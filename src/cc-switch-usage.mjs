@@ -12,9 +12,15 @@ import { HOUR_MS } from './leaderboard-stats.mjs';
 import { HISTORY_DAYS, ROW_LIMIT, WINDOWS, cacheHitRate, localDayKey, localHourStart } from './usage-summary.mjs';
 
 const REVISION = 'a3eafa408ae679db2e3401fca767ed2b89d9a2b2';
-export const CC_SWITCH_APPS = ['antigravity', 'claude', 'codex', 'dsh', 'gemini', 'grokbuild', 'kimi', 'mcode', 'omp', 'opencode', 'opencode2', 'pi'];
+export const CC_SWITCH_APPS = [
+  'agy', 'antigravity', 'claude', 'claude-desktop', 'codex', 'dsh', 'gemini',
+  'grokbuild', 'kimi', 'mcode', 'omp', 'opencode', 'opencode2', 'pi'
+];
 const counters = ['requests', 'freshInput', 'output', 'cacheRead', 'cacheWrite', 'tokens'];
 const scopeName = /^snapshot-[a-zA-Z0-9]+$/;
+
+// CC Switch calls Antigravity `agy`. Orca's session collector uses `antigravity`.
+const providerName = appType => appType === 'agy' ? 'antigravity' : appType;
 
 const missing = error => error.code === 'ENOENT' || error.code === 'ENOTDIR';
 const optional = async operation => operation.catch(error => {
@@ -158,7 +164,7 @@ function mapSummary(result, at) {
     const { summary, rows, hiddenRows } = result.windows[name];
     return {
       ...mapCounters(summary), cacheHitRate: summary.cacheHitRate, hiddenRows,
-      rows: rows.map(({ appType, model, usage }) => ({ provider: appType, model, ...mapCounters(usage) }))
+      rows: mergeUsageRows(rows.map(({ appType, model, usage }) => ({ provider: appType, model, ...mapCounters(usage) })))
     };
   };
   return {
@@ -175,6 +181,17 @@ function combineCounters(first, second) {
   return Object.fromEntries(counters.map(key => [key, first[key] + second[key]]));
 }
 
+function mergeUsageRows(rows) {
+  const merged = new Map();
+  for (const row of rows) {
+    const provider = providerName(row.provider);
+    const key = `${provider}\0${row.model}`;
+    const first = merged.get(key);
+    merged.set(key, { ...row, provider, ...(first ? combineCounters(first, row) : {}) });
+  }
+  return [...merged.values()].sort((a, b) => b.tokens - a.tokens || b.requests - a.requests);
+}
+
 function combineWindow(official, supplemental, speed) {
   const result = { ...official };
   for (const key of ['maxSpeed', 'speeds', 'speedHidden', 'speedSparse']) {
@@ -182,13 +199,7 @@ function combineWindow(official, supplemental, speed) {
   }
   if (!supplemental.requests) return result;
   const totals = combineCounters(official, supplemental);
-  const rows = new Map(official.rows.map(row => [`${row.provider}\0${row.model}`, row]));
-  for (const row of supplemental.rows) {
-    const key = `${row.provider}\0${row.model}`;
-    const first = rows.get(key);
-    rows.set(key, first ? { ...row, ...combineCounters(first, row) } : row);
-  }
-  const ranked = [...rows.values()].sort((a, b) => b.tokens - a.tokens || b.requests - a.requests);
+  const ranked = mergeUsageRows([...official.rows, ...supplemental.rows]);
   return {
     ...result, ...totals, cacheHitRate: cacheHitRate(totals), rows: ranked.slice(0, ROW_LIMIT),
     hiddenRows: official.hiddenRows + supplemental.hiddenRows + Math.max(0, ranked.length - ROW_LIMIT)

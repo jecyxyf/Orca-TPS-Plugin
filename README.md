@@ -69,6 +69,10 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ## 4. Supported Harnesses
 
+**Personal Stats on this machine** uses CC Switch 4.0.25 for Claude Code, Codex, Gemini CLI, OpenCode, Grok Build, Pi, Oh My Pi, MiniMax Code, Kimi Code, Antigravity CLI, and DeepSeek Harness. Claude Desktop requests recorded through CC Switch's local model routing count under Claude Code.
+
+**Orca session collection** supports these harnesses:
+
 - Codex CLI
 - Claude Code (including subagents)
 - OpenCode v1 and v2

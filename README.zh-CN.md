@@ -69,6 +69,10 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 ## 4. 支持的 Harness
 
+**本机个人统计**使用 CC Switch 4.0.25 统计 Claude Code、Codex、Gemini CLI、OpenCode、Grok Build、Pi、Oh My Pi、MiniMax Code、Kimi Code、Antigravity CLI 和 DeepSeek Harness。Claude Desktop 经 CC Switch 本地路由转发的模型映射请求计入 Claude Code。
+
+**Orca 会话采集**支持以下工具。
+
 - Codex CLI
 - Claude Code（含子代理）
 - OpenCode v1 和 v2
