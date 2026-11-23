@@ -2,6 +2,7 @@ import { sourceMessage } from './locales.mjs';
 import { createHash } from 'node:crypto';
 import { open, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { reportDiscoveryError } from './data-paths.mjs';
 import { buildHermesRecord, recentRecords } from './parsers.mjs';
 
 const LOG_NAME = /^agent\.log(?:\.[1-9]\d*)?$/;
@@ -160,11 +161,14 @@ async function readSources(root, cutoffMs) {
   };
 }
 
-export async function hermesSources(roots, cutoffMs = 0, warnings) {
+export async function hermesSources(roots, cutoffMs = 0, warnings, onUnavailable) {
   const profiles = new Set();
-  const warn = () => warnings?.add(sourceMessage('notice.hermes-folder-unavailable'));
+  const warn = () => {
+    warnings?.add(sourceMessage('notice.hermes-folder-unavailable'));
+    onUnavailable?.();
+  };
   for (const root of roots.slice(0, 100)) {
-    const home = await realpath(root).catch(() => null);
+    const home = await realpath(root).catch(error => { reportDiscoveryError(error, warn); return null; });
     if (!home) continue;
     profiles.add(home);
     const directory = path.join(home, 'profiles');

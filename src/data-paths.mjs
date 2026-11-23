@@ -25,7 +25,16 @@ export function defaultRoots({ home = homedir(), env = process.env, platform = p
   };
 }
 
-export async function configuredRoots(custom = {}, includeDefaults = true) {
+export function localUsageDatabasePath(options = {}) {
+  const join = (options.platform ?? process.platform) === 'win32' ? path.win32.join : path.posix.join;
+  return join(defaultRoots(options).userData, 'tps-plugin', 'usage.sqlite');
+}
+
+export function reportDiscoveryError(error, onUnavailable) {
+  if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') onUnavailable?.();
+}
+
+export async function configuredRoots(custom = {}, includeDefaults = true, onUnavailable) {
   const defaults = defaultRoots(), roots = {};
   for (const provider of ['codex', 'claude', 'opencode', 'pi', 'antigravity', 'hermes']) {
     const values = Array.isArray(custom[provider]) ? custom[provider] : [];
@@ -40,7 +49,7 @@ export async function configuredRoots(custom = {}, includeDefaults = true) {
       for (const entry of accounts.slice(0, 100)) if (entry.isDirectory()) {
         roots[provider].push(path.join(accountsRoot, entry.name, 'home', provider === 'codex' ? 'sessions' : 'projects'));
       }
-    } catch { /* Missing managed accounts are normal. */ }
+    } catch (error) { reportDiscoveryError(error, onUnavailable); }
   }
   return roots;
 }

@@ -1,16 +1,39 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { realpath } from 'node:fs/promises';
+import { link, mkdir, readFile, realpath, unlink, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
-import { createLiveSessionReader, discoverUsageUnits, normalizeComparePath } from './data.mjs';
+import { createLiveSessionReader, discoverUsageUnits, normalizeComparePath, usageRecordPage } from './data.mjs';
 import { leaderboardDay, leaderboardDayStart, MAX_WINDOW_DAYS, USAGE_READ_BATCH } from './usage-summary.mjs';
+import { validInstallationId } from './leaderboard-installation.mjs';
 
 export const COLLECTOR_FILES = [
   'remote-collector.mjs', 'data.mjs', 'data-paths.mjs', 'parsers.mjs',
-  'usage-summary.mjs', 'hermes.mjs', 'locales.mjs', 'locales/zh-CN.xml'
+  'usage-summary.mjs', 'leaderboard-stats.mjs', 'leaderboard-installation.mjs', 'hermes.mjs', 'locales.mjs', 'locales/zh-CN.xml'
 ];
 export const MAX_RESPONSE_BASE64 = 1024 * 1024;
 export const USAGE_PAGE_SIZE = 200;
+
+export async function readRemoteSourceId() {
+  const base = process.env.XDG_DATA_HOME;
+  const dir = path.join(base && path.isAbsolute(base) ? base : path.join(homedir(), '.local', 'share'), 'orca-tps-plugin');
+  const target = path.join(dir, 'source-id');
+  async function read() {
+    const id = (await readFile(target, 'utf8')).trim();
+    if (!validInstallationId(id)) throw new Error('invalid_source_id');
+    return id;
+  }
+  try { return await read(); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const id = randomUUID(), temp = path.join(dir, `.source-id-${id}`);
+  await writeFile(temp, `${id}\n`, { flag: 'wx', mode: 0o600 });
+  try {
+    try { await link(temp, target); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
+    return await read();
+  } finally { await unlink(temp); }
+}
 const PROVIDERS = new Set(['codex', 'claude', 'opencode', 'opencode2', 'pi', 'antigravity', 'hermes']);
 const NUMBERS = [
   'completedAt', 'createdAtSec', 'freshInputTokens', 'outputTokens', 'cacheReadTokens', 'cacheCreationTokens',
@@ -19,6 +42,7 @@ const NUMBERS = [
 const clean = value => typeof value === 'string' && value.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value);
 const hermesModelId = /^[a-z\d][a-z\d._-]*\/[a-z\d][a-z\d._:-]*$/i;
 const liveSessions = createLiveSessionReader();
+let liveSourceId;
 
 export function remoteRecord(record) {
   if (!record || !PROVIDERS.has(record.provider) || !Number.isFinite(record.completedAt) || record.completedAt < 0 ||
@@ -55,18 +79,27 @@ export async function collectRemoteChannel(request, { cwd = process.cwd(), load 
     if (clean(entry[field]) && path.isAbsolute(entry[field])) session[field] = entry[field];
     sessions.push(session);
   }
-  const { session, warnings } = await load(
+  const includeUsageRecords = request.includeUsageRecords === true;
+  const { session, warnings, usageRecords } = await load(
     { worktreePath: request.worktreePath, sessions },
-    { fresh: request.fresh === true }
+    { fresh: request.fresh === true, ...(includeUsageRecords ? { includeUsageRecords } : {}) }
   );
+  let usage;
+  if (includeUsageRecords && usageRecords?.length) {
+    try {
+      liveSourceId ??= await readRemoteSourceId();
+      usage = { sourceId: liveSourceId, records: usageRecords.slice(0, 100).map(remoteRecord).filter(Boolean) };
+    } catch { /* Current Data can still show records when the source identifier is unavailable. */ }
+  }
   return {
     records: session ? session.records.slice(0, 100).map(remoteRecord).filter(Boolean) : null,
-    incomplete: Boolean(warnings?.length)
+    incomplete: Boolean(warnings?.length),
+    ...(usage ? { usage } : {})
   };
 }
 
 export function createRemoteUsageScan(discover = discoverUsageUnits) {
-  let units, descriptors;
+  let units, descriptors, sourceId, sourceTime, recordRead;
   return async request => {
     if (request.type === 'list') {
       const { offset, cutoffMs, timeZone, rankDay, rankFrom = rankDay } = request;
@@ -84,17 +117,34 @@ export function createRemoteUsageScan(discover = discoverUsageUnits) {
         // when the machine that owns the logs has another system time zone.
         new Intl.DateTimeFormat('en', { timeZone });
         process.env.TZ = timeZone;
+        sourceTime = Date.now();
         let complete = true;
-        const discovered = await discover(cutoffMs, { rankDay, rankFrom, onUnavailable: () => { complete = false; } });
+        const discovered = await discover(cutoffMs, { rankDay, rankFrom, includeRecent: request.includeRecent === true,
+          ...(request.includeUsageTimes === true ? { includeUsageTimes: true } : {}),
+          ...(request.includeRecords === true ? { includeRecords: true } : {}),
+          onUnavailable: () => { complete = false; } });
         if (!complete) throw new Error('usage_source_unavailable');
+        sourceId = request.includeUsageSources === true ? await readRemoteSourceId() : undefined;
         units = new Map(discovered.map(unit => [unit.key, unit]));
+        recordRead = undefined;
         descriptors = [...units.values()].map(({ key, stamp, bytes, mtimeMs }) => ({
           key, stamp: createHash('sha256').update(stamp).digest('hex').slice(0, 24), bytes, mtimeMs
         }));
       }
       if (!descriptors || offset > descriptors.length) throw new Error('scan');
       const items = descriptors.slice(offset, offset + USAGE_PAGE_SIZE);
-      return { items, more: offset + items.length < descriptors.length };
+      return { items, more: offset + items.length < descriptors.length, ...(sourceId ? { sourceId, sourceTime } : {}) };
+    }
+    if (request.type === 'records') {
+      const unit = units?.get(request.key);
+      if (!unit || !sourceId) throw new Error('scan');
+      if (request.offset === 0) recordRead = { unit, result: await unit.read() };
+      if (recordRead?.unit !== unit) throw new Error('scan');
+      const page = usageRecordPage(recordRead.result, request.offset);
+      if (page.nextOffset === null) recordRead = undefined;
+      const records = page.records.map(remoteRecord).filter(Boolean);
+      if (records.length !== page.records.length) throw new Error('invalid usage record');
+      return { ...page, records, sourceId };
     }
     if (request.type !== 'read' || !units || !Array.isArray(request.keys) || request.keys.length > USAGE_READ_BATCH) throw new Error('scan');
     const results = {};

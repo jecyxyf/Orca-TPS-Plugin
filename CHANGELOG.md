@@ -5,9 +5,12 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- **Leaderboard sync no longer waits for every file**: Today's usage now uploads whatever has been read so far, and later syncs replace it as more files are read. Heavy users with a large session file that was still being written (over 64 MB) previously got "usage not ready" on almost every sync. The one-time history upload for past days still waits for complete data, because the server keeps the first total it receives for each past day.
+- **Leaderboard avatars recover after a failed download**: An avatar that is still the default icon is fetched again when its leaderboard row changes after a sync, and the account avatar is retried too. A loaded avatar updates every place the same user appears and is not downloaded again. Failed downloads now wait 10 seconds (one sync interval) instead of 5 minutes.
 - **Orca 1.4.255+ Active Conversation Tracking**: Adapted to Orca's split state storage (`profile_state_document_parts` and `profile_state_document_parts_meta`), resolving an issue where the sidebar and status bar stayed frozen on an older session after switching channels/tabs. Falls back seamlessly to monolithic `profile_state_documents` on earlier Orca versions.
 
 ### Changed
+- The default leaderboard avatar is a black hat with a white band and a thin gray outline.
 - **Sub-Second Active Tab Polling (250ms)**: Lowered focus poll interval from 1000ms to 250ms with a lightweight revision stamp check (`workspaceStamp`), avoiding full-tree re-parsing when the workspace state is unchanged, reducing channel switch latency to 0.7~1.5s.
 
 ### Added

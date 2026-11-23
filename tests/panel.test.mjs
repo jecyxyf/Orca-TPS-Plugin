@@ -6,6 +6,46 @@ import { fileURLToPath } from 'node:url';
 
 const panelPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'panel.html');
 
+test('the upload notice names the failed part and clears when the rolling retry succeeds', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function renderUploadResult\(snapshot\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(source);
+  const elements = { 'sync-result': {}, 'sync-error': {} };
+  const render = new Function('element', 'renderToolbarTime', 'shortClock', 'messageFor', 't',
+    `${source}\nreturn renderUploadResult;`)(
+    id => elements[id], (target, time) => { target.lastSyncAt = time; }, String, code => code,
+    (key, ...values) => [key, ...values].join(' ')
+  );
+
+  render({ lastSyncAt: 50, lastUpload: { at: 100, code: 'accepted', rollingCode: 'unavailable' }, rollingProblem: 'unavailable' });
+  assert.deepEqual(elements['sync-error'], { textContent: 'daily-upload-succeeded-rolling-failed unavailable', hidden: false });
+  assert.equal(elements['sync-result'].lastSyncAt, 50);
+
+  render({ lastSyncAt: 50, lastUpload: { at: 110, code: 'invalid', rollingCode: 'accepted' } });
+  assert.equal(elements['sync-error'].textContent, 'rolling-upload-succeeded-daily-failed invalid');
+
+  render({ lastSyncAt: 50, lastUpload: { at: 115, code: 'unavailable', rollingOnly: true }, rollingProblem: 'unavailable' });
+  assert.equal(elements['sync-error'].textContent, 'rolling-upload-failed unavailable');
+
+  render({ lastSyncAt: 120, lastUpload: { at: 120, code: 'accepted', rollingCode: 'accepted' }, rollingProblem: null });
+  assert.deepEqual(elements['sync-error'], { textContent: '', hidden: true });
+  assert.equal(elements['sync-result'].lastSyncAt, 120);
+});
+
+test('per-request output uses Tokens and aggregate usage uses millions without rounding small counts to zero', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /const formatMillionTokens = tokens => \{[\s\S]*?\n    \};/.exec(html)?.[0];
+  assert.ok(source);
+  assert.match(html, /data-testid="output-value"><\/span><span class="metric-unit">Tokens<\/span>/);
+  const format = new Function('locale', `${source}\nreturn formatMillionTokens;`)({
+    number: (value, options) => new Intl.NumberFormat('en', options).format(value)
+  });
+  assert.equal(format(501), '0.000501 M');
+  assert.equal(format(1_250_000), '1.25 M');
+  assert.equal(format(0), '0 M');
+  assert.equal(format(null), '—');
+});
+
 /** Parse top-level (non-@media) CSS rules in cascade order so later duplicate selectors override earlier ones. */
 function cascadeTopLevelCss(cssText) {
   const withoutComments = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -96,9 +136,298 @@ test('per-request card renders rocket icon, TPS value, and tokens/s unit on a si
   assert.match(cardTop?.['grid-template-columns'] ?? '', /\bauto\s*$/, '.card-top right column must size to single-line pill');
 });
 
-test('panel resolves per-record agent label from record.provider and shows channel title in summary', async () => {
+test('panel resolves per-record agent label from record.provider', async () => {
   const html = await readFile(panelPath, 'utf8');
   assert.match(html, /agentLabel\(\s*record\.provider\s*\)/, 'recordCard must pass record.provider to agentLabel');
   assert.match(html, /function\s+agentLabel\(\s*provider\s*\)/, 'agentLabel must accept per-record provider override');
-  assert.match(html, /activeSession\?\.provider\s*===\s*['"]channel['"]/, 'summary must display channel title when in channel mode');
+});
+
+test('the panel title has a logo and Current Data shows the update time beside an icon-only refresh button', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const logo = /<h1\b[^>]*\bid="panel-title"[^>]*>\s*<img\b[^>]*\bsrc="([^"]+)"[^>]*\balt=""[^>]*>\s*TPS Plugin/.exec(html);
+  assert.ok(logo, 'logo must be left of the title');
+  const png = await readFile(path.resolve(path.dirname(panelPath), logo[1]));
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.match(html, /<div class="panel-header">\s*<p\b[^>]*\bid="updated"[^>]*>—<\/p>\s*<button\b[^>]*\bid="refresh"/);
+  const refresh = /<button\b[^>]*\bid="refresh"[^>]*>[\s\S]*?<\/button>/.exec(html)?.[0];
+  assert.ok(refresh);
+  assert.match(refresh, /data-i18n-title="refresh"/);
+  assert.match(refresh, /data-i18n-aria-label="refresh-current"/);
+  assert.match(refresh, />\s*<svg\b[^>]*\baria-hidden="true"[^>]*>[\s\S]*?<\/svg>\s*<\/button>$/);
+  assert.doesNotMatch(html, /recent-requests|request-speed-note/);
+});
+
+test('Personal Stats opens with hourly updates as the first option above the period tabs', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const toolbar = /<section\b[^>]*\bid="usage"[^>]*>\s*<div class="war-mode">([\s\S]*?)\n      <section class="war"/.exec(html)?.[1];
+  assert.ok(toolbar);
+  assert.deepEqual([...toolbar.matchAll(/data-usage-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
+    .map(match => match.slice(1)), [['hourly', 'true'], ['calendar', 'false']]);
+  assert.match(html, /usageMode = 'hourly'/);
+  assert.equal([...toolbar.matchAll(/<li data-i18n="usage-update-hint-/g)].length, 4);
+});
+
+test('today usage connects pulses at real timestamps and animates new points once', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /const chartVerticalPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];
+  assert.ok(source);
+  assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart').background, 'transparent');
+  const frames = [], painters = new WeakMap(), paths = [], areas = [], stops = [];
+  class TestPath {
+    constructor(path) { this.points = path ? [...path.points] : []; }
+    moveTo(...point) { this.points.push(point); }
+    lineTo(...point) { this.points.push(point); }
+    bezierCurveTo(...points) { this.points.push(points.slice(-2)); }
+    closePath() { this.points.push('closed'); }
+  }
+  let path, savedAlpha;
+  const ctx = {
+    globalAlpha: 1,
+    setTransform() {}, clearRect() { paths.length = areas.length = 0; }, beginPath() { path = []; },
+    createLinearGradient() { return { addColorStop(...stop) { stops.push(stop); } }; },
+    save() { savedAlpha = this.globalAlpha; },
+    restore() { this.globalAlpha = savedAlpha; },
+    stroke(line) { paths.push(line.points); },
+    arc(...point) { path.push(point.slice(0, 3)); },
+    fill(area) {
+      if (area) areas.push({ points: area.points, opacity: this.globalAlpha, style: this.fillStyle });
+      else paths.push(path);
+    }
+  };
+  let width = 300;
+  const chart = { width: 320, height: 60, isConnected: true,
+    getBoundingClientRect: () => ({ width, height: 30 }), getContext: () => ctx };
+  const { draw, pulseX } = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
+    const RECENT_STATS_MS = 300000;
+    ${source.replace(/\n      function usageCard$/, '')}
+    return { draw: drawSubmissionPulses, pulseX };
+  `)(painters, callback => frames.push(callback), { signal: { aborted: false } }, {
+    devicePixelRatio: 2, matchMedia: () => ({ matches: false }),
+    getComputedStyle: () => ({ getPropertyValue: name => name === '--usage-wave-low' ? '#60a589' : '#ff6b72' })
+  }, { documentElement: {} }, TestPath);
+  assert.equal(pulseX({ submittedAt: 1_000 }, 1_000, width), 0);
+  assert.equal(pulseX({ submittedAt: 301_000 }, 1_000, width), width);
+  draw(chart, [{ submittedAt: 20_000, deltaTokens: 100 }, { submittedAt: 40_000, deltaTokens: 0 },
+    { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
+  frames.shift()(1000);
+  assert.deepEqual([chart.width, chart.height], [600, 60]);
+  assert.deepEqual(stops, [[0, '#60a589'], [1, '#ff6b72']]);
+  assert.deepEqual(paths[0].slice(2, 7), [[20, 15], [23.25, 26], [40, 26], [89.75, 26], [93, 26]]);
+  assert.deepEqual(paths[1][0], [40, 26, 1.4]);
+  assert.deepEqual(areas[0].points, [...paths[0], [96.25, 26], [16.75, 26], 'closed']);
+  assert.equal(areas[0].opacity, 0.5);
+  assert.equal(areas[0].style, ctx.strokeStyle);
+  assert.equal(ctx.globalAlpha, 1);
+  frames.shift()(1200);
+  assert.deepEqual(paths[0][6], [93, 4]);
+  assert.deepEqual(areas[0].points[6], [93, 4]);
+  assert.equal(frames.length, 0);
+  width = 150;
+  painters.get(chart)();
+  frames.shift()(1400);
+  assert.deepEqual([chart.width, chart.height], [300, 60]);
+  assert.deepEqual(paths[0][6], [46.5, 4]);
+  assert.equal(frames.length, 0);
+});
+
+test('leaderboard countdown is shared across all periods of the snapshot', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const countdown = /function countdownText\([\s\S]*?\n      \}/.exec(html)?.[0];
+  const render = /function renderRankCountdown\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(countdown && render);
+  const showCountdown = new Function('state', 'time', `
+    const { nextRankRefresh, rankingPending } = state;
+    const note = { textContent: '' };
+    const element = () => note;
+    const locale = { number: (value, options) => new Intl.NumberFormat('en', options).format(value) };
+    const t = key => key;
+    ${countdown}
+    ${render}
+    renderRankCountdown(time);
+    return note.textContent;
+  `);
+  const state = { nextRankRefresh: 12_000 };
+  assert.equal(showCountdown(state, 2_100), '00:10');
+  assert.equal(showCountdown(state, 6_000), '00:06');
+  assert.equal(showCountdown({ ...state, rankingPending: true }, 6_000), 'sync-in-progress');
+  assert.equal(showCountdown(state, 12_000), 'sync-waiting');
+  assert.equal(showCountdown({}, 2_100), '—');
+});
+
+test('daily usage fills missing dates with zero across the entire selected window', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function dailyUsagePoints\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(source);
+  const dailyUsagePoints = new Function(`const DAY_MS = 86400000; ${source}; return dailyUsagePoints;`)();
+  const week = dailyUsagePoints([{ day: '2026-11-15', tokens: 7 }, { day: '2026-11-19', tokens: 20 }], Date.UTC(2026, 10, 14), 7);
+  assert.deepEqual(week.map(point => point.tokens), [0, 7, 0, 0, 0, 20, 0]);
+  assert.deepEqual([week[0].day, week.at(-1).day], ['2026-11-14', '2026-11-20']);
+  const month = dailyUsagePoints([{ day: '2024-02-29', tokens: 11 }], Date.UTC(2024, 1, 1), 30);
+  assert.equal(month.length, 30);
+  assert.deepEqual(month.slice(-3), [{ day: '2024-02-28', tokens: 0 }, { day: '2024-02-29', tokens: 11 }, { day: '2024-03-01', tokens: 0 }]);
+  assert.equal(dailyUsagePoints([], Date.UTC(2026, 10, 14), 7).filter(point => point.tokens === 0).length, 7);
+  assert.deepEqual(dailyUsagePoints(undefined, Date.UTC(2026, 10, 14), 7), []);
+});
+
+test('daily usage curves pass through every point and stay within each pair of values', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function dailyUsagePath\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(source);
+  class TestPath {
+    segments = [];
+    moveTo(...point) { this.start = point; }
+    bezierCurveTo(...segment) { this.segments.push(segment); }
+  }
+  const dailyUsagePath = new Function('Path2D', `${source}; return dailyUsagePath;`)(TestPath);
+  const points = [56, 56, 40, 30, 4, 56, 56].map((y, index) => ({ x: 4 + 52 * index, y }));
+  const line = dailyUsagePath(points, point => point.x, point => point.y);
+  assert.deepEqual(line.start, [4, 56]);
+  assert.deepEqual(line.segments.map(segment => segment.slice(4)), points.slice(1).map(({ x, y }) => [x, y]));
+  for (const [index, segment] of line.segments.entries()) {
+    const [firstX, firstY, secondX, secondY, endX, endY] = segment;
+    const { x: startX, y: startY } = points[index];
+    assert.ok(startX < firstX && firstX < secondX && secondX < endX);
+    const low = Math.min(startY, endY), high = Math.max(startY, endY);
+    assert.ok([firstY, secondY].every(controlY => controlY >= low && controlY <= high));
+    const next = line.segments[index + 1];
+    if (next) assert.ok(Math.abs((endY - secondY) - (next[1] - endY)) < 1e-10);
+  }
+  assert.notEqual(line.segments[2][1], points[2].y);
+  assert.equal(line.segments[3][3], 4);
+});
+
+async function loadAvatarView() {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /\/\/ avatar-view:start([\s\S]*?)\/\/ avatar-view:end/.exec(html)?.[1];
+  assert.ok(source, 'panel must keep the avatar view between avatar-view markers');
+  return new Function(source + '\nreturn createAvatarView;')();
+}
+
+function fakeAvatar() {
+  return {
+    dataset: {}, isConnected: true, children: [],
+    replaceChildren(...nodes) { this.children = nodes; },
+    get shown() {
+      const [node] = this.children;
+      return node?.kind === 'img' ? node.src : node?.kind;
+    }
+  };
+}
+
+function fakeImage() {
+  const listeners = {};
+  return {
+    kind: 'img', alt: undefined, decoding: undefined, _src: '',
+    addEventListener(type, listener) { listeners[type] = listener; },
+    set src(value) { this._src = value; queueMicrotask(() => listeners[value.startsWith('data:image/') ? 'load' : 'error']?.()); },
+    get src() { return this._src; }
+  };
+}
+
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+test('panel avatar view retries default avatars on new rows and reuses loaded avatars everywhere', async () => {
+  const createAvatarView = await loadAvatarView();
+  const image = 'data:image/png;base64,YXZhdGFy';
+  const loads = [];
+  let reply = null;
+  const view = createAvatarView({
+    fallback: () => ({ kind: 'black-hat' }),
+    createImage: fakeImage,
+    load: async username => { loads.push(username); return reply; },
+    visible: () => true,
+    Observer: null
+  });
+
+  const account = fakeAvatar(), firstRow = fakeAvatar();
+  view.set(account, 'jecyxyf');
+  view.set(firstRow, 'jecyxyf');
+  await settle();
+  assert.deepEqual(loads, ['jecyxyf'], 'one request covers every avatar of the same user');
+  assert.equal(account.shown, 'black-hat');
+  assert.equal(firstRow.shown, 'black-hat');
+
+  view.set(account, 'jecyxyf');
+  await settle();
+  assert.deepEqual(loads, ['jecyxyf'], 'an unchanged account does not request again on its own');
+
+  reply = image;
+  firstRow.isConnected = false;
+  const secondRow = fakeAvatar();
+  view.set(secondRow, 'jecyxyf');
+  view.set(account, 'jecyxyf', { retry: true });
+  await settle();
+  assert.deepEqual(loads, ['jecyxyf', 'jecyxyf'], 'a regenerated row with a default avatar requests once more');
+  assert.equal(secondRow.shown, image);
+  assert.equal(account.shown, image, 'a successful avatar also updates the account avatar');
+
+  const thirdRow = fakeAvatar();
+  view.set(thirdRow, 'JECYXYF');
+  view.set(account, 'jecyxyf', { retry: true });
+  await settle();
+  assert.equal(thirdRow.shown, image, 'a loaded avatar is shown at once');
+  assert.deepEqual(loads, ['jecyxyf', 'jecyxyf'], 'a loaded avatar is never requested again');
+
+  view.set(account, '');
+  assert.equal(account.shown, 'black-hat', 'signing out shows the default avatar');
+});
+
+test('panel avatar view ignores invalid images and keeps the default black hat icon', async () => {
+  const createAvatarView = await loadAvatarView();
+  const view = createAvatarView({
+    fallback: () => ({ kind: 'black-hat' }),
+    createImage: fakeImage,
+    load: async () => 'https://example.test/a.png',
+    visible: () => true,
+    Observer: null
+  });
+  const avatar = fakeAvatar();
+  view.set(avatar, 'alice');
+  await settle();
+  assert.equal(avatar.shown, 'black-hat');
+
+  const html = await readFile(panelPath, 'utf8');
+  const fallback = /<template id="ladder-avatar-fallback">([\s\S]*?)<\/template>/.exec(html)?.[1] ?? '';
+  assert.match(fallback, /data-icon="black-hat"/);
+  assert.match(fallback, /<ellipse[^>]*fill="#101114"/, 'the hat brim is black');
+  assert.match(fallback, /<path[^>]*fill="#17191c"/, 'the hat crown is black');
+});
+
+test('panel avatar view loads visible avatars through the observer and retries a still-default slot', async () => {
+  const createAvatarView = await loadAvatarView();
+  const image = 'data:image/png;base64,YXZhdGFy';
+  const loads = [], observed = [];
+  let reply = null, shown = true;
+  class FakeObserver {
+    constructor(callback) { this.callback = callback; }
+    observe(target) { observed.push(target); queueMicrotask(() => this.callback([{ target, isIntersecting: true }])); }
+    unobserve() {}
+    disconnect() {}
+  }
+  const view = createAvatarView({
+    fallback: () => ({ kind: 'black-hat' }),
+    createImage: fakeImage,
+    load: async username => { loads.push(username); return reply; },
+    visible: () => shown,
+    Observer: FakeObserver
+  });
+  const account = fakeAvatar();
+  shown = false;
+  view.set(account, 'alice');
+  await settle();
+  assert.deepEqual(loads, [], 'hidden leaderboards do not load avatars');
+  shown = true;
+  view.set(account, 'alice', { retry: true });
+  await settle();
+  assert.deepEqual(loads, ['alice']);
+  assert.equal(account.shown, 'black-hat');
+  reply = image;
+  view.set(account, 'alice', { retry: true });
+  await settle();
+  assert.deepEqual(loads, ['alice', 'alice']);
+  assert.equal(account.shown, image);
+  view.set(account, 'alice', { retry: true });
+  await settle();
+  assert.deepEqual(loads, ['alice', 'alice'], 'a loaded avatar is not observed or requested again');
+  assert.equal(observed.length, 3);
 });

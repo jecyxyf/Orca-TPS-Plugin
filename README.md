@@ -10,7 +10,7 @@
 
 TPS Plugin brings token usage and generation speed to the Orca sidebar. See what the current session is doing, review your usage over time, or join the leaderboard with a GitHub account.
 
-The plugin supports local and SSH workspaces and remembers your choice of 10 interface languages. Conversation logs are read in place. The leaderboard receives usage totals.
+The plugin supports local and SSH workspaces and remembers your choice of 15 interface languages. Conversation logs are read in place. The leaderboard receives usage totals.
 
 ## 2. Interface overview
 
@@ -29,7 +29,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 ### 3.1 Current Data
 
 - Follow the active Orca channel and view up to 100 recent requests.
-- See the model, output in KB, generation speed in tokens per second, request duration, time to first token (TTFT) when available, and cache hit rate.
+- See the model, output in Tokens, generation speed in tokens per second, request duration, time to first token (TTFT) when available, and cache hit rate.
 - Check the latest speed and cache hit rate in the Orca status bar. Estimated speeds are marked with ≈.
 
 <p align="center">
@@ -40,26 +40,30 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ### 3.2 Personal Stats
 
-- Review usage and request counts for today, the last 7 days, or the last 30 days.
-- Break down usage by tool and model, and compare average model generation speeds. Usage in MB includes new input, output, cache reads, and cache writes.
-- Use the annual heatmap to see daily activity over the past year.
+- Review usage and request counts for today, the last 7 or 30 days, or the past year. Today's summary also shows the highest generation speed for a single request.
+- Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
+- See daily activity over the past 365 days in the heatmap. Request statistics, panel snapshots, and pending uploads are stored in a local SQLite database. The plugin keeps a year of personal usage and fills in older days from local logs that are still available.
 - Usage history is cached locally and restored when Orca restarts.
 
 <p align="center">
   <a href="./assets/readme/en/personal-stats.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/personal-stats.webp" width="250" alt="English Personal Stats tab showing totals, model usage, average speed, and the annual heatmap">
+    <img src="./assets/readme/en/personal-stats.webp" width="250" alt="English Personal Stats tab showing totals, model usage, average speed, and a usage heatmap">
   </a>
 </p>
 
 ### 3.3 Leaderboard
 
-- Browse today’s, 7-day, and 30-day rankings. Entries show GitHub avatars, and the top three get gold, silver, and bronze medals.
-- Sign in with GitHub to participate. The leaderboard combines usage across installations linked to the same account. The plugin fetches avatars directly from GitHub and uses a built-in hooded avatar while one is unavailable.
-- While signed in, the plugin attempts to sync every 10 seconds. Manual sync shares the same interval. The account card shows the countdown, the last successful sync, and any recent error.
+- Browse usage rankings for the last 24 hours, 7 days, and 30 days in M. All four boards refresh together at the top of the hour. Usage counts the completed hours before that cutoff. The top three get gold, silver, and bronze medals.
+- Use the switch next to Rankings to control leaderboard viewing. Turning it off hides the rankings and stops fetching them. The plugin remembers your choice. Guests can view rankings.
+- The 24-hour usage tab shows the five-minute waveform and average generation speed before the cutoff. The 7-day and 30-day tabs show one usage point per 24-hour period. All three show the most-used model, Harness, and latest upload time.
+- The Speed tab ranks up to 20 GitHub accounts by their best average generation speed from a qualifying upload in the past 24 hours. Each account appears once across all its devices. An upload qualifies with more than 500 new tokens and a valid speed. The winning upload supplies the time, most-used model, Harness, and full count of new tokens, such as `1,250,000 tokens`.
+- Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
+- Sign in with GitHub to participate. The leaderboard adds each computer's local usage and counts each SSH account once, even when several computers connect to it. The plugin fetches avatars directly from GitHub and shows a built-in black hat avatar until one loads. Missing avatars are retried after the next sync, and a loaded avatar is reused everywhere it appears.
+- While signed in, the plugin attempts to upload every 10 seconds. Manual uploads use the same interval. Each toolbar has a manual button on the left, with an hourglass countdown and a clock for the last successful upload or sync on the right. Upload failures appear below the account toolbar.
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English Leaderboard tab showing the account card, GitHub avatars, medals, and sync status">
+    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English leaderboard with a 30-day usage curve, the cutoff time, and the Speed tab">
   </a>
 </p>
 
