@@ -7,6 +7,7 @@ import { HOUR_MS, validStatsLabel, validStatsPoint } from './leaderboard-stats.m
 import { createSourceUploader, createSqliteUploadStorage, uploadUsageChanges } from './usage-upload.mjs';
 import { createHourlySourceUploader } from './hourly-source-upload.mjs';
 import { createWindowViews } from './leaderboard-windows.mjs';
+import { TOKENS_LEADERBOARD } from './tokens-manager-stats.mjs';
 
 const METHOD = 'tps.leaderboard';
 const SECRET = 'leaderboard-session';
@@ -50,7 +51,7 @@ function publicRows(rows, days, day) {
 }
 
 export function startLeaderboard(orca, {
-  readUsage, readHistory, readUsageTimes, readUsageSources, readUsageHours, stats, localDb, reporterGuid, onUsername = () => {},
+  readUsage, readHistory, readUsageTimes, readUsageSources, readUsageHours, stats, localDb, reporterGuid, onUsername = () => {}, manager,
   endpoint = process.env.ORCA_TPS_LEADERBOARD_URL || DEFAULT_ENDPOINT,
   fetcher = fetch, avatarFetcher = fetch, now = () => new Date()
 }) {
@@ -62,7 +63,8 @@ export function startLeaderboard(orca, {
   const lifetime = new AbortController();
   const avatars = createAvatarCache({ fetcher: avatarFetcher, now: () => now().getTime(), signal: lifetime.signal });
   const windows = createWindowViews({ storage: orca.storage, origin: base.origin, request, now: () => now().getTime(),
-    panels: localDb, scope: () => `${base.origin}/${token ? accountId ?? sessionKey(token) : 'guest'}` });
+    panels: localDb, manager: Boolean(manager),
+    scope: () => `${base.origin}/${manager ? 'tokens-manager/' : ''}${token ? accountId ?? sessionKey(token) : 'guest'}` });
   const host = orca.host;
   let token = '', login, submitting, uploadingKind = null, scheduling = false, nextAttempt = null;
   let credentialWrite = Promise.resolve();
@@ -135,7 +137,7 @@ export function startLeaderboard(orca, {
     if (secretAvailable('secrets.get')) tasks.push(host.call('secrets.get', { key: SECRET }));
     const [history, account, saved] = await Promise.allSettled(tasks);
     restoreCredentials(saved?.value?.value);
-    if (token) nextAttempt = now().getTime() + UPLOAD_INTERVAL;
+    if (token && !manager) nextAttempt = now().getTime() + UPLOAD_INTERVAL;
     const cached = account.value;
     if (token && cached?.origin === base.origin && cached.session === sessionKey(token) && validUsername(cached.username)) {
       username = cached.username;
@@ -219,9 +221,10 @@ export function startLeaderboard(orca, {
 
   async function saveToken(value, problem = '') {
     const changed = token !== value;
+    if (changed && manager && token) manager.setCredential({ token: null, accountId: accountId ?? null });
     token = value;
     if (changed) {
-      nextAttempt = token ? now().getTime() + UPLOAD_INTERVAL : null;
+      nextAttempt = token && !manager ? now().getTime() + UPLOAD_INTERVAL : null;
       lastSyncAt = null;
       manualQueued = false;
       localUploadAt = 0;
@@ -262,7 +265,8 @@ export function startLeaderboard(orca, {
       if (auth && credential && token === credential && response.status === 401) {
         await saveToken('', 'session_expired');
       }
-      if (viewHeaders) return { ...result, serverTime, etag: response.headers?.get?.('etag') };
+      if (viewHeaders) return { ...result, serverTime: Number.isFinite(result.serverTime) ? result.serverTime : serverTime,
+        etag: response.headers?.get?.('etag') };
       return acceptEtag ? { ...result, etag: response.headers?.get?.('etag') } : result;
     } catch {
       return { code: 'unavailable' };
@@ -330,6 +334,7 @@ export function startLeaderboard(orca, {
 
   function panelState(days, board = {}, updatedAt = null) {
     const signedIn = Boolean(token);
+    const managerStatus = signedIn ? manager?.uploadStatus() : undefined;
     if (signedIn) {
       const day = today(), time = now().getTime();
       const own = dailyScore(day);
@@ -350,8 +355,8 @@ export function startLeaderboard(orca, {
     return {
       days, board: { ...board, authenticated: signedIn }, updatedAt, signedIn, sessionProblem,
       logoutPending: revocations.size > 0, logoutStorageFailed: revocations.size > 0 && credentialStorageFailed,
-      nextAutomaticAt: nextAttempt === null ? null : Math.max(nextAttempt, board.nextUploadAt ?? 0, board.lockedUntil ?? 0),
-      uploading: Boolean(submitting), uploadingKind, lastUpload, lastSyncAt, manualQueued, rollingProblem,
+      nextAutomaticAt: managerStatus?.nextAt ?? (nextAttempt === null ? null : Math.max(nextAttempt, board.nextUploadAt ?? 0, board.lockedUntil ?? 0)),
+      uploading: managerStatus?.pending === true || Boolean(submitting), uploadingKind, lastUpload, lastSyncAt, manualQueued, rollingProblem,
       initializing: Boolean(historyJob), historyProblem
     };
   }
@@ -359,6 +364,18 @@ export function startLeaderboard(orca, {
   let sessionSignature;
   function publishSession() {
     if (lifetime.signal.aborted || !orca.panels.post) return;
+    if (manager) {
+      const at = manager.lastUploaded();
+      if (at && at > (lastSyncAt ?? 0) && token && accountId) {
+        lastSyncAt = at;
+        lastUpload = { code: 'accepted', kind: 'automatic', at };
+        saveAccount();
+      }
+      const status = manager.uploadStatus();
+      if (token && status?.code && status.code !== 'accepted' && status.at > (lastUpload?.at ?? 0)) {
+        lastUpload = { code: status.code, kind: 'automatic', at: status.at };
+      }
+    }
     const snapshot = panelState(1), signature = JSON.stringify(snapshot);
     if (signature === sessionSignature) return;
     try {
@@ -706,6 +723,10 @@ export function startLeaderboard(orca, {
   async function manualSync(payload, days) {
     const reply = code => ({ code, ...panelState(days) });
     if (!token) return reply('login_required');
+    if (manager) {
+      if (banned) return reply('banned');
+      return reply(manager.upload() ? 'sync_queued' : 'unavailable');
+    }
     if (scheduling || submitting) return reply('upload_in_progress');
     if (payload.action === 'sync' || retryRollingNext) {
       const day = today(), status = uploadStatus?.day === day ? uploadStatus : {};
@@ -757,8 +778,8 @@ export function startLeaderboard(orca, {
       }
       const result = await windows.fetch(hours, payload.force === true, signal);
       if (signal.aborted) return {};
-      const { updatedAt, boards, code, cutoffAt, nextAt } = result;
-      return boards ? { boards, updatedAt, ...(nextAt - cutoffAt === HOUR_MS ? { cutoffAt, nextAt } : {}) }
+      const { updatedAt, boards, code, cutoffAt, nextAt, refreshAt } = result;
+      return boards ? { boards, updatedAt, ...(manager ? { refreshAt } : {}), ...(nextAt - cutoffAt === HOUR_MS ? { cutoffAt, nextAt } : {}) }
         : { updatedAt: null, code: code ?? 'unavailable' };
     }
     if (payload?.action === 'cache') {
@@ -815,8 +836,25 @@ export function startLeaderboard(orca, {
     uploadWake.unref?.();
   }
 
+  let managerToken, managerPending, managerRetry = 0;
+  function bindManager() {
+    if (!token || managerToken === token || managerPending || now().getTime() < managerRetry) return;
+    const current = token;
+    managerRetry = now().getTime() + 5000;
+    managerPending = request(TOKENS_LEADERBOARD + '/account').then(result => {
+      if (token !== current || lifetime.signal.aborted || !(Number.isSafeInteger(result.accountId) && result.accountId > 0)) return;
+      accountId = result.accountId;
+      banned = result.banned === true;
+      managerToken = current;
+      if (!banned) manager.setCredential({ token: current, accountId });
+      if (validUsername(result.username)) rememberUsername(result.username);
+      saveAccount();
+    }).finally(() => { managerPending = undefined; });
+  }
+
   function tick() {
-    void ready.then(() => { revokeSessions(); publishSession(); });
+    void ready.then(() => { revokeSessions(); if (manager) bindManager(); publishSession(); });
+    if (manager) return;
     void runHistoryInitialization().catch(() => {}).then(runScheduled).catch(() => {}).finally(() => {
       publishSession();
       wakeForUpload();

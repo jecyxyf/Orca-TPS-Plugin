@@ -40,10 +40,10 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 ### 3.2 个人统计
 
-- 查看今日、近 7 天、近 30 天和近一年的用量与请求数。今日还会显示单次请求的最大生成速度。
+- 查看今日、近 7 天、近 30 天、今年或过去 365 天的用量与请求数。今日还会显示单次请求的最大生成速度。
 - 按工具和模型查看用量，比较各模型的平均生成速度。用量以百万 Token（M）计，包含新输入、输出和缓存读写。
-- 用热力图查看近 365 天每天的用量。请求统计、界面快照和待传包保存在本机的 SQLite 数据库里。个人用量保留一年，仍在本机的旧日志会用于补齐历史。
-- 本机受支持的来源使用 CC Switch 4.0.25 原版扫描和汇总。刷新期间，个人统计显示上一次成功的结果。
+- Tokens 管家用现有日志补算最近 370 天。最近 32 天保存逐条请求，最近 370 天保存每日和每小时的汇总。热力图显示过去 365 天。
+- 个人统计无需登录，自动合并本机和 SSH 主机的用量。远端离线时继续显示上次收到的统计。在 Orca 的 TPS Plugin 设置中可修改统计时区。
 
 <p align="center">
   <a href="./assets/readme/zh-CN/personal-stats.png" title="查看原图">
@@ -53,13 +53,13 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 ### 3.3 天梯榜
 
-- 查看近 24 小时、近 7 天和近 30 天用量排名，单位为 M。四张榜在每个整点一起刷新，用量统计截止前的完整小时。前三名分别有金、银、铜奖牌。
+- 查看近 24 小时、近 7 天和近 30 天用量排名，单位为 M。四张榜默认每 5 秒一起刷新，用量统计已结束的完整小时。前三名分别有金、银、铜奖牌。
 - 天梯排名旁的开关控制榜单的显示和拉取，并记住上次选择。关闭时收起榜单和个人名次。未登录也可以查看榜单。
-- 近 24 小时榜显示截止前 5 分钟的用量波形和平均速度。近 7 天和近 30 天的曲线每 24 小时取一个用量点。三个周期都显示最常用模型、Harness 和上次上传时间。
+- 近 24 小时榜显示最近 5 分钟的用量波形和平均速度。近 7 天和近 30 天的曲线按天显示用量。三个周期都显示最常用模型、Harness 和上次上传时间。
 - 速度榜取每个 GitHub 账号过去 24 小时内最高的上传平均生成速度，再排前 20 名。同一账号在多台设备上传也只占一个名次。上传新增用量超过 500 Token 且速度有效才参与排名。榜上时间、最常用模型、Harness 和完整的新增 Token 数均来自胜出的那笔上传，例如 `1,250,000 tokens`。
 - 曲线从零线的绿色连续过渡到最高点的红色。曲线与零线之间使用同样的渐变，透明度为 50%。
-- 通过 GitHub 登录后参加排名。同一 GitHub 账号下，各电脑的本机用量会相加。多台电脑连到同一个 SSH 账号时，远端用量只算一次。头像由插件直接向 GitHub 获取，取到之前显示内置的黑帽头像。没取到的头像会在下次同步后重试，取到后各处直接复用。
-- 登录后每 10 秒尝试自动上传，手动上传也使用同一个间隔。数据上传和天梯排名各占一行，左侧是手动按钮，右侧沙漏旁是倒计时，时钟旁是上次成功时间。上传失败时，账户区会显示原因。
+- 通过 GitHub 登录后参加排名。同一账号下，每台设备的用量只算一次。多个管家可以代报同一台设备的最近用量。10 秒内没有收到该设备的新包或代报，下一轮榜单移除它的数据。头像由插件向 GitHub 获取。
+- 登录后管家默认每 5 秒上传。工具栏显示上次成功时间，也可以手动请求上传。
 
 <p align="center">
   <a href="./assets/readme/zh-CN/leaderboard.png" title="查看原图">
@@ -69,7 +69,7 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 ## 4. 支持的 Harness
 
-**本机个人统计**使用 CC Switch 4.0.25 统计 Claude Code、Codex、Gemini CLI、OpenCode、Grok Build、Pi、Oh My Pi、MiniMax Code、Kimi Code、Antigravity CLI 和 DeepSeek Harness。Claude Desktop 经 CC Switch 本地路由转发的模型映射请求计入 Claude Code。
+**个人统计和天梯榜**使用 CC Switch 4.0.39 的扫描规则，并支持 Hermes Agent。来源包括 Claude Code、Codex、Gemini CLI、OpenCode、Grok Build、Pi、Oh My Pi、MiniMax Code、Kimi Code、Antigravity CLI、GitHub Copilot CLI、WorkBuddy 和 DeepSeek Harness。
 
 **Orca 会话采集**支持以下工具。
 
@@ -84,7 +84,7 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 Windows 和 Linux 需使用 **Orca 1.4.251 或更新版本**。采集 SSH 工作区的用量时，远程主机需要安装**支持 SQLite 的 Node.js 22.13 或更新版本**。
 
-Windows x64 随插件附带 CC Switch 用量组件。其他平台可安装 Rust stable 和 [CC Switch 构建依赖](https://github.com/farion1231/cc-switch/blob/v4.0.25/CONTRIBUTING.md)，再在插件目录运行 `npm run build:cc-switch-usage`。
+插件附带 Linux x64 的 Tokens 管家扫描组件。其他平台可安装 Rust stable 和 [CC Switch 构建依赖](https://github.com/farion1231/cc-switch/blob/v4.0.39/CONTRIBUTING.md)，再在插件目录运行 `npm run build:tokens-manager-scan`。Orca 会在每台连接的主机上安装并启动管家，数据保存在 `~/.orca/tpsplugin/`。
 
 ### Orca 插件目录
 

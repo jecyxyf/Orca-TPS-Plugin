@@ -131,7 +131,7 @@ function createOrcaRpc() {
   return rpc;
 }
 
-function createRuntimeLookup(orca, lookupSsh) {
+export function createRuntimeLookup(orca, lookupSsh = readSshTargets) {
   const rpc = createOrcaRpc();
   return async (target, signal) => {
     const host = target.executionHostId;
@@ -181,7 +181,7 @@ function createRuntimeLookup(orca, lookupSsh) {
 
 const shellQuote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
 
-function launchSsh(destination, token) {
+export function launchSsh(destination, token, bootstrap) {
   const { host, port, username, alias, directory } = destination;
   if (typeof host !== 'string' || !/^[a-z\d:][a-z\d.:-]*$/i.test(host) ||
     typeof username !== 'string' || !/^[a-z\d_][a-z\d_.-]*$/i.test(username) ||
@@ -195,7 +195,7 @@ function launchSsh(destination, token) {
     'cd ' + (directory ? shellQuote(directory) : '"$HOME"') + ' || { echo ' + prefix + 'workspace; exit 1; }',
     'for node in node "$HOME"/.orca-remote/runtimes/node-*/bin/node "$HOME"/.local/share/nodejs/node-*/bin/node "$HOME"/.nvm/versions/node/*/bin/node; do',
     '  if "$node" --input-type=commonjs -e ' + shellQuote(checkNode) + ' >/dev/null 2>&1; then',
-    '    exec "$node" ' + collectorCommand(token).slice('node '.length),
+    '    exec "$node" ' + (bootstrap ? '--input-type=module -e ' + shellQuote(bootstrap) : collectorCommand(token).slice('node '.length)),
     '  fi',
     'done',
     'echo ' + prefix + 'node'

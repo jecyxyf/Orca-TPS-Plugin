@@ -183,13 +183,15 @@ export async function hermesSources(roots, cutoffMs = 0, warnings, onUnavailable
   return sources;
 }
 
-export async function readHermesRecords(source, { pace } = {}) {
+export async function readHermesRecords(source, { pace, includeCwd = false } = {}) {
   if (source.bytes > MAX_LOG_BYTES) throw new Error(sourceMessage('notice.hermes-log-size'));
   const records = new Map();
   for (const file of source.files) {
     for (const record of await readLog(file, pace)) records.set(record.id, record);
   }
-  return [...records.values()];
+  if (!includeCwd) return [...records.values()];
+  const metadata = new Map((await sessionCatalogue(source.root)).map(row => [row.id, row.cwd]));
+  return [...records.values()].map(record => ({ ...record, cwd: metadata.get(record.sessionId) }));
 }
 
 async function sessionCatalogue(root) {

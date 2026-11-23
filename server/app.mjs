@@ -6,6 +6,7 @@ import { RECENT_STATS_MS, RANKING_HOURS, RANKING_REFRESH_MS, USAGE_UPLOAD_BYTES,
 import { validInstallationId } from '../src/leaderboard-installation.mjs';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
 import { createRankingSnapshot, recentRankingRows, rollingBoard } from './ranking-snapshot.mjs';
+import { TOKENS_LEADERBOARD } from '../src/tokens-manager-stats.mjs';
 
 const GITHUB = 'https://github.com';
 const GITHUB_API = 'https://api.github.com';
@@ -90,7 +91,7 @@ function redirect(res, location) {
 
 export function createLeaderboardServer({
   store, baseUrl, clientId, clientSecret, adminEmail = '', maxTokens = Number.MAX_SAFE_INTEGER,
-  fetcher = fetch, now = Date.now, log = () => {}, jobs, trustedProxyIps = []
+  fetcher = fetch, now = Date.now, log = () => {}, jobs, tokensJobs, trustedProxyIps = []
 }) {
   const base = new URL(baseUrl);
   const secure = base.protocol === 'https:';
@@ -510,6 +511,15 @@ export function createLeaderboardServer({
       return githubConfigured ? pluginPoll(req, res, time) : send(res, 503, { code: 'github_unavailable' });
     }
     if (!route.startsWith('/api/')) return send(res, 404, { code: 'not_found' });
+    if (tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/config') {
+      res.setHeader('Cache-Control', 'no-store');
+      return send(res, 200, { intervals: tokensJobs.intervals });
+    }
+    if (tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/snapshot') {
+      res.setHeader('Cache-Control', 'no-store');
+      const snapshot = tokensJobs.snapshot();
+      return snapshot ? send(res, 200, snapshot) : send(res, 503, { code: 'unavailable' });
+    }
     if (method === 'GET' && route === '/api/leaderboard/snapshot') {
       let body = jobs ? jobs.snapshot() : JSON.stringify(createRankingSnapshot(store, () => time));
       if (body && jobs?.hourly && req.headers['x-orca-snapshot-schedule'] !== 'hourly') {
@@ -537,6 +547,11 @@ export function createLeaderboardServer({
     const token = /^Bearer ([\w-]{43})$/.exec(req.headers.authorization ?? '')?.[1];
     const sessionDigest = token ? digest(token) : null;
     const account = sessionDigest ? store.session(sessionDigest, 'plugin', time) : null;
+    if (tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/account') {
+      res.setHeader('Cache-Control', 'no-store');
+      if (!account) return send(res, 401, { code: 'login_required' });
+      return send(res, 200, { accountId: account.id, username: account.username, banned: Boolean(account.banned) });
+    }
     if (method === 'GET' && route === '/api/today') {
       const days = url.searchParams.get('days') ?? '1';
       if (!['1', '7', '30'].includes(days)) return send(res, 400, { code: 'invalid' });
@@ -553,6 +568,11 @@ export function createLeaderboardServer({
       return send(res, 200, { ok: true });
     }
     if (account.banned) return send(res, 403, { code: 'banned', username: account.username });
+    if (tokensJobs && method === 'POST' && route === TOKENS_LEADERBOARD + '/packets') {
+      const raw = await readBody(req, 1024 * 1024);
+      return raw && await tokensJobs.receive(account, raw)
+        ? send(res, 202, { code: 'accepted' }) : send(res, 400, { code: 'invalid' });
+    }
     if (method === 'POST' && route === '/api/leaderboard/uploads') {
       const raw = await readBody(req, USAGE_UPLOAD_BYTES + 4608);
       const body = parseJson(raw);

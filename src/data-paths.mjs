@@ -13,7 +13,8 @@ export function defaultRoots({ home = homedir(), env = process.env, platform = p
   const ccSwitchDb = env.CC_SWITCH_DB_PATH || join(home, '.cc-switch', 'cc-switch.db');
   return {
     roots: {
-      codex: [join(env.CODEX_HOME || join(home, '.codex'), 'sessions'), join(home, '.codex', 'sessions'), join(userData, 'codex-runtime-home', 'home', 'sessions')],
+      codex: [env.CODEX_HOME || join(home, '.codex'), join(home, '.codex'),
+        join(userData, 'codex-runtime-home', 'home')].flatMap(base => [join(base, 'sessions'), join(base, 'archived_sessions')]),
       claude: [join(env.CLAUDE_CONFIG_DIR || join(home, '.claude'), 'projects'), join(home, '.claude', 'projects')],
       opencode: [env.OPENCODE_DB && env.OPENCODE_DB !== ':memory:' ? path.isAbsolute(env.OPENCODE_DB) ? env.OPENCODE_DB : join(data, 'opencode', env.OPENCODE_DB) : join(data, 'opencode', 'opencode.db')],
       pi: [join(env.PI_CODING_AGENT_DIR || join(home, '.pi', 'agent'), 'sessions')],

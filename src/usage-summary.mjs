@@ -189,7 +189,7 @@ export function maxRequestSpeed(records) {
   return fastest;
 }
 
-function summarizeGroups(groups) {
+export function summarizeGroups(groups) {
   const totals = { requests: 0, freshInput: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const rows = new Map(), speeds = new Map();
   for (const byProvider of groups) {

@@ -1,6 +1,6 @@
 # Token 天梯榜服务
 
-榜单和管理后台运行在同一个 Node.js 服务。Orca 插件使用 HTTPS 提交统计，SQLite 存在服务端磁盘。
+榜单和管理后台运行在同一个 Node.js 服务。Tokens 管家通过 HTTPS 提交汇总，服务把新榜单的数据放在内存里。GitHub 账号、登录和旧版榜单使用服务端 SQLite。
 
 ## GitHub 登录配置
 
@@ -13,7 +13,7 @@
 
 未登录用户和被封禁的账号都可以查看榜单。提交需要有效的 GitHub 登录，封禁后服务端会拒绝提交。
 
-同一账号每 10 秒最多成功写入一批用量。连续 4 次上传间隔不足 5 秒会自动封禁，间隔达到 5 秒会重新计数。10 分钟内累计 5 次错误会锁定当天的上传权限。管理员手动封禁时须填写原因，自动封禁和当天禁传的原因可在管理页查看。
+旧版写入接口按账号限制上传速度。管理员手动封禁时须填写原因，旧版自动封禁和当天禁传的原因可在管理页查看。
 
 在服务器配置以下环境变量。将包含应用密钥的文件设为仅所有者可读。仓库内的 `server/.env` 已忽略。
 
@@ -34,6 +34,19 @@
 部署期间可以先启动服务。GitHub 凭据还未配置时，管理页显示待配置，`/healthz` 返回 `githubConfigured: false`。
 
 ## 用量榜和速度榜
+
+| 管家接口 | 用途 |
+| --- | --- |
+| `GET /api/tokens-manager/config` | 公开读取扫描、个人统计、上传、榜单发布和读取间隔 |
+| `GET /api/tokens-manager/account` | 用 GitHub 登录凭证获取绑定的账号 ID |
+| `POST /api/tokens-manager/packets` | 上传一台来源设备的小时、每日用量和速度样本 |
+| `GET /api/tokens-manager/snapshot` | 公开读取同一版本的 24 小时、7 天、30 天和速度榜 |
+
+服务按 GitHub 账号和设备 GUID 取最近 10 秒内收到的最新原始统计包。同一设备的代报只算一次。榜单在内存计算和发布，服务重启后由管家重新上报。
+
+五个间隔默认 5000 毫秒。可分别设置 `LEADERBOARD_TOKENS_SCAN_MS`、`LEADERBOARD_TOKENS_PERSONAL_MS`、`LEADERBOARD_TOKENS_UPLOAD_MS`、`LEADERBOARD_TOKENS_PUBLISH_MS` 和 `LEADERBOARD_TOKENS_READ_MS`。上报间隔支持 1000–7500 毫秒。
+
+### 旧版客户端
 
 | 接口 | 用途 |
 | --- | --- |

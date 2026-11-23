@@ -14,10 +14,15 @@ export const COLLECTOR_FILES = [
 export const MAX_RESPONSE_BASE64 = 1024 * 1024;
 export const USAGE_PAGE_SIZE = 200;
 
-export async function readRemoteSourceId() {
+export function remoteSourceIdPath() {
   const base = process.env.XDG_DATA_HOME;
   const dir = path.join(base && path.isAbsolute(base) ? base : path.join(homedir(), '.local', 'share'), 'orca-tps-plugin');
-  const target = path.join(dir, 'source-id');
+  return path.join(dir, 'source-id');
+}
+
+export async function readRemoteSourceId() {
+  const target = remoteSourceIdPath();
+  const dir = path.dirname(target);
   async function read() {
     const id = (await readFile(target, 'utf8')).trim();
     if (!validInstallationId(id)) throw new Error('invalid_source_id');

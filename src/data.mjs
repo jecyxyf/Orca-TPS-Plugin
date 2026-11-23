@@ -1118,10 +1118,14 @@ function usageResult(days, rank) {
 }
 
 async function addCodexStreamRecords(days, file, minDay, leaderboardDays, pace = readPacer()) {
-  const parser = createCodexParser(await codexSessionId(file), { limit: Infinity });
+  const sessionId = await codexSessionId(file);
+  const parser = createCodexParser(sessionId, { limit: Infinity });
   const complete = await streamJsonRows(file, batch => parser.feed(batch), pace);
   if (leaderboardDays?.records && !complete) leaderboardDays.complete = false;
-  accumulateRecords(days, 'codex', parser.finish(), { minDay, leaderboardDays });
+  const metadata = leaderboardDays?.records ? await headerMeta(await candidateFor('codex', file), { remaining: 256 * 1024 }).catch(() => null) : null;
+  const records = parser.finish();
+  accumulateRecords(days, 'codex', leaderboardDays?.records
+    ? records.map(record => ({ ...record, sessionId, cwd: metadata?.cwd })) : records, { minDay, leaderboardDays });
 }
 
 async function addFileRecords(days, provider, file, minDay, isSubagent, leaderboardDays, pace) {
@@ -1131,7 +1135,9 @@ async function addFileRecords(days, provider, file, minDay, isSubagent, leaderbo
   const cursor = createJsonlCursor('', provider, '', { isSubagent, limit: Infinity });
   const complete = await streamCompleteText(file, text => cursor.feed(text), pace);
   if (leaderboardDays?.records && !complete) leaderboardDays.complete = false;
-  accumulateRecords(days, provider, cursor.finish(), { minDay, leaderboardDays });
+  const records = cursor.finish();
+  accumulateRecords(days, provider, leaderboardDays?.records
+    ? records.map(record => ({ ...record, sessionId: cursor.sessionId, cwd: cursor.cwd })) : records, { minDay, leaderboardDays });
 }
 
 async function fileUsageUnit(provider, file, rankWindow, onUnavailable) {
@@ -1169,7 +1175,7 @@ async function fileUsageUnit(provider, file, rankWindow, onUnavailable) {
   };
 }
 
-async function readOpenCodeSession(dbPath, v2, sessionId, rankWindow) {
+async function readOpenCodeSession(dbPath, v2, sessionId, rankWindow, cwd) {
   const { DatabaseSync } = await import('node:sqlite');
   const db = new DatabaseSync(dbPath, { readOnly: true, enableExtensionLoading: false });
   try {
@@ -1191,7 +1197,8 @@ async function readOpenCodeSession(dbPath, v2, sessionId, rankWindow) {
       await pace(512 * 1024);
     }
     collect();
-    accumulateRecords(days, v2 ? 'opencode2' : 'opencode', records.values(),
+    const entries = rank?.records ? [...records.values()].map(record => ({ ...record, sessionId, cwd })) : records.values();
+    accumulateRecords(days, v2 ? 'opencode2' : 'opencode', entries,
       { minDay: dayKeyAgo(Date.now(), HISTORY_DAYS - 1), leaderboardDays: rank });
     return usageResult(days, rank);
   } finally { db.close(); }
@@ -1214,7 +1221,8 @@ async function openCodeUsageUnits(dbPath, cutoffMs, rankWindow, onUnavailable) {
       const sessionColumns = columns(db, table);
       if (!sessionColumns.has('id') || !sessionColumns.has('time_updated')) continue;
       const provider = v2 ? 'opencode2' : 'opencode';
-      const rows = db.prepare(`SELECT id, time_updated FROM ${table} WHERE time_updated >= ?`).iterate(cutoffMs);
+      const directory = sessionColumns.has('directory') ? 'directory' : 'NULL AS directory';
+      const rows = db.prepare(`SELECT id, time_updated, ${directory} FROM ${table} WHERE time_updated >= ?`).iterate(cutoffMs);
       const messageCount = db.prepare(`SELECT COUNT(*) AS n FROM ${messageTable} WHERE session_id=?`);
       for (const row of rows) {
         const count = Number(messageCount.get(row.id)?.n ?? 0);
@@ -1223,7 +1231,7 @@ async function openCodeUsageUnits(dbPath, cutoffMs, rankWindow, onUnavailable) {
           stamp: `${row.time_updated}:${count}`,
           bytes: count * 1024,
           mtimeMs: Number(row.time_updated) || 0,
-          read: () => readOpenCodeSession(dbPath, v2, row.id, rankWindow)
+          read: () => readOpenCodeSession(dbPath, v2, row.id, rankWindow, row.directory)
         });
         if (units.length % 64 === 0) await yieldToRequests();
       }
@@ -1261,7 +1269,10 @@ async function readAntigravityUsage(transcript, conversationId, rankWindow) {
   const cursor = createJsonlCursor('', 'antigravity', '', { sessionId: conversationId, limit: Infinity });
   const complete = await streamCompleteText(transcript, text => cursor.feed(text), readPacer());
   if (rank?.records && !complete) rank.complete = false;
-  accumulateRecords(days, 'antigravity', cursor.finish(native), { minDay: dayKeyAgo(Date.now(), HISTORY_DAYS - 1), leaderboardDays: rank });
+  const records = cursor.finish(native);
+  const cwd = rank?.records ? await antigravityWorkspace(transcript, process.platform).catch(() => null) : null;
+  accumulateRecords(days, 'antigravity', rank?.records ? records.map(record => ({ ...record, sessionId: conversationId, cwd })) : records,
+    { minDay: dayKeyAgo(Date.now(), HISTORY_DAYS - 1), leaderboardDays: rank });
   return usageResult(days, rank);
 }
 
@@ -1306,7 +1317,7 @@ export async function discoverUsageUnits(cutoffMs, options = {}) {
       mtimeMs: source.mtimeMs,
       async read() {
         const days = {}, rank = rankedUsage(rankWindow);
-        const records = await readHermesRecords(source, { pace: readPacer() });
+        const records = await readHermesRecords(source, { pace: readPacer(), includeCwd: includeRecords });
         accumulateRecords(days, 'hermes', records, { minDay: dayKeyAgo(Date.now(), HISTORY_DAYS - 1), leaderboardDays: rank });
         return usageResult(days, rank);
       }

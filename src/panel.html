@@ -998,8 +998,10 @@
     }
     const AGENT_LABELS = {
       agy: 'Antigravity CLI', antigravity: 'Antigravity CLI', claude: 'Claude Code', 'claude-desktop': 'Claude Code',
-      codex: 'Codex CLI', dsh: 'DeepSeek Harness', gemini: 'Gemini CLI', grokbuild: 'Grok Build', hermes: 'Hermes Agent',
-      kimi: 'Kimi Code', mcode: 'MiniMax Code', omp: 'Oh My Pi', opencode: 'OpenCode', opencode2: 'OpenCode', pi: 'Pi Agent'
+      codex: 'Codex CLI', copilot: 'GitHub Copilot CLI', dsh: 'DeepSeek Harness',
+      gemini: 'Gemini CLI', grokbuild: 'Grok Build', hermes: 'Hermes Agent',
+      kimi: 'Kimi Code', mcode: 'MiniMax Code', omp: 'Oh My Pi', opencode: 'OpenCode', opencode2: 'OpenCode',
+      pi: 'Pi Agent', workbuddy: 'WorkBuddy'
     };
     function updateList(container, items, previous, keyOf, create) {
       const next = new Map();
@@ -1259,8 +1261,13 @@
         const hourly = usageMode === 'hourly';
         const windows = hourly ? usageSummary?.hourly?.windows : usageSummary?.windows;
         const range = windows?.[usageRange] ?? null;
+        const lastUpdated = usageSummary?.updatedAt;
+        byId('war').title = date(lastUpdated) ? t('updated-at', timeLabel(lastUpdated)) : '';
         for (const tab of usageRangeTabs) {
-          const label = formatUsagePeriod(Number(tab.dataset.days), hourly);
+          const days = Number(tab.dataset.days);
+          const label = !hourly && days === 365 && windows?.past365
+            ? new Intl.RelativeTimeFormat(document.documentElement.lang, { numeric: 'auto' }).format(0, 'year')
+            : formatUsagePeriod(days, hourly);
           if (tab.firstElementChild.textContent !== label) tab.firstElementChild.textContent = label;
           tab.setAttribute('aria-selected', String(tab.dataset.range === usageRange));
         }
@@ -1374,7 +1381,11 @@
       const dayLabel = date => locale.date(date, { dateStyle: 'full' });
       function renderHeatmap() {
         const grid = byId('heat-grid'), months = byId('heat-months');
-        const today = new Date();
+        const now = new Date();
+        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: usageSummary?.timeZone,
+          year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(now);
+        const calendar = Object.fromEntries(parts.map(part => [part.type, Number(part.value)]));
+        const today = new Date(calendar.year, calendar.month - 1, calendar.day);
         today.setHours(0, 0, 0, 0);
         const layout = localKey(today);
         const daily = usageSummary?.daily ?? [];
@@ -1780,7 +1791,9 @@
           const at = left + offset * DAY_MS;
           const day = new Date(at + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
           const value = totals.get(at) ?? totals.get(day);
-          return { day, tokens: value?.tokens ?? 0, ...(typeof value?.complete === 'boolean' ? { at, complete: value.complete } : {}) };
+          return { day, tokens: value?.tokens ?? 0,
+            ...(value?.day && Number.isFinite(value.at) ? { packetDay: value.day } : {}),
+            ...(typeof value?.complete === 'boolean' ? { at, complete: value.complete } : {}) };
         });
       }
 
@@ -1921,7 +1934,9 @@
           speed.title = t('leaderboard-average-speed');
           meta.append(speed);
         }
-        const pointTitle = point => byDay ? `${dateLabel(point.at)} – ${dateLabel(point.at + DAY_MS)} · ${formatMillionTokens(point.tokens)}` +
+        const pointTitle = point => byDay ? (point.packetDay
+          ? `${dateLabel(Date.parse(point.packetDay + 'T00:00:00+08:00'))} · ${formatMillionTokens(point.tokens)}`
+          : `${dateLabel(point.at)} – ${dateLabel(point.at + DAY_MS)} · ${formatMillionTokens(point.tokens)}`) +
           (point.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '')
           : `${shortClock(point.submittedAt)} · ${formatMillionTokens(point.deltaTokens)} · ${speedText(point.avgTps)}`;
         const latestPoint = points.at(-1);
@@ -2244,8 +2259,9 @@
           const updated = cacheRankings(result.boards, result.updatedAt);
           rankingProblem = updated ? undefined : result.code;
           const next = result.nextAt - (result.boards?.[0]?.clockOffset ?? 0);
-          nextRankRefresh = updated && result.nextAt - result.cutoffAt === 3_600_000 && next > result.updatedAt
-            ? next : (updated ? result.updatedAt : startedAt) + RANK_REFRESH_MS;
+          nextRankRefresh = updated && Number.isFinite(result.refreshAt) ? result.refreshAt
+            : updated && result.nextAt - result.cutoffAt === 3_600_000 && next > result.updatedAt
+              ? next : (updated ? result.updatedAt : startedAt) + RANK_REFRESH_MS;
           render();
           if (updated && rankDays === 1) animateToday = true;
         })().finally(() => {

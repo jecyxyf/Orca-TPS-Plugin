@@ -40,10 +40,10 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ### 3.2 Personal Stats
 
-- Review usage and request counts for today, the last 7 or 30 days, or the past year. Today's summary also shows the highest generation speed for a single request.
+- Review usage and requests for today, the last 7 or 30 days, this calendar year, or the past 365 days. Today's summary also shows the highest generation speed for a single request.
 - Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
-- See daily activity over the past 365 days in the heatmap. Request statistics, panel snapshots, and pending uploads are stored in a local SQLite database. The plugin keeps a year of personal usage and fills in older days from local logs that are still available.
-- The original CC Switch 4.0.25 engine scans and summarizes usage for its supported local sources. Personal Stats uses the last successful result while it refreshes.
+- The Tokens Manager fills in up to 370 days from the available logs, keeping 32 days of request details and 370 days of daily and hourly totals. The heatmap covers 365 days.
+- Personal Stats combines local and SSH hosts without signing in. It keeps the last statistics for an offline host. Set the statistics time zone in the TPS Plugin settings in Orca.
 
 <p align="center">
   <a href="./assets/readme/en/personal-stats.png" title="View full-size screenshot">
@@ -53,13 +53,13 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ### 3.3 Leaderboard
 
-- Browse usage rankings for the last 24 hours, 7 days, and 30 days in M. All four boards refresh together at the top of the hour. Usage counts the completed hours before that cutoff. The top three get gold, silver, and bronze medals.
+- Browse usage rankings for the last 24 hours, 7 days, and 30 days in M. The service refreshes all four boards together every five seconds by default. Usage counts completed hours. The top three get gold, silver, and bronze medals.
 - Use the switch next to Rankings to control leaderboard viewing. Turning it off hides the rankings and stops fetching them. The plugin remembers your choice. Guests can view rankings.
-- The 24-hour usage tab shows the five-minute waveform and average generation speed before the cutoff. The 7-day and 30-day tabs show one usage point per 24-hour period. All three show the most-used model, Harness, and latest upload time.
+- The 24-hour usage tab shows the latest five minutes of usage and average generation speed. The 7-day and 30-day tabs show daily usage. All three show the most-used model, Harness, and latest upload time.
 - The Speed tab ranks up to 20 GitHub accounts by their best average generation speed from a qualifying upload in the past 24 hours. Each account appears once across all its devices. An upload qualifies with more than 500 new tokens and a valid speed. The winning upload supplies the time, most-used model, Harness, and full count of new tokens, such as `1,250,000 tokens`.
 - Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
-- Sign in with GitHub to participate. The leaderboard adds each computer's local usage and counts each SSH account once, even when several computers connect to it. The plugin fetches avatars directly from GitHub and shows a built-in black hat avatar until one loads. Missing avatars are retried after the next sync, and a loaded avatar is reused everywhere it appears.
-- While signed in, the plugin attempts to upload every 10 seconds. Manual uploads use the same interval. Each toolbar has a manual button on the left, with an hourglass countdown and a clock for the last successful upload or sync on the right. Upload failures appear below the account toolbar.
+- Sign in with GitHub to participate. Usage from each device counts once per account, including when several managers relay the same device's last statistics. The service removes a device from the next refresh if it has received no copy from that device for 10 seconds. Avatars load from GitHub.
+- While signed in, the Tokens Manager uploads every five seconds by default. The toolbar shows the last successful sync and lets you request another upload.
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">
@@ -69,7 +69,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ## 4. Supported Harnesses
 
-**Personal Stats on this machine** uses CC Switch 4.0.25 for Claude Code, Codex, Gemini CLI, OpenCode, Grok Build, Pi, Oh My Pi, MiniMax Code, Kimi Code, Antigravity CLI, and DeepSeek Harness. Claude Desktop requests recorded through CC Switch's local model routing count under Claude Code.
+**Personal Stats and leaderboard usage** use CC Switch 4.0.39 scanning rules and add Hermes Agent. Sources include Claude Code, Codex, Gemini CLI, OpenCode, Grok Build, Pi, Oh My Pi, MiniMax Code, Kimi Code, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, and DeepSeek Harness.
 
 **Orca session collection** supports these harnesses:
 
@@ -84,7 +84,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 Use **Orca 1.4.251 or later** on Windows or Linux. To collect usage from an SSH workspace, the remote host needs **Node.js 22.13 or later with SQLite support**.
 
-The CC Switch usage helper is bundled for Windows x64. To build it on another platform, install Rust stable and the [CC Switch platform build prerequisites](https://github.com/farion1231/cc-switch/blob/v4.0.25/CONTRIBUTING.md), then run `npm run build:cc-switch-usage` in the plugin directory.
+The Tokens Manager scanner is bundled for Linux x64. To build it for another platform, install Rust stable and the [CC Switch platform build prerequisites](https://github.com/farion1231/cc-switch/blob/v4.0.39/CONTRIBUTING.md), then run `npm run build:tokens-manager-scan` in the plugin directory. Orca installs and starts the manager in `~/.orca/tpsplugin/` on each connected host.
 
 ### Orca plugin directory
 
