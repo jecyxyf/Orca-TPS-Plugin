@@ -130,10 +130,11 @@
     .panel-tab:focus-visible, .panel-view:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     .panel-view { margin-top: 12px; }
     #usage, #leaderboard { display: grid; gap: 8px; }
-    #panel:has(> #usage:not([hidden])) {
+    #panel:has(> :is(#usage, #current-data):not([hidden])) {
       display: grid; grid-template: auto auto minmax(0, 1fr) / minmax(0, 1fr);
       block-size: calc(100dvh - 32px);
     }
+    #current-data { display: grid; grid-template: auto minmax(96px, 1fr) / minmax(0, 1fr); min-block-size: 0; }
     #usage { grid-template: auto auto minmax(0, 1fr) / minmax(0, 1fr); min-block-size: 0; }
     .usage-breakdown {
       display: grid; grid-template-rows: repeat(2, minmax(112px, 1fr)) 180px; gap: 8px;
@@ -141,8 +142,8 @@
     }
     .usage-ranking, .heat { display: grid; min-inline-size: 0; }
     .usage-ranking { grid-template-rows: auto minmax(0, 1fr); }
-    .usage-scroll { min-inline-size: 0; overflow-y: auto; scrollbar-width: thin; }
-    .usage-scroll:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+    .usage-scroll, #current-scroll { min-inline-size: 0; overflow-y: auto; scrollbar-width: thin; }
+    .usage-scroll:focus-visible, #current-scroll:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
     .section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; }
     .section-title { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; font-weight: 700; }
     .section-detail { margin: 0; color: var(--muted); font-size: 11px; }
@@ -762,13 +763,15 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>
         </button>
       </div>
-      <div class="message message-error" id="error" data-testid="error" role="alert" data-localized-text hidden></div>
-      <div class="messages" id="warnings"></div>
-      <p class="loading" id="loading" data-testid="loading" role="status" aria-live="polite" data-localized-text><span data-i18n="reading-conversation"></span></p>
-      <ol class="records" id="records" data-i18n-aria-label="per-request-speeds"></ol>
-      <div class="empty" id="empty" data-testid="empty" hidden>
-        <span class="empty-icon" aria-hidden="true">🚀</span>
-        <p class="empty-text" id="empty-text" data-localized-text></p>
+      <div id="current-scroll" role="region" tabindex="0" data-i18n-aria-label="per-request-speeds">
+        <div class="message message-error" id="error" data-testid="error" role="alert" data-localized-text hidden></div>
+        <div class="messages" id="warnings"></div>
+        <p class="loading" id="loading" data-testid="loading" role="status" aria-live="polite" data-localized-text><span data-i18n="reading-conversation"></span></p>
+        <ol class="records" id="records" data-i18n-aria-label="per-request-speeds"></ol>
+        <div class="empty" id="empty" data-testid="empty" hidden>
+          <span class="empty-icon" aria-hidden="true">🚀</span>
+          <p class="empty-text" id="empty-text" data-localized-text></p>
+        </div>
       </div>
     </section>
   </main>
@@ -998,7 +1001,7 @@
     (() => {
       'use strict';
       const byId = id => document.getElementById(id);
-      const ui = Object.fromEntries(['current-data', 'updated', 'refresh', 'error', 'warnings', 'loading', 'records', 'empty', 'empty-text', 'record-template'].map(id => [id, byId(id)]));
+      const ui = Object.fromEntries(['current-data', 'current-scroll', 'updated', 'refresh', 'error', 'warnings', 'loading', 'records', 'empty', 'empty-text', 'record-template'].map(id => [id, byId(id)]));
       const views = [...byId('panel-tabs').children];
       const lifetime = new AbortController();
       const bridge = window.orca?.plugin;
@@ -1463,7 +1466,8 @@
         ui['empty-text'].textContent = String(current?.emptyMessage || t('empty-current-records')).slice(0, 1000);
         if (resetScroll) {
           resetScroll = false;
-          if (!ui['current-data'].hidden) window.scrollTo(0, 0);
+          ui['current-scroll'].scrollTop = 0;
+          window.scrollTo(0, 0);
         }
       }
       function scheduleCurrent() {
