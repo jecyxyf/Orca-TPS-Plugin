@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { appendFile, mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createRemoteChannelReader, createRemoteUsageReader } from '../src/remote-channel.mjs';
 import { collectRemoteChannel, collectorCommand, remoteRecord } from '../src/remote-collector.mjs';
-import { createUsageIndex, localDayKey } from '../src/usage-summary.mjs';
+import { createUsageIndex, leaderboardUsageTimesFrom, localDayKey } from '../src/usage-summary.mjs';
 
 test('one SSH stream merges project sessions and receives new records without sending another request', async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'tps-remote-test-'));
@@ -53,7 +53,7 @@ test('one SSH stream merges project sessions and receives new records without se
       const command = collectorCommand(token).split('"')[1];
       child = spawn(process.execPath, ['--input-type=commonjs', '-e', command], {
         cwd: project, env: { ...process.env, HOME: home, USERPROFILE: home, LOCALAPPDATA: home, ORCA_USER_DATA_PATH: home, CODEX_HOME: codexHome,
-          HERMES_HOME: hermesHome, TZ: 'UTC' },
+          HERMES_HOME: hermesHome, XDG_DATA_HOME: path.join(home, 'data'), TZ: 'UTC' },
         stdio: ['pipe', 'pipe', 'ignore']
       });
       const write = child.stdin.write.bind(child.stdin);
@@ -66,15 +66,19 @@ test('one SSH stream merges project sessions and receives new records without se
   });
   try {
     remote.setTarget(target);
-    const first = await remote.read(target);
+    assert.equal((await remote.read(target)).usage, undefined);
+    const first = await remote.read(target, { includeUsageRecords: true });
     assert.deepEqual(first.warnings, []);
     assert.deepEqual(first.session.records.map(record => record.outputTokens), [60, 330, 200]);
     assert.deepEqual(first.session.records.map(record => record.tokensPerSecond), [30, 110, 100]);
     assert.equal(first.session.records[0].dataSource, 'hermes_log');
     assert.equal(first.session.records[0].model, 'vendor/flash-model:free');
     assert.equal(first.session.records[0].cacheHitRate, undefined);
+    const sourceId = (await readFile(path.join(home, 'data', 'orca-tps-plugin', 'source-id'), 'utf8')).trim();
+    assert.equal(first.usage.sourceId, sourceId);
+    assert.deepEqual(first.usage.records.map(record => remoteRecord(record).id), first.session.records.map(record => record.id));
     assert.doesNotMatch(JSON.stringify(first), /PRIVATE_CHAT_CONTENT|remote-one|remote-two|hermes-remote/);
-    assert.deepEqual(await remote.read(target, { fresh: true }), first);
+    assert.deepEqual(await remote.read(target, { fresh: true, includeUsageRecords: true }), first);
     assert.equal(launches, 1);
 
     const sends = requests;
@@ -87,10 +91,12 @@ test('one SSH stream merges project sessions and receives new records without se
     let observed;
     for (let attempt = 0; attempt < 30; attempt++) {
       await delay(100);
-      observed = await remote.read(target);
+      observed = await remote.read(target, { includeUsageRecords: true });
       if (observed.session?.records[0]?.outputTokens === 500) break;
     }
     assert.deepEqual(observed.session.records.map(record => record.outputTokens), [500, 60, 330, 200]);
+    assert.equal(observed.usage.sourceId, sourceId);
+    assert.deepEqual(observed.usage.records.map(record => record.outputTokens), [500, 60, 330, 200]);
     assert.equal(requests, sends, 'no repeat remote query');
   } finally {
     await remote.dispose();
@@ -157,7 +163,7 @@ test('remote usage counts the full history once per host and keeps totals when i
   t.after(() => rm(home, { recursive: true, force: true }));
   const codexHome = path.join(home, '.codex'), logs = path.join(codexHome, 'sessions');
   await mkdir(logs, { recursive: true });
-  const sessions = 202, completed = new Date(), started = new Date(completed.getTime() - 1_000);
+  const sessions = 202, completed = new Date(Math.floor(Date.now() / 1000) * 1000), started = new Date(completed.getTime() - 1_000);
   const hermesHome = path.join(home, '.hermes'), hermesLogs = path.join(hermesHome, 'logs');
   await mkdir(hermesLogs, { recursive: true });
   const occurredAt = `${localDayKey(completed.getTime())} ${completed.toTimeString().slice(0, 8)},000`;
@@ -176,6 +182,7 @@ test('remote usage counts the full history once per host and keeps totals when i
   const host = { host: 'example.test', username: 'example', port: 22 };
   let online = true, launches = 0, writes = 0;
   const reader = createRemoteUsageReader({ grantedCapabilities: ['workspace:read'] }, {
+    includeRecent: true, includeUsageTimes: true, includeUsageSources: true,
     resolveHosts: async () => online ? [host, { ...host, alias: 'duplicate' }] : [],
     launch(_route, token) {
       launches++;
@@ -191,13 +198,15 @@ test('remote usage counts the full history once per host and keeps totals when i
       return child;
     }
   });
-  const stored = new Map(), day = localDayKey(completed.getTime());
+  const stored = new Map(), reported = new Map(), at = completed.getTime(), day = localDayKey(at);
   const local = { key: 'local-unit', stamp: 'same', bytes: 5, mtimeMs: completed.getTime(),
     read: async (rankDay, rankFrom) => ({ days: { [day]: { claude: { 'local-model': [1, 2, 1, 0, 0, 0, 0, 0] } } },
-      leaderboardDays: { [rankDay]: 3 }, leaderboardFrom: rankFrom }) };
+      leaderboardDays: { [rankDay]: 3 }, leaderboardFrom: rankFrom,
+      leaderboardUsageByTime: { [at]: 3 }, usageTimesFrom: leaderboardUsageTimesFrom(rankFrom) }) };
   const index = createUsageIndex({
     now: () => completed.getTime(),
-    leaderboard: true, rankDays: 30,
+    leaderboard: true, rankDays: 30, includeUsageTimes: true,
+    onRecentRequests: (key, records) => reported.set(key, records),
     storage: { keys: async () => [...stored.keys()], get: async key => stored.get(key),
       set: async (key, value) => stored.set(key, value), delete: async key => stored.delete(key) },
     async discover(cutoffMs, rankDay, rankFrom) {
@@ -217,15 +226,83 @@ test('remote usage counts the full history once per host and keeps totals when i
     assert.equal(index.leaderboardUsage().ready, true);
     assert.equal(index.leaderboardHistory().ready, true);
     assert.equal(index.leaderboardHistory().scores[0].tokens, expectedTokens);
+    assert.deepEqual(index.leaderboardUsageTimes().buckets, [[at, expectedTokens]]);
+    const sourceFile = path.join(home, 'data', 'orca-tps-plugin', 'source-id');
+    const sourceId = (await readFile(sourceFile, 'utf8')).trim();
+    const reporter = 'f59783fa-a342-44ab-8b73-26616017a691';
+    const sources = () => index.leaderboardSources(reporter);
+    assert.deepEqual(sources().map(source => [source.sourceId, source.buckets]), [
+      [reporter, [[at, 3]]], [sourceId, [[at, expectedTokens - 3]]]
+    ]);
+    const recent = [...reported.values()].flat();
+    assert.equal(recent.filter(record => record[5] === 'codex').length, sessions);
+    assert.deepEqual(recent.find(record => record[5] === 'hermes')?.slice(2), [12, null, 'test-model', 'hermes']);
     assert.equal(launches, 1);
     const initialWrites = writes;
     await refresh();
     assert.equal(writes - initialWrites, 2, 'only the two descriptor pages are read again');
+    await writeFile(sourceFile, 'invalid');
+    await refresh();
+    assert.equal(index.summary().windows.today.tokens, expectedTokens);
+    assert.deepEqual(sources().filter(source => source.coverage).map(source => source.sourceId), [reporter]);
+    await writeFile(sourceFile, sourceId);
     online = false;
     await refresh();
     assert.equal(index.summary().windows.today.tokens, expectedTokens);
     assert.equal(index.leaderboardUsage().tokens, expectedTokens);
+    assert.deepEqual(index.leaderboardUsageTimes().buckets, [[at, expectedTokens]]);
   } finally {
     await reader.dispose();
   }
+});
+
+test('two SSH connections share a source ID across aliases and other users get their own', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tps-source-id-'));
+  const logs = path.join(root, 'first', '.codex', 'sessions');
+  await mkdir(logs, { recursive: true });
+  const at = Date.now() - 1000;
+  const rows = [{ type: 'session_meta', payload: { id: 'pages', cwd: root } }];
+  for (let index = 0; index < 520; index++) {
+    rows.push({ timestamp: new Date(at - 600 + index), type: 'event_msg',
+      payload: { type: 'task_started', turn_id: String(index) } });
+    rows.push({ timestamp: new Date(at + index), type: 'event_msg',
+      payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 2, output_tokens: 3 } } } });
+  }
+  await writeFile(path.join(logs, 'pages.jsonl'), rows.map(row => JSON.stringify(row)).join('\n') + '\n');
+  const launch = (route, token) => {
+    const home = path.join(root, route.username);
+    return spawn(process.execPath, ['--input-type=commonjs', '-e', collectorCommand(token).split('"')[1]], {
+      cwd: root, stdio: ['pipe', 'pipe', 'ignore'],
+      env: { ...process.env, HOME: home, USERPROFILE: home, LOCALAPPDATA: home, ORCA_USER_DATA_PATH: home,
+        CODEX_HOME: path.join(home, '.codex'), HERMES_HOME: path.join(home, '.hermes'),
+        CLAUDE_CONFIG_DIR: path.join(home, '.claude'), PI_CODING_AGENT_DIR: path.join(home, '.pi'),
+        XDG_DATA_HOME: path.join(home, 'data'), OPENCODE_DB: ':memory:' }
+    });
+  };
+  const route = (host, username = 'first') => ({ host, username, port: 22 });
+  const readers = [[route('alias-one')], [route('alias-two'), route('alias-three')],
+    [route('alias-one', 'second')]].map(routes => createRemoteUsageReader({ grantedCapabilities: ['workspace:read'] }, {
+    resolveHosts: async () => routes, includeUsageSources: true, includeRecords: true, launch
+  }));
+  t.after(async () => {
+    await Promise.all(readers.map(reader => reader.dispose()));
+    await rm(root, { recursive: true, force: true });
+  });
+  const results = await Promise.all(readers.map(reader => reader.discover(Date.now() - 100_000)));
+  const [a, b, c] = results.map(result => [...result.remoteSources.values()]);
+  assert.ok(results.every(result => result.remoteComplete));
+  assert.match(a[0].sourceId, /^[a-f\d-]{36}$/);
+  assert.deepEqual(b.map(source => source.sourceId), [a[0].sourceId]);
+  assert.equal(b[0].legacyScopes.size, 2);
+  assert.notEqual(a[0].sourceId, c[0].sourceId);
+  const [log] = results[1].descriptors;
+  assert.equal(log.deviceGuid, a[0].sourceId);
+  const first = await log.readRecords(0);
+  const last = await log.readRecords(first.nextOffset);
+  assert.equal(first.nextOffset, 512);
+  assert.equal(last.nextOffset, null);
+  assert.ok(first.complete && last.complete);
+  const records = [...first.records, ...last.records];
+  assert.equal(new Set(records.map(row => row.id)).size, 520);
+  assert.equal(records.reduce((total, row) => total + row.freshInputTokens + row.outputTokens, 0), 2600);
 });

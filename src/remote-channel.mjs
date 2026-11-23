@@ -8,9 +8,11 @@ import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import { gunzipSync, gzip } from 'node:zlib';
 import { readOrcaProfile } from './active-conversation.mjs';
-import { normalizeComparePath } from './data.mjs';
+import { normalizeComparePath, USAGE_RECORD_PAGE_SIZE } from './data.mjs';
 import { COLLECTOR_FILES, MAX_RESPONSE_BASE64, USAGE_PAGE_SIZE, collectorCommand, remoteRecord } from './remote-collector.mjs';
-import { REMOTE_USAGE_PREFIX } from './usage-summary.mjs';
+import { validInstallationId } from './leaderboard-installation.mjs';
+import { REMOTE_USAGE_PREFIX, leaderboardDayStart, leaderboardUsageTimesFrom, validLeaderboardUsageTimes } from './usage-summary.mjs';
+import { HOUR_MS, MAX_RECENT_REQUESTS, validRecentRequest } from './leaderboard-stats.mjs';
 
 const warnings = {
   api: sourceMessage('notice.remote-api-missing'),
@@ -363,7 +365,7 @@ export function createRemoteChannelReader(orca, {
     return loadCollectorFiles();
   }
 
-  async function read(target, { fresh = false } = {}) {
+  async function read(target, { fresh = false, includeUsageRecords = false } = {}) {
     if (!wanted.has(target.key)) return resultError('workspace');
     const retry = retries.get(target.key);
     if (!fresh && retry && now() < retry.at) return resultError(retry.reason);
@@ -377,14 +379,16 @@ export function createRemoteChannelReader(orca, {
       const files = !entry.connection ? await start(entry, target, signal) : undefined;
       entry.stage = 'read';
       const signature = JSON.stringify(target.sessions ?? []);
-      if (files || fresh || signature !== entry.signature || now() - entry.lastHandshake >= 30_000) {
+      if (files || fresh || signature !== entry.signature || includeUsageRecords !== entry.includeUsageRecords ||
+          now() - entry.lastHandshake >= 30_000) {
         const response = await entry.connection.exchange({
           ...(files ? { files } : {}),
           watchId: entry.watchId,
-          project: { worktreePath: entry.path, sessions: target.sessions, fresh }
+          project: { worktreePath: entry.path, sessions: target.sessions, fresh, includeUsageRecords }
         }, signal);
         if (!response.answer) throw new RemoteReadError('read');
         entry.signature = signature;
+        entry.includeUsageRecords = includeUsageRecords;
         entry.version = response.version;
         entry.lastHandshake = now();
         entry.lastReply = response.answer;
@@ -398,6 +402,14 @@ export function createRemoteChannelReader(orca, {
       const answer = entry.lastReply;
       if (answer.error) throw new RemoteReadError(answer.error);
       if (!Array.isArray(answer.records)) return resultError('read');
+      const capture = answer.usage;
+      const usage = includeUsageRecords && validInstallationId(capture?.sourceId) && Array.isArray(capture.records) ? {
+        sourceId: capture.sourceId,
+        records: capture.records.slice(0, 100).flatMap(row => {
+          const safe = remoteRecord(row);
+          return safe && usageKey.test(row.id) ? [{ ...safe, id: row.id }] : [];
+        })
+      } : null;
       retries.delete(target.key);
       return {
         session: {
@@ -405,7 +417,8 @@ export function createRemoteChannelReader(orca, {
           provider: 'channel',
           records: answer.records.slice(0, 100).map(remoteRecord).filter(Boolean).sort((a, b) => b.completedAt - a.completedAt)
         },
-        warnings: answer.incomplete ? [sourceMessage('notice.remote-logs-incomplete')] : []
+        warnings: answer.incomplete ? [sourceMessage('notice.remote-logs-incomplete')] : [],
+        ...(usage ? { usage } : {})
       };
     } catch (error) {
       if (collectors.get(target.key) === entry) {
@@ -450,14 +463,15 @@ function validUsageDays(days) {
 
 export function createRemoteUsageReader(orca, {
   lookupSsh = readSshTargets, decode = decodeCollectorReply,
-  resolveHosts = resolveUsageHosts(lookupSsh), launch = launchSsh, t = sourceMessage
+  resolveHosts = resolveUsageHosts(lookupSsh), launch = launchSsh, t = sourceMessage, includeRecent = false, includeUsageTimes = false,
+  includeUsageSources = false, includeRecords = false
 } = {}) {
   const lifetime = new AbortController();
   const connections = new Set();
   const signal = timeout => AbortSignal.any([lifetime.signal, AbortSignal.timeout(timeout)]);
 
   let currentScan;
-  async function openScan(route, scope, cutoffMs, timeZone, rankDay, rankFrom) {
+  async function openScan(route, legacyScope, cutoffMs, timeZone, rankDay, rankFrom) {
     await finish();
     const token = id(), startupSignal = signal(45_000);
     const files = await loadCollectorFiles();
@@ -467,15 +481,25 @@ export function createRemoteUsageReader(orca, {
     try {
       await connection.ready(startupSignal);
       const items = new Map();
-      let offset = 0;
+      let offset = 0, scope = legacyScope, sourceId, sourceTime;
       for (;;) {
         const page = await connection.exchange({
           ...(offset === 0 ? { files } : {}),
-          usage: { type: 'list', cutoffMs, offset, timeZone, rankDay, rankFrom }
+          usage: { type: 'list', cutoffMs, offset, timeZone, rankDay, rankFrom,
+            ...(includeRecent ? { includeRecent } : {}), ...(includeUsageTimes ? { includeUsageTimes } : {}),
+            ...(includeUsageSources ? { includeUsageSources } : {}), ...(includeRecords ? { includeRecords } : {}) }
         }, signal(45_000));
         if (!Array.isArray(page.items) || page.items.length > USAGE_PAGE_SIZE || typeof page.more !== 'boolean' ||
           (page.more && page.items.length !== USAGE_PAGE_SIZE)) {
           throw new RemoteReadError('read');
+        }
+        if (includeUsageSources) {
+          if (!validInstallationId(page.sourceId) ||
+              (page.sourceTime !== undefined && (!Number.isSafeInteger(page.sourceTime) || page.sourceTime <= 0)) ||
+              (offset && (page.sourceId !== sourceId || page.sourceTime !== sourceTime))) throw new RemoteReadError('read');
+          sourceId = page.sourceId;
+          sourceTime = page.sourceTime;
+          scope = `${REMOTE_USAGE_PREFIX}${sourceId}:`;
         }
         for (const item of page.items) {
           if (typeof item.key !== 'string' || !usageKey.test(item.key) || typeof item.stamp !== 'string' || !usageKey.test(item.stamp) ||
@@ -488,7 +512,7 @@ export function createRemoteUsageReader(orca, {
         if (!page.more) break;
         offset += page.items.length;
       }
-      return { scope, connection, items };
+      return { scope, sourceId, sourceTime, connection, items, observedAt: Date.now() };
     } catch (error) {
       await close(connection);
       throw error;
@@ -496,13 +520,30 @@ export function createRemoteUsageReader(orca, {
 
   }
 
-  async function scanHost(route, scope, cutoffMs, timeZone, rankDay, rankFrom) {
-    const open = () => openScan(route, scope, cutoffMs, timeZone, rankDay, rankFrom);
+  async function scanHost(route, legacyScope, cutoffMs, timeZone, rankDay, rankFrom) {
+    const open = () => openScan(route, legacyScope, cutoffMs, timeZone, rankDay, rankFrom);
     const original = currentScan = await open();
-    return [...original.items.values()].map(item => ({ ...item, readMany }));
+    const { scope, sourceId, sourceTime, observedAt } = original;
+    return { scope, sourceId, sourceTime, observedAt, items: [...original.items.values()].map(item => ({
+      ...item, ...(includeRecords ? { deviceGuid: sourceId, readRecords: offset => readRecords(item, offset) } : { readMany })
+    })) };
+
+    async function readRecords(item, offset) {
+      const scan = currentScan?.scope === scope ? currentScan : (currentScan = await open());
+      if (scan.scope !== scope || scan.items.get(item.key)?.stamp !== item.stamp) throw new RemoteReadError('read');
+      const reply = await scan.connection.exchange({ usage: { type: 'records', key: item.key.slice(scope.length), offset } }, signal(90_000));
+      if (reply.sourceId !== sourceId || !Array.isArray(reply.records) || reply.records.length > USAGE_RECORD_PAGE_SIZE ||
+          typeof reply.complete !== 'boolean' || (reply.nextOffset !== null &&
+          (!reply.records.length || reply.nextOffset !== offset + reply.records.length)) ||
+          !reply.records.every(row => row && usageKey.test(row.id) && Number.isFinite(row.completedAt))) {
+        throw new RemoteReadError('read');
+      }
+      return reply;
+    }
 
     async function readMany(keys) {
       const scan = currentScan?.scope === scope ? currentScan : (currentScan = await open());
+      if (scan.scope !== scope) throw new RemoteReadError('read');
       const matching = keys.filter(key => scan.items.get(key)?.stamp === original.items.get(key)?.stamp);
       if (!matching.length) return new Map();
       const localKeys = matching.map(key => key.slice(scope.length));
@@ -518,6 +559,10 @@ export function createRemoteUsageReader(orca, {
         const value = reply.results[key];
         if (!rankDay) return validUsageDays(value);
         if (value?.leaderboardFrom !== rankFrom || !validUsageDays(value.days) || !isObject(value.leaderboardDays)) return false;
+        if (includeUsageTimes && (value.usageTimesFrom !== leaderboardUsageTimesFrom(rankFrom) ||
+            !validLeaderboardUsageTimes(value.leaderboardUsageByTime, value.usageTimesFrom, leaderboardDayStart(rankDay) + 24 * HOUR_MS))) return false;
+        if (value.recent !== undefined && (!Array.isArray(value.recent) || value.recent.length > MAX_RECENT_REQUESTS ||
+          !value.recent.every(validRecentRequest))) return false;
         return Object.entries(value.leaderboardDays).every(([day, total]) =>
           /^\d{4}-\d{2}-\d{2}$/.test(day) && day >= rankFrom && day <= rankDay && Number.isSafeInteger(total) && total >= 0);
       }).map(key => [scope + key, reply.results[key]]));
@@ -526,10 +571,12 @@ export function createRemoteUsageReader(orca, {
 
   async function discover(cutoffMs, rankDay, rankFrom = rankDay) {
     const discovery = { descriptors: [], coveredRemoteScopes: new Set(), remoteComplete: true };
+    if (includeUsageSources) discovery.remoteSources = new Map();
     if (!orca.grantedCapabilities?.includes('workspace:read') || lifetime.signal.aborted) return discovery;
     let routes;
     try { routes = await resolveHosts(signal(15_000)); }
     catch {
+      discovery.remoteComplete = false;
       if (!lifetime.signal.aborted) orca.log?.(t('notice.remote-usage-list-failed'));
       return discovery;
     }
@@ -540,10 +587,17 @@ export function createRemoteUsageReader(orca, {
       if (!scopes.has(scope)) scopes.set(scope, route);
     }
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    for (const [scope, route] of scopes) {
+    for (const [legacyScope, route] of scopes) {
       if (lifetime.signal.aborted) break;
       try {
-        const items = await scanHost(route, scope, cutoffMs, timeZone, rankDay, rankFrom);
+        const { scope, sourceId, sourceTime, observedAt, items } = await scanHost(route, legacyScope, cutoffMs, timeZone, rankDay, rankFrom);
+        const previous = discovery.remoteSources?.get(scope);
+        if (previous) {
+          previous.legacyScopes.add(legacyScope);
+          continue;
+        }
+        discovery.remoteSources?.set(scope, { sourceId, ...(sourceTime !== undefined ? { sourceTime } : {}),
+          observedAt, legacyScopes: new Set([legacyScope]) });
         discovery.coveredRemoteScopes.add(scope);
         for (const item of items) discovery.descriptors.push(item);
       } catch {

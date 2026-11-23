@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, mkdir, rm, utimes } from 'node:fs/promises';
+import fs, { appendFile, mkdtemp, writeFile, mkdir, rm, utimes } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -28,7 +29,7 @@ async function fixture(t) {
   return root;
 }
 
-test('windows are local calendar days: today, the last 7 days, the last 30 days', () => {
+test('the local calendar spans include 365 days for the annual window', () => {
   const now = at(2026, 11, 8, 9);
   assert.equal(localDayKey(now), '2026-11-08');
   assert.equal(dayKeyAgo(now, 0), '2026-11-08');
@@ -37,13 +38,15 @@ test('windows are local calendar days: today, the last 7 days, the last 30 days'
   assert.equal(localDayKey(usageCutoffMs(now)), dayKeyAgo(now, 364), 'the index keeps a year of days');
 });
 
-test('window totals separate today, week and month; tokens are new input plus output', () => {
+test('window totals separate today, week, month and year and include all token types', () => {
   const now = at(2026, 11, 8, 9), days = {};
   accumulateRecords(days, 'claude', [
     { completedAt: at(2026, 11, 8, 8), model: 'claude-opus-5-5', freshInputTokens: 100, outputTokens: 50, cacheReadTokens: 900, cacheCreationTokens: 5 },
     { completedAt: at(2026, 11, 4, 8), model: 'claude-opus-5-5', freshInputTokens: 10, outputTokens: 10, cacheReadTokens: 0, cacheCreationTokens: 0 },
     { completedAt: at(2026, 10, 20, 8), model: '', freshInputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0 },
-    { completedAt: at(2026, 9, 1, 8), model: 'claude-opus-5-5', freshInputTokens: 999, outputTokens: 999, cacheReadTokens: 0, cacheCreationTokens: 0 }
+    { completedAt: at(2026, 9, 1, 8), model: 'claude-opus-5-5', freshInputTokens: 999, outputTokens: 999, cacheReadTokens: 0, cacheCreationTokens: 0 },
+    { completedAt: usageCutoffMs(now), outputTokens: 3 },
+    { completedAt: usageCutoffMs(now) - 1, outputTokens: 999 }
   ]);
   accumulateRecords(days, 'codex', [
     { completedAt: at(2026, 11, 8, 7), model: 'gpt-6-astra', freshInputTokens: 200, outputTokens: 30, cacheReadTokens: 0, cacheCreationTokens: 0 }
@@ -57,7 +60,9 @@ test('window totals separate today, week and month; tokens are new input plus ou
   assert.equal(windows.week.requests, 3);
   assert.equal(windows.week.tokens, 1305);
   assert.equal(windows.month.requests, 4);
-  assert.equal(windows.month.tokens, 1307, 'records older than 30 days stay out of every window');
+  assert.equal(windows.month.tokens, 1307);
+  assert.equal(windows.year.requests, 6);
+  assert.equal(windows.year.tokens, 3308, 'the oldest included day starts at local midnight');
   assert.equal(windows.today.rows[0].provider, 'claude', 'rows are sorted by real total');
   assert.equal(windows.month.rows.find(row => row.model === '').tokens, 2, 'missing model stays a separate empty id');
 });
@@ -266,6 +271,64 @@ test('backfill keeps today eligible before older history and retains complete to
   await index.refresh();
   assert.deepEqual(index.summary().windows, expected);
   assert.equal(index.leaderboardUsage().ready, false);
+});
+
+test('an unreadable log directory or subagent directory retains usage until the next complete scan', async t => {
+  const root = await fixture(t);
+  const first = path.join(root, 'first'), second = path.join(root, 'second');
+  const main = path.join(second, 'session-b.jsonl');
+  const subagents = path.join(second, 'session-b', 'subagents');
+  await mkdir(first);
+  await mkdir(subagents, { recursive: true });
+  const now = Date.now(), day = leaderboardDay(now);
+  const usage = (id, offset, output) => ({
+    type: 'assistant', uuid: id, timestamp: new Date(now - offset).toISOString(),
+    message: { id, model: 'claude', usage: { input_tokens: 0, output_tokens: output }, stop_reason: 'end_turn' }
+  });
+  await writeFile(path.join(first, 'session-a.jsonl'), jsonl([usage('a', 1, 100)]));
+  await writeFile(main, jsonl([usage('b', 2, 200)]));
+  await writeFile(path.join(subagents, 'agent.jsonl'), jsonl([usage('c', 3, 300)]));
+  const readdir = fs.readdir;
+  let denied;
+  const stub = t.mock.method(fs, 'readdir', async (directory, options) => {
+    if (directory === denied) throw Object.assign(new Error('directory temporarily unreadable'), { code: 'EACCES' });
+    return readdir(directory, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    stub.mock.restore();
+    syncBuiltinESMExports();
+  });
+
+  const index = createUsageIndex({ storage: fakeStorage(), now: () => now, leaderboard: true, includeUsageTimes: true,
+    async discover(cutoff, rankDay, rankFrom) {
+      let localComplete = true;
+      const descriptors = await discoverUsageUnits(cutoff, { roots: { claude: [path.join(root, 'missing'), first, second] },
+        includeDefaults: false, rankDay, rankFrom, includeUsageTimes: true, onUnavailable: () => { localComplete = false; } });
+      return { descriptors, localComplete };
+    }
+  });
+  await index.refresh();
+  assert.equal(index.leaderboardUsage().tokens, 600);
+  assert.ok(index.leaderboardUsageTimes().coverage, 'an unused default path does not make a scan partial');
+
+  denied = first;
+  await appendFile(main, jsonl([usage('d', 4, 400)]));
+  await index.refresh();
+  assert.equal(index.leaderboardUsage().tokens, 1_000, 'readable sessions update and the unreadable one keeps its total');
+  assert.deepEqual(index.leaderboardUsageTimes().buckets, [[now - 4, 400], [now - 3, 300], [now - 2, 200], [now - 1, 100]]);
+  assert.equal(index.leaderboardUsageTimes().coverage, undefined, 'a failed scan cannot authorize zeroing missing usage');
+
+  denied = subagents;
+  await appendFile(main, jsonl([usage('e', 5, 500)]));
+  await index.refresh();
+  assert.equal(index.leaderboardUsage().tokens, 1_000, 'a partly readable Claude session keeps its last complete total');
+  assert.equal(index.leaderboardUsageTimes().coverage, undefined);
+
+  denied = undefined;
+  await index.refresh();
+  assert.deepEqual(index.leaderboardUsage(), { day, tokens: 1_500, updatedAt: now, ready: true });
+  assert.ok(index.leaderboardUsageTimes().coverage);
 });
 
 test('the computation thread discovers and returns usage counters without sending raw logs', async t => {

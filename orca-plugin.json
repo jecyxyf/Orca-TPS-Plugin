@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
   "manifestVersion": 2,
-  "id": "tps-stats",
+  "id": "tps-plugin",
   "name": "TPS Plugin",
-  "version": "1.6.4",
-  "description": "Track live request speed and token usage in Orca. Compare models, spot daily trends, and join a cross-device leaderboard with GitHub sign-in.",
+  "version": "1.6.5",
+  "description": "Track request speed and token usage in Orca, compare models, and explore hourly rankings for recent usage and each user's best speed from the past 24 hours.",
   "author": {
     "name": "jecyxyf",
     "url": "https://github.com/jecyxyf"
@@ -14,26 +14,26 @@
   "homepage": "https://github.com/jecyxyf/Orca-TPS-Plugin#readme",
   "icon": "assets/1.6.3/icon.png",
   "cover": {
-    "path": "assets/1.6.3/cover.png",
+    "path": "assets/1.6.5/cover.png",
     "alt": "TPS Plugin overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar"
   },
   "screenshots": [
     {
-      "path": "assets/1.6.3/current-data.png",
+      "path": "assets/1.6.5/current-data.png",
       "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
       "caption": "Current Data · Check how each AI request ran",
       "theme": "dark"
     },
     {
-      "path": "assets/1.6.3/personal-stats.png",
-      "alt": "Personal Stats shows usage by model, average generation speeds, and an annual heatmap",
+      "path": "assets/1.6.5/personal-stats.png",
+      "alt": "Personal Stats shows usage by model, average generation speeds, and a usage heatmap",
       "caption": "Personal Stats · Compare model usage and explore daily trends",
       "theme": "dark"
     },
     {
-      "path": "assets/1.6.3/leaderboard.png",
-      "alt": "Leaderboard with GitHub avatars, three ranking periods, medals, and the sync controls",
-      "caption": "Leaderboard · See your rank across devices and track your next sync",
+      "path": "assets/1.6.5/leaderboard.png",
+      "alt": "Orca sidebar showing the 30-day usage ranking and the 24-hour speed ranking",
+      "caption": "Leaderboard · Compare usage trends and each user's best speed",
       "theme": "dark"
     }
   ],

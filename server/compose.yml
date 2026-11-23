@@ -1,0 +1,25 @@
+services:
+  leaderboard:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    env_file:
+      - ${LEADERBOARD_ENV_FILE:-./.env}
+    environment:
+      LEADERBOARD_HOST: 0.0.0.0
+      LEADERBOARD_PORT: '8787'
+      LEADERBOARD_DB: /data/leaderboard.sqlite
+    ports:
+      - '127.0.0.1:8787:8787'
+    volumes:
+      - leaderboard-data:/data
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8787/healthz').then(response => process.exit(response.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  leaderboard-data:

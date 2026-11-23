@@ -6,7 +6,8 @@ const MAX_IMAGE_BYTES = 32 * 1024;
 const CACHE_ENTRIES = 160;
 const MAX_PENDING = 24, MAX_DOWNLOADS = 3;
 const DOWNLOAD_TIMEOUT = 10_000;
-const IMAGE_TTL = 24 * 60 * 60_000, RETRY_TTL = 5 * 60_000;
+// A failed avatar may be tried again after one leaderboard sync interval.
+const IMAGE_TTL = 24 * 60 * 60_000, RETRY_TTL = 10_000;
 
 export const githubLoginKey = name => typeof name === 'string' &&
   /^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(name) ? name.toLowerCase() : null;

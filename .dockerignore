@@ -1,0 +1,8 @@
+**
+!server/
+!server/Dockerfile
+!server/*.mjs
+!src/
+!src/*.mjs
+!src/locales/
+!src/locales/*.xml
