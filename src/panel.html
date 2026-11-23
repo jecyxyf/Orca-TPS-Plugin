@@ -130,6 +130,19 @@
     .panel-tab:focus-visible, .panel-view:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     .panel-view { margin-top: 12px; }
     #usage, #leaderboard { display: grid; gap: 8px; }
+    #panel:has(> #usage:not([hidden])) {
+      display: grid; grid-template: auto auto minmax(0, 1fr) / minmax(0, 1fr);
+      block-size: calc(100dvh - 32px);
+    }
+    #usage { grid-template: auto auto minmax(0, 1fr) / minmax(0, 1fr); min-block-size: 0; }
+    .usage-breakdown {
+      display: grid; grid-template-rows: repeat(2, minmax(112px, 1fr)) 180px; gap: 8px;
+      min-inline-size: 0;
+    }
+    .usage-ranking, .heat { display: grid; min-inline-size: 0; }
+    .usage-ranking { grid-template-rows: auto minmax(0, 1fr); }
+    .usage-scroll { min-inline-size: 0; overflow-y: auto; scrollbar-width: thin; }
+    .usage-scroll:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
     .section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; }
     .section-title { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; font-weight: 700; }
     .section-detail { margin: 0; color: var(--muted); font-size: 11px; }
@@ -464,8 +477,8 @@
     .rank-index { flex-shrink: 0; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .rank-tps { flex-shrink: 0; padding: 3px 7px; border-radius: 10px; color: var(--speed); background: var(--speed-bg); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
     #speed .war-fill { background: var(--speed); }
-    .heat { position: relative; min-width: 0; }
-    .heat-scroll { direction: ltr; margin: 8px -4px 0; padding: 0 4px 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+    .heat { position: relative; grid-template-rows: minmax(0, 1fr); }
+    .heat-scroll { direction: ltr; margin-top: 8px; padding-bottom: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
     .heat-canvas { position: relative; width: max-content; }
     .heat-months { position: relative; height: 13px; color: var(--muted); font-size: 9px; }
     .heat-months span { position: absolute; top: 0; white-space: nowrap; }
@@ -485,7 +498,7 @@
     .heat-legend .lv2 { background: var(--heat-2); }
     .heat-legend .lv3 { background: var(--heat-3); }
     .heat-legend .lv4 { background: var(--heat-4); }
-    .heat-tip { position: absolute; z-index: 5; max-width: 240px; padding: 5px 8px; border-radius: 8px; background: var(--ink); color: var(--surface); font-size: 11px; line-height: 1.4; white-space: nowrap; pointer-events: none; transform: translate(-50%, -100%); box-shadow: var(--shadow); }
+    .heat-tip { position: absolute; z-index: 5; max-width: min(240px, calc(100% - 8px)); padding: 5px 8px; border-radius: 8px; background: var(--ink); color: var(--surface); font-size: 11px; line-height: 1.4; pointer-events: none; transform: translate(-50%, -100%); box-shadow: var(--shadow); }
     .heat-tip[hidden] { display: none; }
     @media (max-width: 339px) {
       .metrics { gap: 6px; }
@@ -512,6 +525,10 @@
       .ladder-rows li { --ladder-row-gap: 6px; }
       .war-totals { gap: 6px; }
       .ladder-total { padding-inline: 6px; font-size: 12px; }
+    }
+    @media (max-width: 280px) {
+      .war-period-tabs { grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.15fr); gap: 2px; }
+      .war-period-tabs .war-tab { padding-inline: 1px; font-size: 10px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .refresh.is-busy svg { animation: none; }
@@ -678,10 +695,10 @@
       </div>
       <section class="war" id="war" data-i18n-aria-label="usage-overview">
         <div class="war-tabs war-period-tabs" role="tablist" data-i18n-aria-label="usage-period">
-          <button class="war-tab" type="button" role="tab" data-range="today" aria-selected="true" data-testid="range-today"><span data-i18n="today"></span></button>
-          <button class="war-tab" type="button" role="tab" data-range="week" aria-selected="false" data-testid="range-week"><span data-i18n="last-seven-days"></span></button>
-          <button class="war-tab" type="button" role="tab" data-range="month" aria-selected="false" data-testid="range-month"><span data-i18n="last-thirty-days"></span></button>
-          <button class="war-tab" type="button" role="tab" data-range="year" aria-selected="false" data-testid="range-year"><span data-i18n="last-year"></span></button>
+          <button class="war-tab" type="button" role="tab" data-range="today" data-days="1" aria-selected="true" data-testid="range-today"><span data-localized-text></span></button>
+          <button class="war-tab" type="button" role="tab" data-range="week" data-days="7" aria-selected="false" data-testid="range-week"><span data-localized-text></span></button>
+          <button class="war-tab" type="button" role="tab" data-range="month" data-days="30" aria-selected="false" data-testid="range-month"><span data-localized-text></span></button>
+          <button class="war-tab" type="button" role="tab" data-range="year" data-days="365" aria-selected="false" data-testid="range-year"><span data-localized-text></span></button>
         </div>
         <div class="war-totals">
           <div class="war-stat">
@@ -698,37 +715,45 @@
           </div>
         </div>
       </section>
-      <section class="war" aria-labelledby="war-model-title">
-        <h2 class="section-title" id="war-model-title"><span data-i18n="model-usage"></span></h2>
-        <ol class="war-rows" id="war-rows" data-testid="war-rows" data-i18n-aria-label="usage-by-agent-model"></ol>
-        <p class="war-empty" id="war-empty" data-testid="war-empty" hidden><span data-i18n="empty-usage"></span></p>
-      </section>
-      <section class="war" id="speed" aria-labelledby="speed-title" data-testid="speed">
-        <div class="section-head">
-          <h2 class="section-title" id="speed-title"><span data-i18n="average-model-speed"></span></h2>
-          <p class="section-detail"><span data-i18n="model-speed-description"></span></p>
-        </div>
-        <ol class="war-rows" id="speed-rows" data-testid="speed-rows" data-i18n-aria-label="model-speed-list"></ol>
-        <p class="war-empty" id="speed-empty" data-testid="speed-empty" hidden><span data-i18n="empty-model-speeds"></span></p>
-        <p class="war-note" id="speed-note" data-testid="speed-note" data-localized-text hidden></p>
-      </section>
-      <section class="heat" id="heat" aria-labelledby="heat-title" data-testid="heatmap">
-        <div class="section-head">
-          <h2 class="section-title" id="heat-title"><span data-i18n="usage-heatmap"></span></h2>
-          <p class="section-detail" id="heat-sub"><span data-i18n="heatmap-description"></span></p>
-        </div>
-        <div class="heat-scroll" id="heat-scroll" tabindex="0">
-          <div class="heat-canvas">
-            <div class="heat-months" id="heat-months" aria-hidden="true"></div>
-            <div class="heat-grid" id="heat-grid" role="img" data-i18n-aria-label="heatmap-label"></div>
+      <div class="usage-breakdown">
+        <section class="war usage-ranking" aria-labelledby="war-model-title">
+          <h2 class="section-title" id="war-model-title"><span data-i18n="model-usage"></span></h2>
+          <div class="usage-scroll" tabindex="0" aria-labelledby="war-model-title">
+            <ol class="war-rows" id="war-rows" data-testid="war-rows" data-i18n-aria-label="usage-by-agent-model"></ol>
+            <p class="war-empty" id="war-empty" data-testid="war-empty" hidden><span data-i18n="empty-usage"></span></p>
           </div>
-        </div>
-        <div class="heat-foot">
-          <span id="heat-total" data-testid="heat-total" data-localized-text></span>
-          <span class="heat-legend" aria-hidden="true"><span data-i18n="heatmap-less"></span> <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> <span data-i18n="heatmap-more"></span></span>
-        </div>
-        <div class="heat-tip" id="heat-tip" role="tooltip" data-localized-text hidden></div>
-      </section>
+        </section>
+        <section class="war usage-ranking" id="speed" aria-labelledby="speed-title" data-testid="speed">
+          <div class="section-head">
+            <h2 class="section-title" id="speed-title"><span data-i18n="average-model-speed"></span></h2>
+            <p class="section-detail"><span data-i18n="model-speed-description"></span></p>
+          </div>
+          <div class="usage-scroll" tabindex="0" aria-labelledby="speed-title">
+            <ol class="war-rows" id="speed-rows" data-testid="speed-rows" data-i18n-aria-label="model-speed-list"></ol>
+            <p class="war-empty" id="speed-empty" data-testid="speed-empty" hidden><span data-i18n="empty-model-speeds"></span></p>
+            <p class="war-note" id="speed-note" data-testid="speed-note" data-localized-text hidden></p>
+          </div>
+        </section>
+        <section class="heat" id="heat" aria-labelledby="heat-title" data-testid="heatmap">
+          <div class="usage-scroll" tabindex="0" aria-labelledby="heat-title">
+            <div class="section-head">
+              <h2 class="section-title" id="heat-title"><span data-i18n="usage-heatmap"></span></h2>
+              <p class="section-detail" id="heat-sub"><span data-i18n="heatmap-description"></span></p>
+            </div>
+            <div class="heat-scroll" id="heat-scroll" tabindex="0">
+              <div class="heat-canvas">
+                <div class="heat-months" id="heat-months" aria-hidden="true"></div>
+                <div class="heat-grid" id="heat-grid" role="img" data-i18n-aria-label="heatmap-label"></div>
+              </div>
+            </div>
+            <div class="heat-foot">
+              <span id="heat-total" data-testid="heat-total" data-localized-text></span>
+              <span class="heat-legend" aria-hidden="true"><span data-i18n="heatmap-less"></span> <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> <span data-i18n="heatmap-more"></span></span>
+            </div>
+          </div>
+          <div class="heat-tip" id="heat-tip" role="tooltip" data-localized-text hidden></div>
+        </section>
+      </div>
     </section>
     <section class="panel-view" id="current-data" role="tabpanel" aria-labelledby="tab-current" tabindex="0" hidden>
       <div class="panel-header">
@@ -1196,9 +1221,14 @@
       }
       function renderUsage() {
         if (disposed || usageGroup.hidden) return;
-        const windows = usageMode === 'hourly' ? usageSummary?.hourly?.windows : usageSummary?.windows;
+        const hourly = usageMode === 'hourly';
+        const windows = hourly ? usageSummary?.hourly?.windows : usageSummary?.windows;
         const range = windows?.[usageRange] ?? null;
+        const periodFormat = { style: 'unit', unit: hourly ? 'hour' : 'day', unitDisplay: 'short', useGrouping: false };
         for (const tab of usageRangeTabs) {
+          const days = Number(tab.dataset.days);
+          const label = locale.number(hourly ? days * 24 : days, periodFormat);
+          if (tab.firstElementChild.textContent !== label) tab.firstElementChild.textContent = label;
           tab.setAttribute('aria-selected', String(tab.dataset.range === usageRange));
         }
         byId('war-tokens').textContent = range ? formatMillionTokens(range.tokens) : '—';
@@ -1388,7 +1418,7 @@
         else heatTip.hidden = true;
       });
       byId('heat-grid').addEventListener('pointerleave', () => { heatTip.hidden = true; });
-      byId('heat-scroll').addEventListener('scroll', () => { heatTip.hidden = true; }, { passive: true });
+      byId('heat').addEventListener('scroll', () => { heatTip.hidden = true; }, { capture: true, passive: true });
       usageGroup.addEventListener('tps-view-opened', () => {
         renderUsage();
         const scroller = byId('heat-scroll');
