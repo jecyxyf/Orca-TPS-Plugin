@@ -281,5 +281,4 @@
   <message id="ranking-update-mode">ランキングの更新方法</message>
   <message id="ranking-update-daily">日単位で更新</message>
   <message id="ranking-update-hourly">24時間ごとに更新</message>
-  <message id="ranking-recent-period">過去{0}</message>
 </messages>

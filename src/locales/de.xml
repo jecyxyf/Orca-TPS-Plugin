@@ -281,5 +281,4 @@
   <message id="ranking-update-mode">Art der Ranglistenaktualisierung</message>
   <message id="ranking-update-daily">Nach Tagen</message>
   <message id="ranking-update-hourly">Alle 24 Std.</message>
-  <message id="ranking-recent-period">Letzte {0}</message>
 </messages>

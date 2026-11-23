@@ -238,16 +238,16 @@
     .ladder-account-name .ladder-avatar { width: 32px; height: 32px; }
     .ladder-user-stats { margin: 0; }
     .ladder-user-stat {
-      display: grid; grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1.4fr));
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
       align-items: center; column-gap: 8px; min-height: 30px; padding-block: 1px;
       border-block-end: 1px solid var(--line); line-height: 1.25;
     }
     .ladder-user-stat dt { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
     .ladder-user-stat dd { min-width: 0; margin: 0; font-variant-numeric: tabular-nums; }
-    .ladder-user-position { display: flex; align-items: center; gap: 4px; }
+    .ladder-user-position { display: flex; align-items: center; justify-content: flex-end; gap: 4px; text-align: end; }
     .ladder-user-position .ladder-medal, .ladder-row-user .ladder-medal { zoom: var(--ladder-medal-scale); }
     .ladder-user-rank { font-size: 16px; font-weight: 750; overflow-wrap: anywhere; }
-    .ladder-user-tokens { color: var(--blue); font-size: 14px; font-weight: 650; text-align: end; overflow-wrap: anywhere; }
+    .ladder-user-tokens { color: var(--blue); font-size: 14px; font-weight: 650; text-align: start; overflow-wrap: anywhere; }
     .ladder-mine {
       min-width: 0; margin: 0; color: var(--purple); font-size: 24px; font-weight: 800; line-height: 1.25;
       letter-spacing: -.3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -523,7 +523,7 @@
       .speed-value { font-size: 17px; }
       .war, .heat, .ladder-card { padding-inline: 12px; }
       .ladder-mine { font-size: 22px; }
-      .ladder-user-stat { column-gap: 6px; }
+      .ladder-user-stat { grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1.4fr)); column-gap: 6px; }
       .ladder-user-stat dt { font-size: 12px; }
       .ladder-user-position { gap: 2px; }
       #leaderboard { --ladder-medal-scale: .7; }
@@ -621,27 +621,27 @@
         <dl class="ladder-user-stats" id="ladder-personal-ranks" data-i18n-aria-label="personal-ranking" hidden>
           <div class="ladder-user-stat">
             <dt data-ladder-range="1" data-localized-text></dt>
+            <dd class="ladder-user-tokens" id="ladder-user-tokens-1" data-i18n-title="daily-ranked-usage">—</dd>
             <dd class="ladder-user-position">
               <span class="ladder-badge-slot" id="ladder-user-badge-1"></span>
               <span class="ladder-user-rank" id="ladder-user-rank-1" data-localized-text>—</span>
             </dd>
-            <dd class="ladder-user-tokens" id="ladder-user-tokens-1" data-i18n-title="daily-ranked-usage">—</dd>
           </div>
           <div class="ladder-user-stat">
             <dt data-ladder-range="7" data-localized-text></dt>
+            <dd class="ladder-user-tokens" id="ladder-user-tokens-7" data-i18n-title="weekly-ranked-usage">—</dd>
             <dd class="ladder-user-position">
               <span class="ladder-badge-slot" id="ladder-user-badge-7"></span>
               <span class="ladder-user-rank" id="ladder-user-rank-7" data-localized-text>—</span>
             </dd>
-            <dd class="ladder-user-tokens" id="ladder-user-tokens-7" data-i18n-title="weekly-ranked-usage">—</dd>
           </div>
           <div class="ladder-user-stat">
             <dt data-ladder-range="30" data-localized-text></dt>
+            <dd class="ladder-user-tokens" id="ladder-user-tokens-30" data-i18n-title="monthly-ranked-usage">—</dd>
             <dd class="ladder-user-position">
               <span class="ladder-badge-slot" id="ladder-user-badge-30"></span>
               <span class="ladder-user-rank" id="ladder-user-rank-30" data-localized-text>—</span>
             </dd>
-            <dd class="ladder-user-tokens" id="ladder-user-tokens-30" data-i18n-title="monthly-ranked-usage">—</dd>
           </div>
         </dl>
         <div class="ladder-toolbar ladder-upload-toolbar">
@@ -989,6 +989,13 @@
       };
     })();
     const t = locale.t;
+    function formatUsagePeriod(days, hourly) {
+      const value = hourly ? days * 24 : days;
+      if (hourly && document.documentElement.lang === 'zh-CN') {
+        return `${locale.number(value, { useGrouping: false })}时`;
+      }
+      return locale.number(value, { style: 'unit', unit: hourly ? 'hour' : 'day', unitDisplay: 'short', useGrouping: false });
+    }
     const AGENT_LABELS = {
       agy: 'Antigravity CLI', antigravity: 'Antigravity CLI', claude: 'Claude Code', 'claude-desktop': 'Claude Code',
       codex: 'Codex CLI', dsh: 'DeepSeek Harness', gemini: 'Gemini CLI', grokbuild: 'Grok Build', hermes: 'Hermes Agent',
@@ -1252,14 +1259,8 @@
         const hourly = usageMode === 'hourly';
         const windows = hourly ? usageSummary?.hourly?.windows : usageSummary?.windows;
         const range = windows?.[usageRange] ?? null;
-        const shortChineseHours = hourly && document.documentElement.lang === 'zh-CN';
-        const periodFormat = shortChineseHours
-          ? { useGrouping: false }
-          : { style: 'unit', unit: hourly ? 'hour' : 'day', unitDisplay: 'short', useGrouping: false };
         for (const tab of usageRangeTabs) {
-          const days = Number(tab.dataset.days);
-          const period = locale.number(hourly ? days * 24 : days, periodFormat);
-          const label = shortChineseHours ? `${period}时` : period;
+          const label = formatUsagePeriod(Number(tab.dataset.days), hourly);
           if (tab.firstElementChild.textContent !== label) tab.firstElementChild.textContent = label;
           tab.setAttribute('aria-selected', String(tab.dataset.range === usageRange));
         }
@@ -2142,14 +2143,8 @@
 
       function renderRangeLabels() {
         const hourly = rankingMode === 'hourly';
-        const shortChineseHours = hourly && document.documentElement.lang === 'zh-CN';
-        const format = shortChineseHours
-          ? { useGrouping: false }
-          : { style: 'unit', unit: hourly ? 'hour' : 'day', unitDisplay: 'short', useGrouping: false };
         for (const label of rangeLabels) {
-          const days = Number(label.dataset.ladderRange);
-          const period = locale.number(hourly ? days * 24 : days, format);
-          label.textContent = t('ranking-recent-period', shortChineseHours ? `${period}时` : period);
+          label.textContent = formatUsagePeriod(Number(label.dataset.ladderRange), hourly);
         }
       }
 

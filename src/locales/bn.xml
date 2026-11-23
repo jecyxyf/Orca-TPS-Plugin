@@ -281,5 +281,4 @@
   <message id="ranking-update-mode">র‍্যাঙ্কিং হালনাগাদের পদ্ধতি</message>
   <message id="ranking-update-daily">দিন অনুযায়ী</message>
   <message id="ranking-update-hourly">প্রতি ২৪ ঘণ্টায় হালনাগাদ</message>
-  <message id="ranking-recent-period">গত {0}</message>
 </messages>

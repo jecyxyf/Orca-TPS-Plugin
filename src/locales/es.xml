@@ -281,5 +281,4 @@
   <message id="ranking-update-mode">Método de actualización de la clasificación</message>
   <message id="ranking-update-daily">Por días</message>
   <message id="ranking-update-hourly">Cada 24 h</message>
-  <message id="ranking-recent-period">Últimas {0}</message>
 </messages>

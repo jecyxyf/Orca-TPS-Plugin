@@ -281,5 +281,4 @@
   <message id="ranking-update-mode">Cara memperbarui peringkat</message>
   <message id="ranking-update-daily">Per hari</message>
   <message id="ranking-update-hourly">Setiap 24 jam</message>
-  <message id="ranking-recent-period">{0} terakhir</message>
 </messages>

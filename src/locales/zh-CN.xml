@@ -281,5 +281,4 @@
   <message id="ranking-update-mode">排名更新方式</message>
   <message id="ranking-update-daily">按天数更新</message>
   <message id="ranking-update-hourly">按24小时更新</message>
-  <message id="ranking-recent-period">近{0}</message>
 </messages>

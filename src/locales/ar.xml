@@ -281,5 +281,4 @@
   <message id="ranking-update-mode">طريقة تحديث الترتيب</message>
   <message id="ranking-update-daily">حسب اليوم</message>
   <message id="ranking-update-hourly">التحديث كل 24 ساعة</message>
-  <message id="ranking-recent-period">آخر {0}</message>
 </messages>
