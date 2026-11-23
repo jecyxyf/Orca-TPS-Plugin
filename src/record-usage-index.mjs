@@ -3,10 +3,13 @@ import { personalRecordsCutoff, USAGE_RETENTION_MS } from './local-usage-db.mjs'
 import { HOUR_MS, MAX_RECENT_REQUESTS, RECENT_STATS_MS, hourStart, validStatsLabel } from './leaderboard-stats.mjs';
 import { validInstallationId } from './leaderboard-installation.mjs';
 import { sourceMessage } from './locales.mjs';
-import { accumulateRecords, dailySeries, leaderboardDay, localHourStart, maxRequestSpeed, requestTokens, summarizeHourlyUsage, summarizeUsage } from './usage-summary.mjs';
+import {
+  accumulateRecords, dailySeries, HISTORY_DAYS, leaderboardDay, localHourStart, maxRequestSpeed,
+  requestTokens, summarizeHourlyUsage, summarizeUsage, usageCutoffMs
+} from './usage-summary.mjs';
 
 const sumTokens = (a, b) => Math.min(Number.MAX_SAFE_INTEGER, a + b);
-const importStamp = item => 'local-history:' + item.stamp;
+const importStamp = item => `local-history-${HISTORY_DAYS}:${item.stamp}`;
 const RECENT_CAPTURE_LIMIT = 4096;
 
 export function createRecordUsageIndex({
@@ -15,16 +18,17 @@ export function createRecordUsageIndex({
 }) {
   const observed = new Map(), recentCaptures = new Set();
   let collection, history, cursor = 0, progress = { done: 0, total: 0 };
-  let ready, refreshTail = Promise.resolve(), recordsChanged = true, totals, personal, hourly, updatedAt = null;
+  let ready, refreshTail = Promise.resolve(), recordsChanged = true, totals, pastDays, personal, hourly, updatedAt = null;
 
   function assemble(at) {
     const day = leaderboardDay(at), localMidnight = new Date(at).setHours(0, 0, 0, 0);
     if (!recordsChanged && totals && totals.day === day && totals.localMidnight === localMidnight && at < totals.nextExpiry) return totals;
     const leaderboardCutoff = at - USAGE_RETENTION_MS;
-    const records = db.readRecords({ from: personalRecordsCutoff(at), to: at + 1 });
+    const records = db.readRecords({ from: Math.min(localMidnight, leaderboardCutoff), to: at + 1 });
     const firstRankingRecord = records.find(row => row.completedAt >= leaderboardCutoff);
     const days = Object.create(null), sources = new Map(), recent = new Map();
-    for (const [provider, items] of Map.groupBy(records, item => item.provider)) accumulateRecords(days, provider, items);
+    const today = records.filter(row => row.completedAt >= localMidnight);
+    accumulateRecords(days, undefined, today);
     for (const row of records) {
       if (row.completedAt < leaderboardCutoff) continue;
       if (!sources.has(row.deviceGuid)) sources.set(row.deviceGuid, { daily: new Map(), buckets: new Map(), hours: new Map() });
@@ -48,7 +52,7 @@ export function createRecordUsageIndex({
       }
     }
     for (const [key, items] of recent) onRecentRequests(key, items);
-    totals = { day, localMidnight, days, sources, maxSpeed: maxRequestSpeed(records, localMidnight),
+    totals = { day, localMidnight, days, sources, maxSpeed: maxRequestSpeed(today),
       nextExpiry: firstRankingRecord ? firstRankingRecord.completedAt + USAGE_RETENTION_MS + 1 : Infinity };
     recordsChanged = false;
     return totals;
@@ -56,24 +60,41 @@ export function createRecordUsageIndex({
 
   function snapshot(at) {
     const cutoffAt = localHourStart(at), imported = collection.importedAt !== null;
-    if (!hourly || (imported && (!hourly.ready || hourly.cutoffAt !== cutoffAt))) {
-      const records = db.readRecords({ from: personalRecordsCutoff(at), to: cutoffAt });
-      hourly = { cutoffAt, ready: imported, windows: summarizeHourlyUsage(records, cutoffAt) };
+    const historyDays = collection.historyDays ?? 0;
+    if (!hourly || (imported && (!hourly.ready || hourly.cutoffAt !== cutoffAt || hourly.historyDays !== historyDays))) {
+      const records = db.iterateRecords({ from: cutoffAt - HISTORY_DAYS * 24 * HOUR_MS, to: cutoffAt });
+      hourly = { cutoffAt, ready: imported, historyDays, windows: summarizeHourlyUsage(records, cutoffAt) };
     }
-    const { days, maxSpeed } = assemble(at);
-    const windows = summarizeUsage([days], at);
+    const { days, localMidnight, maxSpeed } = assemble(at);
+    if (pastDays?.until !== localMidnight) {
+      const historical = Object.create(null);
+      accumulateRecords(historical, undefined, db.iterateRecords({ from: usageCutoffMs(at), to: localMidnight }));
+      pastDays = { until: localMidnight, historical };
+    }
+    const dayMaps = [pastDays.historical, days];
+    const windows = summarizeUsage(dayMaps, at);
     windows.today.maxSpeed = maxSpeed;
-    personal = { updatedAt, progress, windows, daily: dailySeries([days], at), hourly };
+    personal = { updatedAt, progress, windows, daily: dailySeries(dayMaps, at), hourly };
   }
 
   const initialize = () => ready ??= Promise.resolve().then(() => {
     const at = now();
     collection = db.loadCollection(at);
     const cachedHour = db.readPanel('usage', 'desktop')?.value?.hourly;
-    if (cachedHour?.cutoffAt === localHourStart(at) && Object.hasOwn(cachedHour.windows?.today ?? {}, 'maxSpeed')) hourly = cachedHour;
+    if (cachedHour?.cutoffAt === localHourStart(at) && cachedHour.windows?.year &&
+        Object.hasOwn(cachedHour.windows.today ?? {}, 'maxSpeed')) hourly = cachedHour;
     snapshot(at);
     return true;
   });
+
+  function updateSummaries(inserted) {
+    if (!inserted.length) return;
+    recordsChanged = true;
+    if (pastDays) {
+      const historical = inserted.filter(row => row.completedAt < pastDays.until);
+      accumulateRecords(pastDays.historical, undefined, historical);
+    }
+  }
 
   async function importLocalHistory(at, signal) {
     const cutoff = personalRecordsCutoff(at);
@@ -101,8 +122,9 @@ export function createRecordUsageIndex({
           for (const row of page.records) records.push(row);
           offset = page.nextOffset;
         } while (offset !== null);
-        const added = db.appendRecords({ deviceGuid, records, now: at, logUnitKey: item.key, logStamp: importStamp(item) });
-        recordsChanged ||= added > 0;
+        const insertedRecords = [];
+        db.appendRecords({ deviceGuid, records, now: at, logUnitKey: item.key, logStamp: importStamp(item), insertedRecords });
+        updateSummaries(insertedRecords);
       } catch (error) {
         signal?.throwIfAborted();
         log(sourceMessage('notice.usage-read-failed', error?.code ?? error?.message ?? 'unknown'));
@@ -111,9 +133,9 @@ export function createRecordUsageIndex({
     }
     progress = { done: cursor, total: history.length };
     if (cursor === history.length) {
-      const importedAt = now();
-      const state = { startedAt: collection.startedAt, importedAt };
-      db.saveCollection(state, importedAt);
+      const finishedAt = now();
+      const state = { ...collection, importedAt: collection.importedAt ?? finishedAt, historyDays: HISTORY_DAYS };
+      db.saveCollection(state, finishedAt);
       collection = state;
       history = undefined;
     }
@@ -124,7 +146,7 @@ export function createRecordUsageIndex({
     signal?.throwIfAborted();
     const at = now();
     recordsChanged = db.prune(at) > 0 || recordsChanged;
-    if (collection.importedAt === null) await importLocalHistory(at, signal);
+    if (hasPendingHistory()) await importLocalHistory(at, signal);
     for (const [id, seen] of observed) if (seen <= at - 60_000) observed.delete(id);
     updatedAt = now();
     snapshot(updatedAt);
@@ -144,11 +166,12 @@ export function createRecordUsageIndex({
     const cutoff = Math.max(from, personalRecordsCutoff(at));
     const candidates = records.filter(row => typeof row?.id === 'string' && row.id && typeof row.provider === 'string' &&
       row.completedAt >= cutoff && row.completedAt <= at && !recentCaptures.has(sourceId + '/' + row.id));
-    const added = db.appendRecords({ deviceGuid: sourceId, records: candidates, from, now: at });
+    const insertedRecords = [];
+    const added = db.appendRecords({ deviceGuid: sourceId, records: candidates, from, now: at, insertedRecords });
     for (const row of candidates) recentCaptures.add(sourceId + '/' + row.id);
     while (recentCaptures.size > RECENT_CAPTURE_LIMIT) recentCaptures.delete(recentCaptures.values().next().value);
     observed.set(sourceId, at);
-    recordsChanged ||= added > 0;
+    updateSummaries(insertedRecords);
     return added > 0;
   }
 
@@ -179,8 +202,9 @@ export function createRecordUsageIndex({
   }
 
   const initialized = () => collection != null && collection.importedAt !== null;
+  const hasPendingHistory = () => (collection?.historyDays ?? 0) < HISTORY_DAYS;
   return {
-    refresh, ready: initialize, observe, initialized, summary: () => personal, leaderboardSources, leaderboardHours,
+    refresh, ready: initialize, observe, initialized, hasPendingHistory, summary: () => personal, leaderboardSources, leaderboardHours,
     canPublish: () => initialized() || progress.done > 0,
     leaderboardUsage() {
       const { day, daily } = dayTotals();

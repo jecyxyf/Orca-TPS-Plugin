@@ -31,6 +31,7 @@
   <message id="today">今日</message>
   <message id="last-seven-days">過去 7 日間</message>
   <message id="last-thirty-days">過去 30 日間</message>
+  <message id="last-year">1 年</message>
   <message id="daily-usage-rankings">今日の使用量ランキング</message>
   <message id="empty-today">今日のアップロードはまだありません。</message>
   <message id="usage-overview">使用量の概要</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">毎時更新</message>
   <message id="usage-update-help">更新方法について</message>
   <message id="usage-update-hint-daily">日付で更新。現地時刻の午前0時に今日の統計をリセットし、ゼロから集計します。</message>
-  <message id="usage-update-hint-hourly">毎時更新。現地時刻の毎時0分に、過去24時間、168時間、または720時間の統計を更新します。</message>
+  <message id="usage-update-hint-hourly">現地時刻の毎時0分に、選択した期間の統計を更新します。</message>
   <message id="usage-update-hint-ranking">使用量の変化によって順位が変わることがあります。</message>
   <message id="usage-update-hint-recommended">毎時更新をおすすめします。</message>
   <message id="total-usage">合計使用量（キャッシュの読み取りと書き込みを含む）</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">モデル別の平均出力速度（速い順）</message>
   <message id="empty-model-speeds">この期間にリクエスト数が十分なモデルはありません</message>
   <message id="usage-heatmap">使用量ヒートマップ</message>
-  <message id="heatmap-description">過去 30 日間の日別使用量（M、キャッシュを含む）</message>
-  <message id="heatmap-label">過去 30 日間の日別使用量ヒートマップ（M）</message>
+  <message id="heatmap-description">過去 365 日間の日別使用量（M、キャッシュを含む）</message>
+  <message id="heatmap-label">過去 365 日間の日別使用量ヒートマップ（M）</message>
   <message id="heatmap-less">少ない</message>
   <message id="heatmap-more">多い</message>
   <message id="refresh-current">現在のデータを更新</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">表示されていないその他のモデル · {0}</message>
   <message id="model-speed-insufficient-samples">リクエスト数が少なくランキング対象外のモデル · {0}</message>
   <message id="usage-unavailable">使用量の統計を一時的に取得できません</message>
-  <message id="recent-usage-total">過去 30 日間 · {0} · 利用日数 · {1}</message>
+  <message id="recent-usage-total">過去 365 日間 · {0} · 利用日数 · {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · リクエスト数 · {2}</message>
   <message id="heatmap-day-empty">{0} · 使用量の記録なし</message>
   <message id="current-channel">現在のチャンネル</message>

@@ -164,7 +164,7 @@ async function tick(orca) {
   try {
     await index.refresh({ signal });
     if (!signal.aborted) publishUsage(orca, index);
-    delay = index.initialized() ? IDLE_DELAY_MS : BACKFILL_DELAY_MS;
+    delay = index.hasPendingHistory() ? BACKFILL_DELAY_MS : IDLE_DELAY_MS;
   } catch (error) {
     if (!signal.aborted) orca.log(locales.t('notice.usage-refresh-failed', error?.message ?? 'unknown'));
   }

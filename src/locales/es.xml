@@ -31,6 +31,7 @@
   <message id="today">Hoy</message>
   <message id="last-seven-days">Últimos 7 días</message>
   <message id="last-thirty-days">Últimos 30 días</message>
+  <message id="last-year">1 año</message>
   <message id="daily-usage-rankings">Clasificación de uso de hoy</message>
   <message id="empty-today">Aún no hay subidas hoy.</message>
   <message id="usage-overview">Resumen de uso</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">Cada hora</message>
   <message id="usage-update-help">Acerca de la actualización</message>
   <message id="usage-update-hint-daily">Por fecha. Las estadísticas de hoy vuelven a cero a medianoche, hora local.</message>
-  <message id="usage-update-hint-hourly">Cada hora. Al inicio de cada hora local, se recalculan las últimas 24, 168 o 720 horas.</message>
+  <message id="usage-update-hint-hourly">Al inicio de cada hora local, se recalculan las estadísticas del periodo seleccionado.</message>
   <message id="usage-update-hint-ranking">Los cambios en el uso pueden afectar a la clasificación.</message>
   <message id="usage-update-hint-recommended">Recomendamos actualizar cada hora.</message>
   <message id="total-usage">Uso total (incluye lecturas y escrituras de caché)</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">Velocidad media de salida por modelo, del más rápido al más lento</message>
   <message id="empty-model-speeds">Ningún modelo tiene suficientes solicitudes en este período</message>
   <message id="usage-heatmap">Mapa de calor de uso</message>
-  <message id="heatmap-description">Uso diario de los últimos 30 días (M, caché incluida)</message>
-  <message id="heatmap-label">Mapa de calor del uso diario de los últimos 30 días (M)</message>
+  <message id="heatmap-description">Uso diario de los últimos 365 días (M, caché incluida)</message>
+  <message id="heatmap-label">Mapa de calor del uso diario de los últimos 365 días (M)</message>
   <message id="heatmap-less">Menos</message>
   <message id="heatmap-more">Más</message>
   <message id="refresh-current">Actualizar datos actuales</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">Modelos adicionales omitidos: {0}</message>
   <message id="model-speed-insufficient-samples">Modelos con pocas solicitudes para clasificar: {0}</message>
   <message id="usage-unavailable">Las estadísticas de uso no están disponibles temporalmente</message>
-  <message id="recent-usage-total">Últimos 30 días: {0} · Días activos: {1}</message>
+  <message id="recent-usage-total">Últimos 365 días: {0} · Días activos: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Solicitudes: {2}</message>
   <message id="heatmap-day-empty">{0} · Sin uso registrado</message>
   <message id="current-channel">Canal actual</message>

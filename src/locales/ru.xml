@@ -31,6 +31,7 @@
   <message id="today">Сегодня</message>
   <message id="last-seven-days">Последние 7 дней</message>
   <message id="last-thirty-days">Последние 30 дней</message>
+  <message id="last-year">1 год</message>
   <message id="daily-usage-rankings">Рейтинг по расходу за сегодня</message>
   <message id="empty-today">Сегодня ещё не было загрузок.</message>
   <message id="usage-overview">Обзор расхода</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">Каждый час</message>
   <message id="usage-update-help">О способе обновления</message>
   <message id="usage-update-hint-daily">По дате. В полночь по местному времени сегодняшняя статистика обнуляется, и подсчёт начинается заново.</message>
-  <message id="usage-update-hint-hourly">Каждый час. В начале местного часа пересчитываются данные за последние 24, 168 или 720 часов.</message>
+  <message id="usage-update-hint-hourly">В начале каждого часа по местному времени данные за выбранный период пересчитываются.</message>
   <message id="usage-update-hint-ranking">Изменения в использовании могут повлиять на место в рейтинге.</message>
   <message id="usage-update-hint-recommended">Рекомендуем обновлять данные каждый час.</message>
   <message id="total-usage">Общий расход (включая чтение и запись кэша)</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">Средняя скорость вывода по моделям, сначала самые быстрые</message>
   <message id="empty-model-speeds">За этот период ни у одной модели нет достаточного числа запросов</message>
   <message id="usage-heatmap">Тепловая карта расхода</message>
-  <message id="heatmap-description">Ежедневный расход за последние 30 дней (M, включая кэш)</message>
-  <message id="heatmap-label">Тепловая карта ежедневного расхода за последние 30 дней (M)</message>
+  <message id="heatmap-description">Ежедневный расход за последние 365 дней (M, включая кэш)</message>
+  <message id="heatmap-label">Тепловая карта ежедневного расхода за последние 365 дней (M)</message>
   <message id="heatmap-less">Меньше</message>
   <message id="heatmap-more">Больше</message>
   <message id="refresh-current">Обновить текущие данные</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">Другие скрытые модели · {0}</message>
   <message id="model-speed-insufficient-samples">Модели, у которых слишком мало запросов для рейтинга · {0}</message>
   <message id="usage-unavailable">Статистика расхода временно недоступна</message>
-  <message id="recent-usage-total">За последние 30 дней · {0} · Дней с активностью · {1}</message>
+  <message id="recent-usage-total">За последние 365 дней · {0} · Дней с активностью · {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Запросы · {2}</message>
   <message id="heatmap-day-empty">{0} · Нет записей о расходе</message>
   <message id="current-channel">Текущий канал</message>

@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { openLocalUsageDb, personalRecordsCutoff, USAGE_RETENTION_MS } from '../src/local-usage-db.mjs';
 import { HOUR_MS } from '../src/leaderboard-stats.mjs';
 import { createRecordUsageIndex } from '../src/record-usage-index.mjs';
+import { HISTORY_DAYS } from '../src/usage-summary.mjs';
 import { createSourceUploader, createSqliteUploadStorage } from '../src/usage-upload.mjs';
 
 const now = Date.UTC(2026, 10, 21, 12);
@@ -53,7 +54,7 @@ test('complete log reads replace old rows, while interrupted reads preserve them
     const affected = db.replaceLog(reading([record('a', now, 20)], { logStamp: 'updated' }));
     assert.deepEqual(affected, [edge, now - 1, now]);
     assert.deepEqual(db.readRecords().map(row => [row.id, row.tokens]), [['a', 20]]);
-    db.prune(now + USAGE_RETENTION_MS + 2 * HOUR_MS);
+    db.prune(now + HISTORY_DAYS * 24 * HOUR_MS + 2 * HOUR_MS);
     assert.deepEqual(db.readRecords(), []);
     assert.equal(db.readLogVersions(source).size, 0);
   } finally { db.close(); }
@@ -130,24 +131,53 @@ test('a fresh database imports local history once, then resumes live collection 
   } finally { db.close(); }
 });
 
-test('a database from the previous version keeps its data without running historical discovery again', async t => {
+test('an existing database resumes the annual backfill without duplicating saved requests or uploading old usage', async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'tps-existing-usage-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const filename = path.join(dir, 'usage.sqlite');
   let db = openLocalUsageDb(filename);
-  db.replaceLog(reading([record('existing', now - 100, 12)]));
+  const recent = record('existing', now - 100, 12);
+  const older = record('100 days ago', now - 100 * 24 * HOUR_MS, 40);
+  const oldest = record('200 days ago', now - 200 * 24 * HOUR_MS, 20);
+  db.replaceLog(reading([recent], { logStamp: 'local-history:stamp' }));
   db.close();
   const olderDatabase = new DatabaseSync(filename);
   olderDatabase.prepare('DELETE FROM panel_cache WHERE panel=?').run('usage-collection');
   olderDatabase.close();
   db = openLocalUsageDb(filename);
-  const index = createRecordUsageIndex({ db, deviceGuid: source, now: () => now,
-    discover: async () => assert.fail('an existing database must skip historical discovery') });
+  let reads = 0;
+  const makeIndex = () => createRecordUsageIndex({ db, deviceGuid: source, now: () => now, maxUnits: 1, budgetBytes: 1000,
+    discover: async cutoff => {
+      assert.ok(cutoff <= oldest.completedAt);
+      return [
+        { key: 'log', stamp: 'stamp', bytes: 1, mtimeMs: now,
+          readRecords: async () => { reads++; return { records: [recent, older], nextOffset: null }; } },
+        { key: 'archive', stamp: 'stamp', bytes: 1, mtimeMs: older.completedAt,
+          readRecords: async () => { reads++; return { records: [oldest], nextOffset: null }; } }
+      ];
+    } });
+  let index = makeIndex();
   try {
     await index.refresh();
     assert.equal(index.initialized(), true);
+    assert.equal(index.hasPendingHistory(), true);
     assert.equal(index.observe(source, [record('old unindexed', now - 200, 40)]), false);
     assert.equal(index.summary().windows.today.tokens, 12);
+    assert.equal(index.summary().windows.year.tokens, 52);
+    assert.equal(reads, 1);
+    db.close();
+    db = openLocalUsageDb(filename);
+    index = makeIndex();
+    await index.refresh();
+    await index.refresh();
+    assert.equal(index.hasPendingHistory(), false);
+    assert.equal(reads, 2);
+    assert.equal(index.summary().windows.year.tokens, 72);
+    assert.equal(index.summary().windows.month.tokens, 12);
+    assert.equal(index.summary().daily.length, 3);
+    assert.equal(index.summary().hourly.windows.year.tokens - index.summary().hourly.windows.month.tokens, 60);
+    assert.equal(index.leaderboardSources()[0].buckets.reduce((total, [, tokens]) => total + tokens, 0), 12);
+    assert.equal(db.loadCollection(now).importedAt, now);
   } finally { db.close(); }
 });
 
@@ -197,12 +227,15 @@ test('the version 1 migration keeps request totals, log versions, snapshots and 
   } finally { migrated.close(); }
 });
 
-test('personal hourly stats use the last local hour for all three periods and hold until the next hour', async () => {
+test('personal hourly stats use the last local hour for all four periods and hold until the next hour', async () => {
   const db = openLocalUsageDb(':memory:');
   const cutoff = new Date(2026, 10, 21, 14).getTime();
+  const year = HISTORY_DAYS * 24 * HOUR_MS;
   let clock = cutoff + 35 * 60_000;
   const records = [
-    record('too old', cutoff - 720 * HOUR_MS - 1, 1000),
+    record('before year', cutoff - year - 1, 2000),
+    record('year edge', cutoff - year, 2048),
+    record('before month', cutoff - 720 * HOUR_MS - 1, 1000),
     record('month edge', cutoff - 720 * HOUR_MS, 1),
     record('before week', cutoff - 168 * HOUR_MS - 1, 2),
     record('week edge', cutoff - 168 * HOUR_MS, 4),
@@ -216,13 +249,13 @@ test('personal hourly stats use the last local hour for all three periods and ho
     discover: async () => assert.fail('a ready database must not rescan logs') });
   const index = createIndex();
   try {
-    db.saveCollection({ startedAt: cutoff - 60_000, importedAt: cutoff - 60_000 }, cutoff - 60_000);
+    db.saveCollection({ startedAt: cutoff - 60_000, importedAt: cutoff - 60_000, historyDays: HISTORY_DAYS }, cutoff - 60_000);
     db.appendRecords({ deviceGuid: source, records, now: clock });
     await index.refresh();
     const first = index.summary().hourly;
     assert.equal(first.cutoffAt, cutoff);
     assert.equal(first.ready, true);
-    assert.deepEqual(Object.values(first.windows).map(value => [value.tokens, value.requests]), [[48, 2], [60, 4], [63, 6]]);
+    assert.deepEqual(Object.values(first.windows).map(value => [value.tokens, value.requests]), [[48, 2], [60, 4], [63, 6], [3111, 8]]);
     assert.deepEqual(first.windows.today.maxSpeed, { tokensPerSecond: 160, estimated: true });
     assert.equal(index.summary().windows.today.tokens, 224);
     assert.deepEqual(index.summary().windows.today.maxSpeed, { tokensPerSecond: 260, estimated: false });
@@ -242,10 +275,11 @@ test('personal hourly stats use the last local hour for all three periods and ho
     clock = cutoff + HOUR_MS;
     await restarted.refresh();
     assert.equal(restarted.summary().hourly.cutoffAt, clock);
-    assert.deepEqual(Object.values(restarted.summary().hourly.windows).map(value => value.tokens), [480, 504, 510]);
+    assert.deepEqual(Object.values(restarted.summary().hourly.windows).map(value => value.tokens), [480, 504, 510, 1511]);
     assert.deepEqual(restarted.summary().hourly.windows.today.maxSpeed, { tokensPerSecond: 300, estimated: true });
 
     const legacy = structuredClone(restarted.summary());
+    delete legacy.hourly.windows.year;
     delete legacy.hourly.windows.today.maxSpeed;
     db.publishPanel('usage', 'desktop', legacy, clock);
     const upgraded = createIndex();

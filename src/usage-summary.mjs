@@ -18,10 +18,9 @@ export const REMOTE_USAGE_PREFIX = 'remote:';
 export const USAGE_READ_BATCH = 16;
 export const BACKFILL_BYTES = 16 * 1024 * 1024;
 export const BACKFILL_UNITS = 8;
-export const WINDOWS = [['today', 1], ['week', 7], ['month', 30]];
 export const MAX_WINDOW_DAYS = 30;
-// The heatmap shows a year, so the index keeps a year of per-day counts; windows still use the spans above.
 export const HISTORY_DAYS = 365;
+export const WINDOWS = [['today', 1], ['week', 7], ['month', 30], ['year', HISTORY_DAYS]];
 const ROW_LIMIT = 30;
 const SPEED_ROW_LIMIT = 10;
 // Per day, provider and model: requests, fresh input, output, cache read, cache write, then speed samples:
@@ -58,9 +57,10 @@ export function usageCutoffMs(nowMs) {
 }
 
 /** Adds one source's records into `days[day][provider][model] = [requests, fresh, output, cacheRead, cacheWrite]`. */
-export function accumulateRecords(days, provider, records, { minDay = '', leaderboardDays } = {}) {
+export function accumulateRecords(days, sourceProvider, records, { minDay = '', leaderboardDays } = {}) {
   for (const record of records) {
     if (!Number.isFinite(record?.completedAt)) continue;
+    const provider = sourceProvider ?? record.provider;
     if (leaderboardDays?.records && record.completedAt >= leaderboardDays.recordFrom) {
       leaderboardDays.records.push({ ...record, provider });
     }
@@ -86,25 +86,29 @@ export function accumulateRecords(days, provider, records, { minDay = '', leader
       const total = (leaderboardDays.usageByTime[at] ?? 0) + requestTokens(record);
       if (Number.isSafeInteger(total)) leaderboardDays.usageByTime[at] = total;
     }
-    const model = typeof record.model === 'string' && record.model ? record.model.slice(0, 128) : '';
-    const byModel = (days[day] ??= Object.create(null))[provider] ??= Object.create(null);
-    const cell = byModel[model] ??= new Array(COUNTERS).fill(0);
-    cell[0] += 1;
-    cell[1] += numberOr0(record.freshInputTokens);
-    cell[2] += numberOr0(record.outputTokens);
-    cell[3] += numberOr0(record.cacheReadTokens);
-    cell[4] += numberOr0(record.cacheCreationTokens);
-    const speed = record.tokensPerSecond;
-    if (Number.isFinite(speed) && speed > 0) {
-      cell[SPEED_AT] += 1;
-      cell[SPEED_AT + 1] += speed;
-      if (record.isEstimatedSpeed) cell[SPEED_AT + 2] += 1;
-    }
+    countRequest(days[day] ??= Object.create(null), provider, record);
   }
   return days;
 }
 
 const numberOr0 = value => Number.isFinite(value) && value > 0 ? value : 0;
+
+function countRequest(byProvider, provider, record) {
+  const model = typeof record.model === 'string' && record.model ? record.model.slice(0, 128) : '';
+  const byModel = byProvider[provider] ??= Object.create(null);
+  const cell = byModel[model] ??= new Array(COUNTERS).fill(0);
+  cell[0] += 1;
+  cell[1] += numberOr0(record.freshInputTokens);
+  cell[2] += numberOr0(record.outputTokens);
+  cell[3] += numberOr0(record.cacheReadTokens);
+  cell[4] += numberOr0(record.cacheCreationTokens);
+  const speed = numberOr0(record.tokensPerSecond);
+  if (speed > 0) {
+    cell[SPEED_AT] += 1;
+    cell[SPEED_AT + 1] += speed;
+    if (record.isEstimatedSpeed) cell[SPEED_AT + 2] += 1;
+  }
+}
 
 export function requestTokens(record) {
   return numberOr0(record.freshInputTokens) + numberOr0(record.outputTokens) +
@@ -152,26 +156,36 @@ export function summarizeUsage(dayMaps, nowMs) {
 }
 
 export function summarizeHourlyUsage(records, cutoffAt) {
-  return Object.fromEntries(WINDOWS.map(([name, span]) => {
-    const start = cutoffAt - span * 24 * HOUR_MS;
-    const rows = records.filter(row => row.completedAt >= start && row.completedAt < cutoffAt);
-    const days = Object.create(null);
-    for (const [provider, items] of Map.groupBy(rows, row => row.provider)) accumulateRecords(days, provider, items);
-    const summary = summarizeGroups(Object.values(days));
-    if (name === 'today') summary.maxSpeed = maxRequestSpeed(rows);
+  const segments = WINDOWS.map(([name, span]) => ({ name, start: cutoffAt - span * 24 * HOUR_MS, group: Object.create(null) }));
+  let fastest = null;
+  for (const record of records) {
+    if (record.completedAt >= cutoffAt) continue;
+    const segment = segments.find(({ start }) => record.completedAt >= start);
+    if (!segment) continue;
+    countRequest(segment.group, record.provider, record);
+    if (segment.name === 'today') fastest = fasterRequest(fastest, record);
+  }
+  const groups = [];
+  return Object.fromEntries(segments.map(({ name, group }) => {
+    groups.push(group);
+    const summary = summarizeGroups(groups);
+    if (name === 'today') summary.maxSpeed = fastest;
     return [name, summary];
   }));
 }
 
-export function maxRequestSpeed(records, from = -Infinity) {
-  let fastest = null;
-  for (const { completedAt, tokensPerSecond, isEstimatedSpeed: estimated } of records) {
-    if (completedAt < from || !Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0) continue;
-    if (!fastest || tokensPerSecond > fastest.tokensPerSecond ||
-        (tokensPerSecond === fastest.tokensPerSecond && fastest.estimated && !estimated)) {
-      fastest = { tokensPerSecond, estimated: estimated === true };
-    }
+function fasterRequest(fastest, { tokensPerSecond, isEstimatedSpeed: estimated }) {
+  if (!Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0) return fastest;
+  if (!fastest || tokensPerSecond > fastest.tokensPerSecond ||
+      (tokensPerSecond === fastest.tokensPerSecond && fastest.estimated && !estimated)) {
+    return { tokensPerSecond, estimated: estimated === true };
   }
+  return fastest;
+}
+
+export function maxRequestSpeed(records) {
+  let fastest = null;
+  for (const record of records) fastest = fasterRequest(fastest, record);
   return fastest;
 }
 

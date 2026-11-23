@@ -3,13 +3,11 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { HOUR_MS } from './leaderboard-stats.mjs';
 import { validInstallationId } from './leaderboard-installation.mjs';
-import { localHourStart, MAX_WINDOW_DAYS, requestTokens } from './usage-summary.mjs';
+import { HISTORY_DAYS, localHourStart, requestTokens, usageCutoffMs } from './usage-summary.mjs';
 
 export const USAGE_RETENTION_MS = 720 * HOUR_MS;
 export function personalRecordsCutoff(now) {
-  const date = new Date(now);
-  const calendarStart = new Date(date.getFullYear(), date.getMonth(), date.getDate() - (MAX_WINDOW_DAYS - 1)).getTime();
-  return Math.min(calendarStart, localHourStart(now) - USAGE_RETENTION_MS);
+  return Math.min(usageCutoffMs(now), localHourStart(now) - HISTORY_DAYS * 24 * HOUR_MS);
 }
 const PANELS = new Set(['current-data', 'usage', 'leaderboard']);
 const COLLECTION_KEY = 'usage-collection';
@@ -185,7 +183,7 @@ export function openLocalUsageDb(filename) {
     });
   }
 
-  function appendRecords({ deviceGuid, records, now, from = 0, logUnitKey = 'live', logStamp = 'live' }) {
+  function appendRecords({ deviceGuid, records, now, from = 0, logUnitKey = 'live', logStamp = 'live', insertedRecords }) {
     const cutoff = Math.max(from, personalRecordsCutoff(now));
     const incoming = [];
     for (const row of records) {
@@ -195,7 +193,11 @@ export function openLocalUsageDb(filename) {
     if (!incoming.length) return 0;
     return atomic(() => {
       let inserted = 0;
-      for (const record of incoming) inserted += Number(insertRecord.run(deviceGuid, logUnitKey, now, ...recordValues(record)).changes);
+      for (const record of incoming) {
+        if (!insertRecord.run(deviceGuid, logUnitKey, now, ...recordValues(record)).changes) continue;
+        inserted++;
+        insertedRecords?.push(record);
+      }
       if (inserted) upsertState.run(`${LOG_PREFIX}${deviceGuid}/${logUnitKey}`, deviceGuid, encode(logStamp), now);
       return inserted;
     });
@@ -205,6 +207,11 @@ export function openLocalUsageDb(filename) {
     return db.prepare(`SELECT device_guid AS deviceGuid, log_unit_key AS logUnitKey, updated_at AS indexedAt, ${recordSelect}
       FROM usage_records WHERE completed_at>=? AND completed_at<?${deviceGuid ? ' AND device_guid=?' : ''}
       ORDER BY completed_at, record_id`).all(from, to, ...(deviceGuid ? [deviceGuid] : [])).map(shape);
+  }
+
+  function* iterateRecords({ from, to }) {
+    const select = db.prepare(`SELECT ${recordSelect} FROM usage_records WHERE completed_at>=? AND completed_at<?`);
+    for (const row of select.iterate(from, to)) yield shape(row);
   }
 
   function readCollection(now) {
@@ -257,7 +264,7 @@ export function openLocalUsageDb(filename) {
   };
 
   return {
-    replaceLog, appendRecords, readRecords, loadCollection, saveCollection,
+    replaceLog, appendRecords, readRecords, iterateRecords, loadCollection, saveCollection,
     readSources: (from = 0) => listSources.all(from).map(row => row.deviceGuid),
     readLogVersions(deviceGuid) {
       const prefix = `${LOG_PREFIX}${deviceGuid}/`;

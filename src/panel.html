@@ -413,6 +413,7 @@
     .empty-text { margin: 10px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
     .war, .heat { padding: 10px 16px; }
     .war-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 13px; background: var(--speed-bg); }
+    .war-period-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .war-tab { min-width: 0; padding: 5px 4px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 650; cursor: pointer; }
     .war-tab[aria-selected="true"], .war-tab[aria-pressed="true"] { background: var(--button-bg); color: var(--blue); }
     .war-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
@@ -463,9 +464,9 @@
     .rank-index { flex-shrink: 0; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .rank-tps { flex-shrink: 0; padding: 3px 7px; border-radius: 10px; color: var(--speed); background: var(--speed-bg); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
     #speed .war-fill { background: var(--speed); }
-    .heat { position: relative; }
+    .heat { position: relative; min-width: 0; }
     .heat-scroll { direction: ltr; margin: 8px -4px 0; padding: 0 4px 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
-    .heat-canvas { position: relative; }
+    .heat-canvas { position: relative; width: max-content; }
     .heat-months { position: relative; height: 13px; color: var(--muted); font-size: 9px; }
     .heat-months span { position: absolute; top: 0; white-space: nowrap; }
     .heat-grid { display: grid; grid-template-rows: repeat(7, 8px); grid-auto-flow: column; grid-auto-columns: 8px; gap: 2px; }
@@ -676,10 +677,11 @@
         </details>
       </div>
       <section class="war" id="war" data-i18n-aria-label="usage-overview">
-        <div class="war-tabs" role="tablist" data-i18n-aria-label="usage-period">
+        <div class="war-tabs war-period-tabs" role="tablist" data-i18n-aria-label="usage-period">
           <button class="war-tab" type="button" role="tab" data-range="today" aria-selected="true" data-testid="range-today"><span data-i18n="today"></span></button>
           <button class="war-tab" type="button" role="tab" data-range="week" aria-selected="false" data-testid="range-week"><span data-i18n="last-seven-days"></span></button>
           <button class="war-tab" type="button" role="tab" data-range="month" aria-selected="false" data-testid="range-month"><span data-i18n="last-thirty-days"></span></button>
+          <button class="war-tab" type="button" role="tab" data-range="year" aria-selected="false" data-testid="range-year"><span data-i18n="last-year"></span></button>
         </div>
         <div class="war-totals">
           <div class="war-stat">
@@ -715,7 +717,7 @@
           <h2 class="section-title" id="heat-title"><span data-i18n="usage-heatmap"></span></h2>
           <p class="section-detail" id="heat-sub"><span data-i18n="heatmap-description"></span></p>
         </div>
-        <div class="heat-scroll" id="heat-scroll">
+        <div class="heat-scroll" id="heat-scroll" tabindex="0">
           <div class="heat-canvas">
             <div class="heat-months" id="heat-months" aria-hidden="true"></div>
             <div class="heat-grid" id="heat-grid" role="img" data-i18n-aria-label="heatmap-label"></div>
@@ -1303,8 +1305,8 @@
         usageHelp.open = false;
         usageHelp.querySelector('summary').focus();
       });
-      // One cell per local day over the last 30 days, grouped by week.
-      const HEAT_DAYS = 30;
+      // One cell per local day over the last year, grouped by week.
+      const HEAT_DAYS = 365;
       const localKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
       const dayLabel = date => locale.date(date, { dateStyle: 'full' });
       function renderHeatmap() {
@@ -1382,7 +1384,7 @@
       }
       byId('heat-grid').addEventListener('pointerover', event => {
         const cell = event.target.closest?.('.heat-cell');
-        if (cell && !cell.classList.contains('future')) showHeatTip(cell);
+        if (cell && !cell.classList.contains('outside')) showHeatTip(cell);
         else heatTip.hidden = true;
       });
       byId('heat-grid').addEventListener('pointerleave', () => { heatTip.hidden = true; });

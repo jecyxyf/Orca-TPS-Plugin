@@ -31,6 +31,7 @@
   <message id="today">आज</message>
   <message id="last-seven-days">पिछले 7 दिन</message>
   <message id="last-thirty-days">पिछले 30 दिन</message>
+  <message id="last-year">1 साल</message>
   <message id="daily-usage-rankings">आज की उपयोग रैंकिंग</message>
   <message id="empty-today">आज अभी कोई अपलोड नहीं है।</message>
   <message id="usage-overview">उपयोग का सारांश</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">हर घंटे</message>
   <message id="usage-update-help">अपडेट के तरीके की जानकारी</message>
   <message id="usage-update-hint-daily">तारीख के अनुसार। स्थानीय समय में आधी रात को आज के आँकड़े फिर से शून्य से शुरू होते हैं।</message>
-  <message id="usage-update-hint-hourly">हर घंटे। स्थानीय समय में हर घंटे की शुरुआत पर पिछले 24, 168 या 720 घंटे के आँकड़े निकाले जाते हैं।</message>
+  <message id="usage-update-hint-hourly">स्थानीय समय में हर घंटे की शुरुआत पर चुनी गई अवधि के आँकड़े फिर से निकाले जाते हैं।</message>
   <message id="usage-update-hint-ranking">उपयोग में बदलाव से लीडरबोर्ड की रैंकिंग बदल सकती है।</message>
   <message id="usage-update-hint-recommended">हम हर घंटे अपडेट करने की सलाह देते हैं।</message>
   <message id="total-usage">कुल उपयोग (कैश पढ़ना और लिखना शामिल)</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">औसत आउटपुट गति के अनुसार मॉडल, सबसे तेज़ पहले</message>
   <message id="empty-model-speeds">इस अवधि में किसी मॉडल के पर्याप्त अनुरोध नहीं हैं</message>
   <message id="usage-heatmap">उपयोग का हीटमैप</message>
-  <message id="heatmap-description">पिछले 30 दिनों का दैनिक उपयोग (M, कैश सहित)</message>
-  <message id="heatmap-label">पिछले 30 दिनों का दैनिक उपयोग हीटमैप (M)</message>
+  <message id="heatmap-description">पिछले 365 दिनों का दैनिक उपयोग (M, कैश सहित)</message>
+  <message id="heatmap-label">पिछले 365 दिनों का दैनिक उपयोग हीटमैप (M)</message>
   <message id="heatmap-less">कम</message>
   <message id="heatmap-more">ज़्यादा</message>
   <message id="refresh-current">मौजूदा डेटा रीफ़्रेश करें</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">सूची से छूटे अतिरिक्त मॉडल: {0}</message>
   <message id="model-speed-insufficient-samples">रैंकिंग के लिए कम अनुरोध वाले मॉडल: {0}</message>
   <message id="usage-unavailable">उपयोग के आँकड़े अभी उपलब्ध नहीं हैं</message>
-  <message id="recent-usage-total">पिछले 30 दिन: {0} · सक्रिय दिन: {1}</message>
+  <message id="recent-usage-total">पिछले 365 दिन: {0} · सक्रिय दिन: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · अनुरोध: {2}</message>
   <message id="heatmap-day-empty">{0} · कोई उपयोग दर्ज नहीं</message>
   <message id="current-channel">मौजूदा चैनल</message>

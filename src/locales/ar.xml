@@ -31,6 +31,7 @@
   <message id="today">اليوم</message>
   <message id="last-seven-days">آخر 7 أيام</message>
   <message id="last-thirty-days">آخر 30 يومًا</message>
+  <message id="last-year">سنة</message>
   <message id="daily-usage-rankings">ترتيب الاستخدام اليوم</message>
   <message id="empty-today">لم تُرفع أي بيانات اليوم بعد.</message>
   <message id="usage-overview">نظرة عامة على الاستخدام</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">كل ساعة</message>
   <message id="usage-update-help">حول طريقة التحديث</message>
   <message id="usage-update-hint-daily">حسب التاريخ. تبدأ إحصاءات اليوم من الصفر عند منتصف الليل بالتوقيت المحلي.</message>
-  <message id="usage-update-hint-hourly">كل ساعة. تُحدّث إحصاءات آخر 24 أو 168 أو 720 ساعة عند بداية كل ساعة بالتوقيت المحلي.</message>
+  <message id="usage-update-hint-hourly">كل ساعة. تُحدّث إحصاءات الفترة المحددة عند بداية كل ساعة بالتوقيت المحلي.</message>
   <message id="usage-update-hint-ranking">قد يؤثر تغيّر الاستخدام في ترتيب لوحة الصدارة.</message>
   <message id="usage-update-hint-recommended">نوصي بالتحديث كل ساعة.</message>
   <message id="total-usage">إجمالي الاستخدام (يشمل القراءة من ذاكرة التخزين المؤقت والكتابة إليها)</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">متوسط سرعة الإخراج حسب النموذج، من الأسرع إلى الأبطأ</message>
   <message id="empty-model-speeds">لا توجد نماذج لها طلبات كافية في هذه الفترة</message>
   <message id="usage-heatmap">خريطة الاستخدام الحرارية</message>
-  <message id="heatmap-description">الاستخدام اليومي خلال آخر 30 يومًا (M، يشمل الذاكرة المؤقتة)</message>
-  <message id="heatmap-label">خريطة حرارية للاستخدام اليومي خلال آخر 30 يومًا (M)</message>
+  <message id="heatmap-description">الاستخدام اليومي خلال آخر 365 يومًا (M، يشمل الذاكرة المؤقتة)</message>
+  <message id="heatmap-label">خريطة حرارية للاستخدام اليومي خلال آخر 365 يومًا (M)</message>
   <message id="heatmap-less">أقل</message>
   <message id="heatmap-more">أكثر</message>
   <message id="refresh-current">تحديث البيانات الحالية</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">نماذج إضافية غير معروضة: {0}</message>
   <message id="model-speed-insufficient-samples">نماذج بطلبات غير كافية للترتيب: {0}</message>
   <message id="usage-unavailable">إحصاءات الاستخدام غير متاحة مؤقتًا</message>
-  <message id="recent-usage-total">آخر 30 يومًا: {0} · أيام النشاط: {1}</message>
+  <message id="recent-usage-total">آخر 365 يومًا: {0} · أيام النشاط: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · الطلبات: {2}</message>
   <message id="heatmap-day-empty">{0} · لا يوجد استخدام مسجّل</message>
   <message id="current-channel">القناة الحالية</message>

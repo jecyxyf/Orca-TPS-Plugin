@@ -31,6 +31,7 @@
   <message id="today">آج</message>
   <message id="last-seven-days">گزشتہ ۷ دن</message>
   <message id="last-thirty-days">گزشتہ ۳۰ دن</message>
+  <message id="last-year">۱ سال</message>
   <message id="daily-usage-rankings">آج کے استعمال کی درجہ بندی</message>
   <message id="empty-today">آج ابھی کوئی اپ لوڈ نہیں ہوا۔</message>
   <message id="usage-overview">استعمال کا خلاصہ</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">ہر گھنٹے</message>
   <message id="usage-update-help">اپ ڈیٹ کے طریقے کی معلومات</message>
   <message id="usage-update-hint-daily">تاریخ کے مطابق۔ مقامی وقت کے مطابق آدھی رات کو آج کے اعداد و شمار صفر سے دوبارہ شمار ہوتے ہیں۔</message>
-  <message id="usage-update-hint-hourly">ہر گھنٹے۔ مقامی وقت میں ہر گھنٹے کے آغاز پر گزشتہ 24، 168 یا 720 گھنٹوں کے اعداد و شمار دوبارہ شمار ہوتے ہیں۔</message>
+  <message id="usage-update-hint-hourly">مقامی وقت کے مطابق ہر گھنٹے کے آغاز پر منتخب مدت کے اعداد و شمار دوبارہ شمار ہوتے ہیں۔</message>
   <message id="usage-update-hint-ranking">استعمال میں تبدیلی درجہ بندی کو متاثر کر سکتی ہے۔</message>
   <message id="usage-update-hint-recommended">ہم ہر گھنٹے اپ ڈیٹ کرنے کی تجویز دیتے ہیں۔</message>
   <message id="total-usage">کل استعمال (کیش پڑھنا اور لکھنا شامل ہے)</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">ماڈل کے لحاظ سے اوسط آؤٹ پٹ رفتار، سب سے تیز پہلے</message>
   <message id="empty-model-speeds">اس مدت میں کسی ماڈل کی کافی درخواستیں نہیں ہیں</message>
   <message id="usage-heatmap">استعمال کا ہیٹ میپ</message>
-  <message id="heatmap-description">گزشتہ 30 دن کا یومیہ استعمال (M، کیش سمیت)</message>
-  <message id="heatmap-label">گزشتہ 30 دن کے یومیہ استعمال کا ہیٹ میپ (M)</message>
+  <message id="heatmap-description">گزشتہ 365 دن کا یومیہ استعمال (M، کیش سمیت)</message>
+  <message id="heatmap-label">گزشتہ 365 دن کے یومیہ استعمال کا ہیٹ میپ (M)</message>
   <message id="heatmap-less">کم</message>
   <message id="heatmap-more">زیادہ</message>
   <message id="refresh-current">موجودہ ڈیٹا تازہ کریں</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">فہرست سے خارج اضافی ماڈل: {0}</message>
   <message id="model-speed-insufficient-samples">درجہ بندی کے لیے کم درخواستوں والے ماڈل: {0}</message>
   <message id="usage-unavailable">استعمال کے اعداد و شمار عارضی طور پر دستیاب نہیں</message>
-  <message id="recent-usage-total">گزشتہ 30 دن: {0} · فعال دن: {1}</message>
+  <message id="recent-usage-total">گزشتہ 365 دن: {0} · فعال دن: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · درخواستیں: {2}</message>
   <message id="heatmap-day-empty">{0} · استعمال کا کوئی ریکارڈ نہیں</message>
   <message id="current-channel">موجودہ چینل</message>

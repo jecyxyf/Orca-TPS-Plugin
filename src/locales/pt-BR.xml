@@ -31,6 +31,7 @@
   <message id="today">Hoje</message>
   <message id="last-seven-days">Últimos 7 dias</message>
   <message id="last-thirty-days">Últimos 30 dias</message>
+  <message id="last-year">1 ano</message>
   <message id="daily-usage-rankings">Classificação de uso de hoje</message>
   <message id="empty-today">Ainda não há envios hoje.</message>
   <message id="usage-overview">Visão geral do uso</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">A cada hora</message>
   <message id="usage-update-help">Sobre a atualização</message>
   <message id="usage-update-hint-daily">Por data. As estatísticas de hoje voltam a zero à meia-noite, no horário local.</message>
-  <message id="usage-update-hint-hourly">A cada hora. No início de cada hora local, são recalculadas as últimas 24, 168 ou 720 horas.</message>
+  <message id="usage-update-hint-hourly">No início de cada hora local, as estatísticas do período selecionado são recalculadas.</message>
   <message id="usage-update-hint-ranking">Mudanças no uso podem afetar a classificação.</message>
   <message id="usage-update-hint-recommended">Recomendamos atualizar a cada hora.</message>
   <message id="total-usage">Uso total (inclui leituras e gravações no cache)</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">Velocidade média de saída por modelo, do mais rápido ao mais lento</message>
   <message id="empty-model-speeds">Nenhum modelo tem solicitações suficientes neste período</message>
   <message id="usage-heatmap">Mapa de calor de uso</message>
-  <message id="heatmap-description">Uso diário nos últimos 30 dias (M, inclui cache)</message>
-  <message id="heatmap-label">Mapa de calor do uso diário nos últimos 30 dias (M)</message>
+  <message id="heatmap-description">Uso diário nos últimos 365 dias (M, inclui cache)</message>
+  <message id="heatmap-label">Mapa de calor do uso diário nos últimos 365 dias (M)</message>
   <message id="heatmap-less">Menos</message>
   <message id="heatmap-more">Mais</message>
   <message id="refresh-current">Atualizar dados atuais</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">Modelos adicionais omitidos: {0}</message>
   <message id="model-speed-insufficient-samples">Modelos com poucas solicitações para classificar: {0}</message>
   <message id="usage-unavailable">Estatísticas de uso temporariamente indisponíveis</message>
-  <message id="recent-usage-total">Últimos 30 dias: {0} · Dias ativos: {1}</message>
+  <message id="recent-usage-total">Últimos 365 dias: {0} · Dias ativos: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Solicitações: {2}</message>
   <message id="heatmap-day-empty">{0} · Nenhum uso registrado</message>
   <message id="current-channel">Canal atual</message>

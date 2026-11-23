@@ -31,6 +31,7 @@
   <message id="today">今天</message>
   <message id="last-seven-days">近 7 天</message>
   <message id="last-thirty-days">近 30 天</message>
+  <message id="last-year">一年</message>
   <message id="daily-usage-rankings">今日用量名次</message>
   <message id="empty-today">今日还没有人提交。</message>
   <message id="usage-overview">用量概览</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">按小时更新</message>
   <message id="usage-update-help">统计更新方式说明</message>
   <message id="usage-update-hint-daily">按日期更新。每天本地时间 00:00，今日统计归零并重新累计。</message>
-  <message id="usage-update-hint-hourly">按小时更新。每到本地整点，汇总过去 24 小时、168 小时或 720 小时的数据。</message>
+  <message id="usage-update-hint-hourly">按小时更新。每到本地整点，重新汇总所选时间范围的数据。</message>
   <message id="usage-update-hint-ranking">用量变化可能影响天梯榜排名。</message>
   <message id="usage-update-hint-recommended">建议选择「按小时更新」。</message>
   <message id="total-usage">总用量（含缓存读写）</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">按模型的平均输出速度，从高到低</message>
   <message id="empty-model-speeds">这段时间还没有样本充足的模型</message>
   <message id="usage-heatmap">用量热力图</message>
-  <message id="heatmap-description">近 30 天每日用量（M，含缓存）</message>
-  <message id="heatmap-label">近 30 天每日用量热力图（M）</message>
+  <message id="heatmap-description">近 365 天每日用量（M，含缓存）</message>
+  <message id="heatmap-label">近 365 天每日用量热力图（M）</message>
   <message id="heatmap-less">少</message>
   <message id="heatmap-more">多</message>
   <message id="refresh-current">刷新当前数据</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">另有 {0} 个模型未列出</message>
   <message id="model-speed-insufficient-samples">{0} 个模型请求数不足，未参与排名</message>
   <message id="usage-unavailable">用量统计暂不可用</message>
-  <message id="recent-usage-total">近 30 天 {0} · {1} 天有用量</message>
+  <message id="recent-usage-total">近 365 天 {0} · {1} 天有用量</message>
   <message id="heatmap-day-usage">{0} · {1} · {2} 次请求</message>
   <message id="heatmap-day-empty">{0} · 无用量记录</message>
   <message id="current-channel">当前频道</message>

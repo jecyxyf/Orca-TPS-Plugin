@@ -31,6 +31,7 @@
   <message id="today">Heute</message>
   <message id="last-seven-days">Letzte 7 Tage</message>
   <message id="last-thirty-days">Letzte 30 Tage</message>
+  <message id="last-year">1 Jahr</message>
   <message id="daily-usage-rankings">Heutige Verbrauchsrangliste</message>
   <message id="empty-today">Heute gibt es noch keine Uploads.</message>
   <message id="usage-overview">Verbrauchsübersicht</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">Stündlich</message>
   <message id="usage-update-help">Info zur Aktualisierung</message>
   <message id="usage-update-hint-daily">Nach Datum. Die heutige Statistik beginnt um Mitternacht Ortszeit wieder bei null.</message>
-  <message id="usage-update-hint-hourly">Stündlich. Zu jeder vollen Ortsstunde werden die letzten 24, 168 oder 720 Stunden neu ausgewertet.</message>
+  <message id="usage-update-hint-hourly">Zu jeder vollen Ortsstunde werden die Statistiken für den ausgewählten Zeitraum neu berechnet.</message>
   <message id="usage-update-hint-ranking">Änderungen beim Verbrauch können die Platzierung in der Bestenliste beeinflussen.</message>
   <message id="usage-update-hint-recommended">Wir empfehlen die stündliche Aktualisierung.</message>
   <message id="total-usage">Gesamtverbrauch (einschließlich Cache-Lese- und Schreibvorgängen)</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">Durchschnittliche Ausgabegeschwindigkeit nach Modell, schnellste zuerst</message>
   <message id="empty-model-speeds">Für diesen Zeitraum liegen zu wenige Anfragen pro Modell vor</message>
   <message id="usage-heatmap">Verbrauchs-Heatmap</message>
-  <message id="heatmap-description">Täglicher Verbrauch in den letzten 30 Tagen (M, einschließlich Cache)</message>
-  <message id="heatmap-label">Heatmap des täglichen Verbrauchs in den letzten 30 Tagen (M)</message>
+  <message id="heatmap-description">Täglicher Verbrauch in den letzten 365 Tagen (M, einschließlich Cache)</message>
+  <message id="heatmap-label">Heatmap des täglichen Verbrauchs in den letzten 365 Tagen (M)</message>
   <message id="heatmap-less">Weniger</message>
   <message id="heatmap-more">Mehr</message>
   <message id="refresh-current">Aktuelle Daten aktualisieren</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">Weitere ausgeblendete Modelle · {0}</message>
   <message id="model-speed-insufficient-samples">Modelle mit zu wenigen Anfragen für die Rangliste · {0}</message>
   <message id="usage-unavailable">Verbrauchsstatistik vorübergehend nicht verfügbar</message>
-  <message id="recent-usage-total">Letzte 30 Tage · {0} · Aktive Tage · {1}</message>
+  <message id="recent-usage-total">Letzte 365 Tage · {0} · Aktive Tage · {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Anfragen · {2}</message>
   <message id="heatmap-day-empty">{0} · Kein Verbrauch erfasst</message>
   <message id="current-channel">Aktueller Kanal</message>

@@ -31,6 +31,7 @@
   <message id="today">Today</message>
   <message id="last-seven-days">Last 7 days</message>
   <message id="last-thirty-days">Last 30 days</message>
+  <message id="last-year">1 year</message>
   <message id="daily-usage-rankings">Today's usage rankings</message>
   <message id="empty-today">No uploads yet today.</message>
   <message id="usage-overview">Usage overview</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">Update hourly</message>
   <message id="usage-update-help">About update methods</message>
   <message id="usage-update-hint-daily">Update by date. At local midnight, today’s stats reset and start counting again.</message>
-  <message id="usage-update-hint-hourly">Update hourly. On each local hour, stats are recalculated for the past 24, 168, or 720 hours.</message>
+  <message id="usage-update-hint-hourly">At the start of each local hour, stats are recalculated for the selected period.</message>
   <message id="usage-update-hint-ranking">Usage changes can affect leaderboard rankings.</message>
   <message id="usage-update-hint-recommended">We recommend hourly updates.</message>
   <message id="total-usage">Total usage (including cache reads and writes)</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">Average output speed by model, fastest first</message>
   <message id="empty-model-speeds">No models have enough requests in this period</message>
   <message id="usage-heatmap">Usage heatmap</message>
-  <message id="heatmap-description">Daily usage over the past 30 days (M, including cache)</message>
-  <message id="heatmap-label">Daily usage heatmap for the past 30 days (M)</message>
+  <message id="heatmap-description">Daily usage over the past 365 days (M, including cache)</message>
+  <message id="heatmap-label">Daily usage heatmap for the past 365 days (M)</message>
   <message id="heatmap-less">Less</message>
   <message id="heatmap-more">More</message>
   <message id="refresh-current">Refresh current data</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">Additional models omitted: {0}</message>
   <message id="model-speed-insufficient-samples">Models with too few requests to rank: {0}</message>
   <message id="usage-unavailable">Usage stats are temporarily unavailable</message>
-  <message id="recent-usage-total">Past 30 days: {0} · Active days: {1}</message>
+  <message id="recent-usage-total">Past 365 days: {0} · Active days: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · Requests: {2}</message>
   <message id="heatmap-day-empty">{0} · No recorded usage</message>
   <message id="current-channel">Current channel</message>

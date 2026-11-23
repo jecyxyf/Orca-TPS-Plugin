@@ -31,6 +31,7 @@
   <message id="today">আজ</message>
   <message id="last-seven-days">গত ৭ দিন</message>
   <message id="last-thirty-days">গত ৩০ দিন</message>
+  <message id="last-year">১ বছর</message>
   <message id="daily-usage-rankings">আজকের ব্যবহারের লিডারবোর্ড</message>
   <message id="empty-today">আজ এখনো কোনো আপলোড নেই।</message>
   <message id="usage-overview">ব্যবহারের সারসংক্ষেপ</message>
@@ -40,7 +41,7 @@
   <message id="usage-update-hourly">প্রতি ঘণ্টায়</message>
   <message id="usage-update-help">হালনাগাদের পদ্ধতি সম্পর্কে</message>
   <message id="usage-update-hint-daily">তারিখ অনুযায়ী। স্থানীয় মধ্যরাতে আজকের পরিসংখ্যান আবার শূন্য থেকে শুরু হয়।</message>
-  <message id="usage-update-hint-hourly">প্রতি ঘণ্টায়। স্থানীয় সময়ে প্রতি ঘণ্টার শুরুতে গত ২৪, ১৬৮ বা ৭২০ ঘণ্টার হিসাব হালনাগাদ হয়।</message>
+  <message id="usage-update-hint-hourly">স্থানীয় সময়ে প্রতি ঘণ্টার শুরুতে নির্বাচিত সময়সীমার হিসাব হালনাগাদ হয়।</message>
   <message id="usage-update-hint-ranking">ব্যবহার বদলালে লিডারবোর্ডে অবস্থান বদলাতে পারে।</message>
   <message id="usage-update-hint-recommended">প্রতি ঘণ্টায় হালনাগাদ বেছে নেওয়ার পরামর্শ দিই।</message>
   <message id="total-usage">মোট ব্যবহার (ক্যাশ পড়া ও লেখা সহ)</message>
@@ -54,8 +55,8 @@
   <message id="model-speed-list">মডেল অনুযায়ী গড় আউটপুট গতি, দ্রুততম আগে</message>
   <message id="empty-model-speeds">এই সময়ে কোনো মডেলের যথেষ্ট অনুরোধ নেই</message>
   <message id="usage-heatmap">ব্যবহারের হিটম্যাপ</message>
-  <message id="heatmap-description">গত ৩০ দিনের দৈনিক ব্যবহার (M, ক্যাশ সহ)</message>
-  <message id="heatmap-label">গত ৩০ দিনের দৈনিক ব্যবহারের হিটম্যাপ (M)</message>
+  <message id="heatmap-description">গত ৩৬৫ দিনের দৈনিক ব্যবহার (M, ক্যাশ সহ)</message>
+  <message id="heatmap-label">গত ৩৬৫ দিনের দৈনিক ব্যবহারের হিটম্যাপ (M)</message>
   <message id="heatmap-less">কম</message>
   <message id="heatmap-more">বেশি</message>
   <message id="refresh-current">বর্তমান ডেটা রিফ্রেশ করুন</message>
@@ -104,7 +105,7 @@
   <message id="model-list-truncated">বাদ পড়া অতিরিক্ত মডেল: {0}</message>
   <message id="model-speed-insufficient-samples">র‍্যাঙ্কিংয়ের জন্য কম অনুরোধ থাকা মডেল: {0}</message>
   <message id="usage-unavailable">ব্যবহারের পরিসংখ্যান সাময়িকভাবে পাওয়া যাচ্ছে না</message>
-  <message id="recent-usage-total">গত ৩০ দিন: {0} · সক্রিয় দিন: {1}</message>
+  <message id="recent-usage-total">গত ৩৬৫ দিন: {0} · সক্রিয় দিন: {1}</message>
   <message id="heatmap-day-usage">{0} · {1} · অনুরোধ: {2}</message>
   <message id="heatmap-day-empty">{0} · কোনো ব্যবহার রেকর্ড হয়নি</message>
   <message id="current-channel">বর্তমান চ্যানেল</message>

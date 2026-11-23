@@ -40,9 +40,9 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ### 3.2 Personal Stats
 
-- Review usage and request counts for today, the last 7 days, or the last 30 days. Today's summary also shows the highest generation speed for a single request.
+- Review usage and request counts for today, the last 7 or 30 days, or the past year. Today's summary also shows the highest generation speed for a single request.
 - Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
-- See daily activity over the past 30 days in the heatmap. Request statistics, panel snapshots, and pending uploads are stored in a local SQLite database.
+- See daily activity over the past 365 days in the heatmap. Request statistics, panel snapshots, and pending uploads are stored in a local SQLite database. The plugin keeps a year of personal usage and fills in older days from local logs that are still available.
 - Usage history is cached locally and restored when Orca restarts.
 
 <p align="center">
