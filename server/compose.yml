@@ -8,7 +8,7 @@ services:
     environment:
       LEADERBOARD_HOST: 0.0.0.0
       LEADERBOARD_PORT: '8787'
-      LEADERBOARD_DB: /data/leaderboard.sqlite
+      LEADERBOARD_STATE_FILE: /data/leaderboard.bin
     ports:
       - '127.0.0.1:8787:8787'
     volumes:

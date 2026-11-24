@@ -7,7 +7,8 @@ import { createChannelCache } from './channel-cache.mjs';
 import { openLocalUsageDb } from './local-usage-db.mjs';
 import { localUsageDatabasePath } from './data-paths.mjs';
 import { startLeaderboard } from './leaderboard.mjs';
-import { INSTALLATION_KEY, validInstallationId } from './leaderboard-installation.mjs';
+import { INSTALLATION_KEY } from './leaderboard-installation.mjs';
+import { validInstallationId } from './leaderboard_stats.mjs';
 import { createTokensManagerClient } from './tokens-manager-client.mjs';
 
 const PANEL_VIEW_KEY = 'panel-view';

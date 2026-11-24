@@ -3,11 +3,11 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { leaderboardDay, leaderboardDayStart } from './usage-summary.mjs';
 import { loadInstallationId } from './leaderboard-installation.mjs';
 import { createAvatarCache, githubLoginKey } from './leaderboard-avatars.mjs';
-import { HOUR_MS, validStatsLabel, validStatsPoint } from './leaderboard-stats.mjs';
+import { HOUR_MS, validStatsLabel, validStatsPoint } from './leaderboard_stats.mjs';
 import { createSourceUploader, createSqliteUploadStorage, uploadUsageChanges } from './usage-upload.mjs';
 import { createHourlySourceUploader } from './hourly-source-upload.mjs';
 import { createWindowViews } from './leaderboard-windows.mjs';
-import { TOKENS_LEADERBOARD } from './tokens-manager-stats.mjs';
+import { TOKENS_LEADERBOARD } from './leaderboard_stats.mjs';
 
 const METHOD = 'tps.leaderboard';
 const SECRET = 'leaderboard-session';

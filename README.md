@@ -58,7 +58,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - The 24-hour usage tab shows the latest five minutes of usage and average generation speed. The 7-day and 30-day tabs show daily usage. All three show the most-used model, Harness, and latest upload time.
 - The Speed tab ranks up to 20 GitHub accounts by their best average generation speed from a qualifying upload in the past 24 hours. Each account appears once across all its devices. An upload qualifies with more than 500 new tokens and a valid speed. The winning upload supplies the time, most-used model, Harness, and full count of new tokens, such as `1,250,000 tokens`.
 - Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
-- Sign in with GitHub to participate. Usage from each device counts once per account, including when several managers relay the same device's last statistics. The service removes a device from the next refresh if it has received no copy from that device for 10 seconds. Avatars load from GitHub.
+- Sign in with GitHub to participate. Each five-second round counts the latest report received for each device once per account, including reports relayed by other managers. A device that misses a round can contribute again as soon as its next report arrives. Avatars load from GitHub.
 - While signed in, the Tokens Manager uploads every five seconds by default. The toolbar shows the last successful sync and lets you request another upload.
 
 <p align="center">
@@ -69,7 +69,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ## 4. Supported Harnesses
 
-**Personal Stats and leaderboard usage** use CC Switch 4.0.39 scanning rules and add Hermes Agent. Sources include Claude Code, Codex, Gemini CLI, OpenCode, Grok Build, Pi, Oh My Pi, MiniMax Code, Kimi Code, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, and DeepSeek Harness.
+**Personal Stats and leaderboard usage** read local records from 16 harnesses on both Windows and Linux: Claude Code, Claude Desktop, Codex, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes Agent, Pi, MiniMax Code, Kimi Code, Oh My Pi, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, and DeepSeek Harness. Claude Desktop usage comes from Cowork's local audit logs and usage ledger. DeepSeek Harness can use either plain or Zstd-compressed session logs.
 
 **Orca session collection** supports these harnesses:
 
@@ -84,7 +84,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 Use **Orca 1.4.251 or later** on Windows or Linux. To collect usage from an SSH workspace, the remote host needs **Node.js 22.13 or later with SQLite support**.
 
-The Tokens Manager scanner is bundled for Linux x64. To build it for another platform, install Rust stable and the [CC Switch platform build prerequisites](https://github.com/farion1231/cc-switch/blob/v4.0.39/CONTRIBUTING.md), then run `npm run build:tokens-manager-scan` in the plugin directory. Orca installs and starts the manager in `~/.orca/tpsplugin/` on each connected host.
+Orca starts the Tokens Manager from `~/.orca/tpsplugin/bin/token_manager.mjs` on each connected host. The `bin` directory contains six program files. The SQLite database is at `~/.orca/tpsplugin/database/tpslugin.db`, and the installation fingerprint is in `~/.orca/tpsplugin/`.
 
 ### Orca plugin directory
 

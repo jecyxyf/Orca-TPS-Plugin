@@ -8,7 +8,7 @@ import {
   BACKFILL_UNITS, UNIT_KEY_PREFIX, USAGE_SCHEMA, accumulateRecords, createUsageIndex, dayKeyAgo, leaderboardDay,
   localDayKey, realTokens, summarizeUsage, usageCutoffMs
 } from '../src/usage-summary.mjs';
-import { discoverUsageUnits } from '../src/data.mjs';
+import { discoverUsageUnits } from '../src/harness_parser.mjs';
 import { createComputation } from '../src/computation.mjs';
 
 let DatabaseSync;
@@ -529,8 +529,7 @@ test('discovery reads Antigravity conversations with native model and cache coun
 });
 
 test('streamed Codex usage equals a whole-file parse, and a file name is counted once across roots', async t => {
-  const { readCodexUsageFile } = await import('../src/data.mjs');
-  const { parseJsonl } = await import('../src/parsers.mjs');
+  const { readCodexUsageFile, parseJsonl } = await import('../src/harness_parser.mjs');
   const root = await fixture(t), now = Date.now();
   const iso = offset => new Date(now - offset).toISOString();
   // Cumulative totals: each snapshot adds one request of 1000 input (800 cached) and 240 output tokens.

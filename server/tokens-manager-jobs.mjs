@@ -1,47 +1,51 @@
 import { Worker } from 'node:worker_threads';
-import { tokensIntervals } from '../src/tokens-manager-stats.mjs';
+import { TOKENS_DEFAULT_INTERVALS, tokensIntervals } from '../src/leaderboard_stats.mjs';
+import { createPacketBuffer, openPacketBuffer } from './tokens-manager-buffer.mjs';
 
 export function createTokensManagerJobs({ maxTokens, now, intervals: input, log }) {
-  const intervals = tokensIntervals(input);
+  const intervals = tokensIntervals({ ...input, publishMs: TOKENS_DEFAULT_INTERVALS.publishMs });
+  const buffer = createPacketBuffer();
+  const { release } = openPacketBuffer(buffer);
   const source = new URL('./tokens-manager-rankings.mjs', import.meta.url);
-  const start = mode => new Worker(source, { workerData: { mode } });
+  const start = mode => new Worker(source, { workerData: { mode, buffer, intervals, maxTokens } });
   const counters = [start('validate'), start('validate')];
-  let rank = start('rank'), snapshot, sequence = 0, timer, stopped = false;
+  let rank = start('rank'), snapshot, sequence = 0, stopped = false;
   const pending = new Map();
-  function observeRank() {
-    rank.on('message', result => { snapshot = result; });
-    rank.on('error', () => { snapshot = undefined; log('Tokens manager ranking worker restarted'); });
-    rank.on('exit', () => {
+  function observeRank(worker) {
+    const owner = worker.threadId;
+    worker.on('message', result => { snapshot = result; });
+    worker.on('error', () => { snapshot = undefined; log('Tokens manager ranking worker restarted'); });
+    worker.on('exit', () => {
+      release(owner);
       if (stopped) return;
       rank = start('rank');
-      observeRank();
+      observeRank(rank);
     });
   }
-  observeRank();
+  observeRank(rank);
 
   function observeReceiver(worker, index) {
-    worker.on('message', ({ id, packet }) => {
-      const job = pending.get(id);
-      if (!job) return;
-      pending.delete(id);
-      if (packet && !stopped) rank.postMessage({ type: 'receive', account: job.account, packet, at: job.at });
-      job.resolve(Boolean(packet));
+    const owner = worker.threadId;
+    worker.on('message', results => {
+      for (const { id, accepted } of results) {
+        const job = pending.get(id);
+        if (!job) continue;
+        pending.delete(id);
+        job.resolve(accepted);
+      }
     });
     worker.on('error', () => log('Tokens manager receiving worker restarted'));
     worker.on('exit', () => {
+      release(owner);
       for (const [id, job] of pending) if (job.worker === worker) { pending.delete(id); job.resolve(false); }
       if (!stopped) observeReceiver(counters[index] = start('validate'), index);
     });
   }
   counters.forEach(observeReceiver);
 
-  function publish() {
-    if (stopped) return;
-    rank.postMessage({ type: 'publish', at: now(), intervals });
-    timer = setTimeout(publish, intervals.publishMs);
-    timer.unref();
-  }
-  publish();
+  rank.postMessage({ at: now(), initial: true });
+  const timer = setInterval(() => rank.postMessage({ at: now() }), intervals.publishMs);
+  timer.unref();
   return {
     intervals,
     snapshot: () => snapshot,
@@ -50,13 +54,13 @@ export function createTokensManagerJobs({ maxTokens, now, intervals: input, log 
       const id = ++sequence, worker = counters[id % counters.length];
       const at = now();
       return new Promise(resolve => {
-        pending.set(id, { worker, account: { id: account.id, username: account.username }, at, resolve });
-        worker.postMessage({ id, raw, accountId: account.id, at, maxTokens });
+        pending.set(id, { worker, resolve });
+        worker.postMessage({ id, raw, account: { id: account.id, username: account.username }, at });
       });
     },
     async close() {
       stopped = true;
-      clearTimeout(timer);
+      clearInterval(timer);
       await Promise.all([rank, ...counters].map(worker => worker.terminate()));
     }
   };

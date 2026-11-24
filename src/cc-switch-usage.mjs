@@ -8,7 +8,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip } from 'node:zlib';
 import { ccSwitchUsagePaths } from './data-paths.mjs';
-import { HOUR_MS } from './leaderboard-stats.mjs';
+import { HOUR_MS } from './leaderboard_stats.mjs';
 import { HISTORY_DAYS, ROW_LIMIT, WINDOWS, cacheHitRate, localDayKey, localHourStart } from './usage-summary.mjs';
 
 const REVISION = 'a3eafa408ae679db2e3401fca767ed2b89d9a2b2';

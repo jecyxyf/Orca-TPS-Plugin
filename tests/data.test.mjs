@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, rm, readFile, appendFile, utimes } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
-import { scanSessions, readTargetSession } from '../src/data.mjs';
-import { defaultRoots } from '../src/data-paths.mjs';
+import { scanSessions, readTargetSession } from '../src/harness_parser.mjs';
+import { defaultRoots } from '../src/harness_parser.mjs';
 import { createTpsController } from '../src/controller.mjs';
 
 let DatabaseSync;
@@ -305,11 +305,9 @@ test('JSONL cache preserves truncation warnings without retaining another source
   ]));
   await writeFile(small, jsonl(codexRows('small-session')));
   const first = await scanSessions({ roots: { codex: [homedir(), large, small] }, includeDefaults: false });
-  assert.ok(first.warnings.some(value => value.includes('16 MiB')));
-  assert.ok(first.warnings.some(value => value.includes('用户主目录')));
+  assert.deepEqual(first.warnings, [['notice.invalid-session-folder', 'codex'], ['notice.large-session', 'codex']]);
   const cachedLarge = await scanSessions({ roots: { codex: [large] }, includeDefaults: false });
-  assert.ok(cachedLarge.warnings.some(value => value.includes('16 MiB')));
-  assert.ok(!cachedLarge.warnings.some(value => value.includes('用户主目录')));
+  assert.deepEqual(cachedLarge.warnings, [['notice.large-session', 'codex']]);
   const cachedSmall = await scanSessions({ roots: { codex: [small] }, includeDefaults: false });
   assert.deepEqual(cachedSmall.warnings, []);
 });
@@ -348,7 +346,7 @@ test('unsupported database and missing roots return warnings or empty data, neve
   const bytes = await readFile(file);
   const result = await scanSessions({ roots: { opencode: [file], pi: [path.join(root, 'missing')] }, includeDefaults: false });
   assert.deepEqual(result.sessions, []);
-  assert.ok(result.warnings.some(value => value.includes('受支持')));
+  assert.ok(result.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
   const cached = await scanSessions({ roots: { opencode: [file] }, includeDefaults: false });
   assert.deepEqual(cached.warnings, result.warnings);
   assert.deepEqual(await readFile(file), bytes);
@@ -367,14 +365,12 @@ test('SQLite cache retains row truncation without copying warnings from another 
   const other = new DatabaseSync(unsupported);
   try { other.exec('CREATE TABLE unrelated (id TEXT)'); } finally { other.close(); }
   const first = await scanSessions({ roots: { opencode: [unsupported, large] }, includeDefaults: false });
-  assert.ok(first.warnings.some(value => value.includes('10000')));
-  assert.ok(first.warnings.some(value => value.includes('受支持')));
+  assert.ok(first.warnings.some(([code]) => code === 'notice.opencode-message-limit'));
+  assert.ok(first.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
   const cachedLarge = await scanSessions({ roots: { opencode: [large] }, includeDefaults: false });
-  assert.ok(cachedLarge.warnings.some(value => value.includes('10000')));
-  assert.ok(!cachedLarge.warnings.some(value => value.includes('受支持')));
+  assert.deepEqual(cachedLarge.warnings, [['notice.opencode-message-limit']]);
   const cachedOther = await scanSessions({ roots: { opencode: [unsupported] }, includeDefaults: false });
-  assert.ok(cachedOther.warnings.some(value => value.includes('受支持')));
-  assert.ok(!cachedOther.warnings.some(value => value.includes('10000')));
+  assert.deepEqual(cachedOther.warnings, [['notice.opencode-schema-unavailable']]);
 });
 
 test('channel target merges registered panes and unregistered CWD sessions across providers while isolating parent worktree', sqliteTestOptions, async t => {

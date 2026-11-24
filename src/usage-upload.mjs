@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { HOUR_MS, RANKING_HOURS, USAGE_UPLOAD_BYTES } from './leaderboard-stats.mjs';
+import { HOUR_MS, RANKING_HOURS, USAGE_UPLOAD_BYTES } from './leaderboard_stats.mjs';
 
 const RECEIPT_CHUNK_SIZE = 32 * 1024;
 const encoded = value => gzipSync(JSON.stringify(value)).toString('base64');

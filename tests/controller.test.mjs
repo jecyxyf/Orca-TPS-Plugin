@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTpsController, validateRoots } from '../src/controller.mjs';
 import { createChannelCache } from '../src/channel-cache.mjs';
+import { createLocalePreferences } from '../src/locales.mjs';
 
 function fakeHost(saved = null) {
   const handlers = new Map(), statuses = [], posts = [];
@@ -210,19 +211,24 @@ test('stop unregisters handlers and ignores in-flight file reads', async () => {
 
 test('routine limits stay hidden while actual read problems remain visible', async () => {
   const host = fakeHost(); let actualError = false;
+  const locales = await createLocalePreferences({ get: async () => 'zh-CN', set: async () => {} });
   const controller = createTpsController(host.orca, {
+    locales,
     readActive: async () => ({ target: target('a') }),
     readSession: async () => ({ ...result('a'), warnings: [
       '仅读取最近 100 个文件会话及最多 10 个数据库。',
-      'codex：较大会话只读取末尾 16 MiB，缺少开头的轮次不计入。',
-      ...(actualError ? ['读取失败'] : [])
+      ['notice.large-session', 'codex'],
+      ...(actualError ? [['notice.partial-session-scan', 'codex', ['notice.read-failed']]] : [])
     ] }), focusPollMs: 0
   });
   await controller.start();
   assert.deepEqual(controller.state().warnings, []);
   assert.ok(!host.statuses.at(-1).tooltip.includes('部分数据不可用'));
   actualError = true; await controller.refresh();
-  assert.deepEqual(controller.state().warnings, ['读取失败']);
+  assert.deepEqual(controller.state().warnings, ['codex：部分会话目录无法读取（读取失败）。']);
+  await locales.select('en', controller.refreshLocale);
+  assert.deepEqual(host.handlers.get('tps.state')().warnings,
+    ['codex: Some session folders could not be read (Read failed).']);
   controller.stop();
 });
 

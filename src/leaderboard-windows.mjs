@@ -1,5 +1,5 @@
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { HOUR_MS, RANKING_HOURS, RANKING_REFRESH_MS, SPEED_MIN_DELTA, isUsageTime, validStatsLabel, validStatsPoint } from './leaderboard-stats.mjs';
+import { HOUR_MS, RANKING_HOURS, RANKING_REFRESH_MS, SPEED_MIN_DELTA, isUsageTime, validStatsLabel, validStatsPoint } from './leaderboard_stats.mjs';
 
 const validTime = value => Number.isSafeInteger(value) && value >= 0 && value < 8_640_000_000_000_000;
 const validUsername = value => typeof value === 'string' && value.length > 0 && value.length <= 39;

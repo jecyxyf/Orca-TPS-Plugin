@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openLocalUsageDb, personalRecordsCutoff, USAGE_RETENTION_MS } from '../src/local-usage-db.mjs';
-import { HOUR_MS } from '../src/leaderboard-stats.mjs';
+import { HOUR_MS } from '../src/leaderboard_stats.mjs';
 import { createRecordUsageIndex } from '../src/record-usage-index.mjs';
 import { CC_SWITCH_APPS, combineCcSwitchUsage } from '../src/cc-switch-usage.mjs';
 import { HISTORY_DAYS } from '../src/usage-summary.mjs';

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { personalRecordsCutoff, USAGE_RETENTION_MS } from './local-usage-db.mjs';
-import { HOUR_MS, MAX_RECENT_REQUESTS, RECENT_STATS_MS, hourStart, validStatsLabel } from './leaderboard-stats.mjs';
-import { validInstallationId } from './leaderboard-installation.mjs';
+import { HOUR_MS, MAX_RECENT_REQUESTS, RECENT_STATS_MS, hourStart, validStatsLabel } from './leaderboard_stats.mjs';
+import { validInstallationId } from './leaderboard_stats.mjs';
 import { sourceMessage } from './locales.mjs';
 import {
   accumulateRecords, dailySeries, HISTORY_DAYS, leaderboardDay, localHourStart, maxRequestSpeed,

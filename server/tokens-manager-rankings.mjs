@@ -1,12 +1,12 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { validInstallationId } from '../src/leaderboard-installation.mjs';
+import { validInstallationId } from '../src/leaderboard_stats.mjs';
 import {
   HOUR_MS, MAX_RECENT_REQUESTS, RANKING_HOURS, RECENT_STATS_MS, SPEED_MIN_DELTA, hourStart, isHourStart,
   isUsageTime, validRecentRequest
-} from '../src/leaderboard-stats.mjs';
-import { TOKENS_PACKET_TTL_MS } from '../src/tokens-manager-stats.mjs';
-import { calendarFor } from '../src/tokens-manager-db.mjs';
+} from '../src/leaderboard_stats.mjs';
+import { calendarFor } from '../src/personal_stats.mjs';
 import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
+import { openPacketBuffer } from './tokens-manager-buffer.mjs';
 
 const dayMs = 24 * HOUR_MS;
 const sum = (map, key, amount) => map.set(key, (map.get(key) ?? 0) + amount);
@@ -82,29 +82,21 @@ const ranked = (rows, compare, limit = 100) => rows.sort((a, b) => compare(a, b)
   .slice(0, limit).map((row, i) => ({ ...row, rank: i + 1 }));
 
 export function createTokensRankings() {
-  const variants = new Map();
   let version = 0;
 
-  function receive(account, packet, receivedAt) {
-    const key = `${account.id}/${packet.deviceGuid}`;
-    if (!variants.has(key)) variants.set(key, new Map());
-    const entries = variants.get(key);
-    const previous = entries.get(packet.publishedAt);
-    if (!previous || receivedAt >= previous.receivedAt) entries.set(packet.publishedAt, { account, packet, receivedAt });
-  }
-
-  function publish(at, intervals) {
-    const accounts = new Map();
-    for (const [key, entries] of variants) {
-      let latest;
-      for (const [stamp, entry] of entries) {
-        if (entry.receivedAt > at) continue;
-        if (entry.receivedAt <= at - TOKENS_PACKET_TTL_MS) entries.delete(stamp);
-        else if (!latest || stamp > latest.packet.publishedAt) latest = entry;
+  function publish(entries, at, intervals) {
+    const latest = new Map();
+    for (const entry of entries) {
+      const { account, packet, receivedAt } = entry;
+      const key = `${account.id}/${packet.deviceGuid}`;
+      const previous = latest.get(key);
+      if (!previous || packet.publishedAt > previous.packet.publishedAt ||
+          (packet.publishedAt === previous.packet.publishedAt && receivedAt >= previous.receivedAt)) {
+        latest.set(key, entry);
       }
-      if (!entries.size) variants.delete(key);
-      if (!latest) continue;
-      const { account, packet, receivedAt } = latest;
+    }
+    const accounts = new Map();
+    for (const { account, packet, receivedAt } of latest.values()) {
       let totals = accounts.get(account.id);
       if (!totals) {
         totals = { username: account.username, receivedAt, submittedAt: packet.publishedAt, timeZone: packet.timeZone,
@@ -160,19 +152,44 @@ export function createTokensRankings() {
     boards[0] = { rows: ranked(speedRows, (a, b) => b.avgTps - a.avgTps, 20) };
     return { version: ++version, serverTime: at, refreshAt: at + intervals.readMs, cutoffAt, nextAt, boards };
   }
-  return { receive, publish };
+  return { publish };
+}
+
+export function createPacketReceiver(buffer, maxTokens, reply) {
+  let pending = [], timer;
+
+  function flush() {
+    clearTimeout(timer);
+    timer = undefined;
+    const batch = pending;
+    pending = [];
+    const accepted = buffer.appendBatch(batch.map(({ entry }) => entry));
+    reply(batch.map(({ id }, index) => ({ id, accepted: accepted[index] })));
+  }
+
+  return ({ id, raw, account, at }) => {
+    const packet = validatePacket(raw, account.id, at, maxTokens);
+    if (!packet) {
+      reply([{ id, accepted: false }]);
+      return;
+    }
+    pending.push({ id, entry: { account, packet, receivedAt: at } });
+    if (pending.length === 32) flush();
+    else if (pending.length === 1) timer = setTimeout(flush, 1000);
+  };
 }
 
 if (parentPort && workerData?.mode === 'validate') {
-  parentPort.on('message', ({ id, raw, accountId, at, maxTokens }) => {
-    parentPort.postMessage({ id, packet: validatePacket(raw, accountId, at, maxTokens) });
-  });
+  const receive = createPacketReceiver(openPacketBuffer(workerData.buffer),
+    workerData.maxTokens, results => parentPort.postMessage(results));
+  parentPort.on('message', receive);
 }
 
 if (parentPort && workerData?.mode === 'rank') {
+  const buffer = openPacketBuffer(workerData.buffer);
   const rankings = createTokensRankings();
-  parentPort.on('message', message => {
-    if (message.type === 'receive') rankings.receive(message.account, message.packet, message.at);
-    else if (message.type === 'publish') parentPort.postMessage(rankings.publish(message.at, message.intervals));
+  parentPort.on('message', ({ at, initial }) => {
+    const entries = initial ? [] : buffer.take();
+    parentPort.postMessage(rankings.publish(entries, at, workerData.intervals));
   });
 }

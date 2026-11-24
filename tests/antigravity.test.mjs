@@ -10,8 +10,8 @@ import {
   antigravitySessionIdFromPath,
   antigravityStepStart,
   parseJsonl
-} from '../src/parsers.mjs';
-import { scanSessions, readTargetSession } from '../src/data.mjs';
+} from '../src/harness_parser.mjs';
+import { scanSessions, readTargetSession } from '../src/harness_parser.mjs';
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import('node:sqlite')); }
@@ -209,7 +209,7 @@ test('a conversation without a readable native store keeps tokens and warns inst
   assert.equal(scan.sessions.length, 1);
   assert.equal(scan.sessions[0].records.find(record => record.rawId === '7').durationMs, null);
   assert.equal(scan.sessions[0].records.find(record => record.rawId === '7').outputTokens, 280);
-  assert.ok(scan.warnings.some(message => message.startsWith('antigravity：原生会话库无法读取')));
+  assert.ok(scan.warnings.some(([code]) => code === 'notice.antigravity-database-unavailable'));
 });
 
 test('project TPS discovers unregistered Antigravity sessions by their saved workspace', sqliteTestOptions, async t => {

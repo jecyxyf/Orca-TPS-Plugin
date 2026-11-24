@@ -1,20 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { DatabaseSync } from 'node:sqlite';
 import { setTimeout } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { calendarFor, openTokensManagerDb } from '../src/tokens-manager-db.mjs';
-import { makePersonalPacket, mergePersonalPackets, TOKENS_DEFAULT_INTERVALS } from '../src/tokens-manager-stats.mjs';
-import { createTokensRankings, validatePacket } from '../server/tokens-manager-rankings.mjs';
+import { pathToFileURL } from 'node:url';
+import { calendarFor } from '../src/personal_stats.mjs';
+import { openTokensManagerDb } from '../src/database.mjs';
+import { makePersonalPacket, mergePersonalPackets } from '../src/personal_stats.mjs';
+import { TOKENS_DEFAULT_INTERVALS } from '../src/leaderboard_stats.mjs';
+import { createPacketReceiver, createTokensRankings, validatePacket } from '../server/tokens-manager-rankings.mjs';
 import { createTokensManagerJobs } from '../server/tokens-manager-jobs.mjs';
+import { createPacketBuffer, openPacketBuffer } from '../server/tokens-manager-buffer.mjs';
 import { createLeaderboardServer } from '../server/app.mjs';
-import { runTokensManager } from '../src/tokens-manager.mjs';
-import { scannerArchive } from '../src/tokens-manager-scan.mjs';
+import { openLeaderboardStore } from '../server/store.mjs';
+import { runTokensManager } from '../src/token_manager.mjs';
+import { installTokensManagerBundle, readTokensManagerBundle } from '../src/tokens-manager-client.mjs';
 
 const at = Date.parse('2026-06-15T12:03:00Z');
 const day = 86_400_000, hour = day / 24;
@@ -23,16 +29,56 @@ const entry = (id, daysAgo, tokens = 100) => ({
   freshInputTokens: tokens, outputTokens: 200, tokensPerSecond: 30, isEstimatedSpeed: true
 });
 
-test('retains 32 days of detail and 370 days of rollups, including after a crash between database commits', async t => {
+test('the manager installation keeps exactly six modules and preserves data in the parent directory', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tps-manager-bundle-'));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const bin = path.join(root, 'bin');
+  await mkdir(path.join(bin, 'locales'), { recursive: true });
+  const bundle = await readTokensManagerBundle();
+  const expected = ['database.mjs', 'harness_parser.mjs', 'leaderboard_stats.mjs',
+    'orca_connection.mjs', 'personal_stats.mjs', 'token_manager.mjs'];
+  assert.deepEqual(Object.keys(bundle.files).sort(), expected);
+  for (const name of ['data.mjs', 'remote-collector.mjs', 'locales/zh-CN.xml', 'version', 'local-addon.mjs']) {
+    await writeFile(path.join(bin, name), 'old copy');
+  }
+  const stored = ['device-guid', 'tpslugin.db', 'daily.db'];
+  for (const name of stored) await writeFile(path.join(root, name), 'existing data');
+
+  await installTokensManagerBundle(root, bundle);
+  const manager = await import(pathToFileURL(path.join(bin, 'token_manager.mjs')).href);
+  assert.equal(typeof manager.runTokensManager, 'function');
+  assert.deepEqual((await readdir(bin)).sort(), expected);
+  assert.equal(await readFile(path.join(root, 'bundle-version'), 'utf8'), bundle.version);
+  for (const name of stored) assert.equal(await readFile(path.join(root, name), 'utf8'), 'existing data');
+
+  await assert.rejects(installTokensManagerBundle(root, { ...bundle, files: { '../device-guid': 'ZGF0YQ==' } }),
+    /Invalid manager bundle/);
+  await writeFile(path.join(bin, 'old-copy.mjs'), 'stale');
+  await installTokensManagerBundle(root, bundle);
+  assert.deepEqual((await readdir(bin)).sort(), expected);
+});
+
+test('commits details, rollups and scan progress together, and retains each for its configured period', async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'tps-manager-db-'));
   t.after(() => rm(root, { force: true, recursive: true }));
   const open = () => openTokensManagerDb(root, { timeZone: 'UTC', now: () => at });
   let db = open();
   assert.equal(db.setting('lastScanAt'), 0);
   const guid = db.deviceGuid;
+  const sqlite = new DatabaseSync(path.join(root, 'database', 'tpslugin.db'));
+  try {
+    sqlite.exec(`CREATE TRIGGER fail_bucket BEFORE INSERT ON buckets
+      BEGIN SELECT RAISE(ABORT, 'cannot save bucket'); END;`);
+    assert.throws(() => db.commitSource('fixture', 'one', [entry('partial', 0)]), /cannot save bucket/);
+    assert.equal(db.sourceStamp('fixture'), undefined);
+    assert.deepEqual(db.details(), []);
+    assert.deepEqual(db.buckets(0), []);
+  } finally {
+    sqlite.exec('DROP TRIGGER IF EXISTS fail_bucket');
+    sqlite.close();
+  }
   db.commitSource('fixture', 'one', [entry('today', 0), entry('boundary-in', 31), entry('boundary-out', 32),
     entry('oldest', 369), entry('too-old', 370), entry('today', 0)]);
-  assert.throws(() => db.applyPending(() => { throw new Error('interrupted after commit'); }), /interrupted/);
   db.close();
   db = open();
   assert.equal(db.deviceGuid, guid);
@@ -59,61 +105,198 @@ test('retains 32 days of detail and 370 days of rollups, including after a crash
   assert.equal(calendarFor('Asia/Seoul').day(Date.parse('2026-06-15T15:01:00Z')), '2026-06-16');
 });
 
+test('merges legacy databases and WAL changes without counting already-applied batches twice', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tps-manager-db-merge-'));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const newPath = name => path.join(root, 'database', name);
+  const oldDaily = path.join(root, 'daily.db');
+  const open = () => openTokensManagerDb(root, { timeZone: 'UTC', now: () => at });
+  let db = open();
+  const guid = db.deviceGuid, generation = db.setting('generation');
+  db.commitSource('fixture', 'one', [entry('already-applied', 0)], at);
+  const completed = [0, 1].flatMap(kind => db.buckets(kind).map(row => ({ kind, ...row })));
+  db.commitSource('fixture', 'two', [entry('awaiting-rollup', 0)], at);
+  db.finishScan(at);
+  db.close();
+
+  const main = new DatabaseSync(newPath('tpslugin.db'));
+  const daily = new DatabaseSync(newPath('daily.db'));
+  const batch = completed.map(({ kind, day, at, project, provider, model, counters }) => [
+    JSON.stringify([kind, day, at, project, provider, model]), counters
+  ]);
+  try {
+    const schema = main.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='buckets'").get().sql;
+    daily.exec('CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);');
+    daily.exec(schema);
+    const saveSetting = daily.prepare('INSERT INTO settings VALUES (?, ?)');
+    saveSetting.run('generation', generation);
+    saveSetting.run('applied', '0');
+    const save = daily.prepare('INSERT INTO buckets VALUES (?, ?, ?, ?, ?, ?, ?)');
+    for (const [key, counters] of batch) save.run(...JSON.parse(key), JSON.stringify(counters));
+    main.exec(`DROP TABLE buckets;
+      CREATE TABLE pending(id INTEGER PRIMARY KEY AUTOINCREMENT, buckets TEXT NOT NULL);
+      UPDATE settings SET value='3' WHERE key='version';`);
+    const pending = main.prepare('INSERT INTO pending(buckets) VALUES (?)');
+    pending.run(JSON.stringify(batch));
+    pending.run(JSON.stringify(batch));
+  } finally { daily.close(); main.close(); }
+
+  // Simulate a prior move that finished for the main file only.
+  await rename(newPath('daily.db'), oldDaily);
+  const sourceFiles = [newPath('tpslugin.db'), oldDaily];
+  // Exit without closing either connection so the latest commits remain in the WAL files.
+  const leaveWal = `
+    import { DatabaseSync } from 'node:sqlite';
+    const [mainPath, dailyPath] = process.argv.slice(1);
+    const main = new DatabaseSync(mainPath), daily = new DatabaseSync(dailyPath);
+    for (const db of [main, daily]) {
+      db.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;');
+    }
+    main.exec("INSERT INTO settings VALUES ('wal-marker', '123');");
+    daily.exec("UPDATE settings SET value='1' WHERE key='applied';");
+    process.exit(0);
+  `;
+  await promisify(execFile)(process.execPath, ['--input-type=module', '-e', leaveWal, ...sourceFiles]);
+  for (const filename of sourceFiles) assert.ok((await stat(filename + '-wal')).size > 32);
+
+  db = open();
+  try {
+    assert.equal(db.deviceGuid, guid);
+    assert.equal(db.setting('generation'), generation);
+    assert.equal(db.sourceStamp('fixture'), 'two');
+    assert.deepEqual(db.details().map(row => row.id).sort(), ['already-applied', 'awaiting-rollup']);
+    assert.equal(db.buckets(0)[0].counters[0], 2);
+    assert.equal(db.buckets(1)[0].counters[0], 2);
+    assert.equal(db.setting('wal-marker'), 123);
+    for (const filename of [oldDaily, newPath('daily.db')]) {
+      for (const suffix of ['', '-wal', '-shm']) await assert.rejects(access(filename + suffix), { code: 'ENOENT' });
+    }
+  } finally { db.close(); }
+
+  db = open();
+  try {
+    assert.equal(db.setting('generation'), generation);
+    assert.equal(db.buckets(0)[0].counters[0], 2);
+    db.commitSource('fixture', 'three', [entry('after-migration', 0)], at);
+    db.finishScan(at);
+    assert.equal(db.details().length, 3);
+    assert.equal(db.buckets(0)[0].counters[0], 3);
+  } finally { db.close(); }
+});
+
 function packet(guid, tokens, publishedAt = at) {
   return { deviceGuid: guid, accountId: 11, publishedAt, hours: [[Date.parse('2026-06-15T11:00:00Z'), tokens]],
     daily: [['2026-06-15', tokens]], samples: [] };
 }
 
-test('combines three devices, keeps original timestamps on relay, and expires received packets at ten seconds', () => {
+test('switches shared buffers while the finished round is still readable', () => {
+  const buffer = createPacketBuffer(64);
+  const receiverA = openPacketBuffer(buffer);
+  const receiverB = openPacketBuffer(buffer);
+  const ranking = openPacketBuffer(buffer);
+  assert.deepEqual(receiverA.appendBatch([{ value: 'first' }, { value: 'x'.repeat(64) }]), [true, false]);
+  assert.deepEqual(receiverB.appendBatch([{ value: 'second' }]), [true]);
+  const finished = ranking.take();
+  assert.deepEqual(receiverB.appendBatch([{ value: 'next round' }]), [true]);
+  assert.deepEqual([...finished], [{ value: 'first' }, { value: 'second' }]);
+  assert.deepEqual([...ranking.take()], [{ value: 'next round' }]);
+  assert.deepEqual([...ranking.take()], []);
+});
+
+test('flushes a receiver batch after one second or 32 packets without waiting for a ranking round', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const shared = createPacketBuffer(16 * 1024);
+  const ranking = openPacketBuffer(shared);
+  const replies = [];
+  const receive = createPacketReceiver(openPacketBuffer(shared), 1e6, batch => replies.push(batch));
+  const account = { id: 11, username: 'player' };
+  const raw = JSON.stringify(packet(randomUUID(), 100));
+  const send = id => receive({ id, raw, account, at });
+
+  send(1);
+  t.mock.timers.tick(999);
+  assert.deepEqual(replies, []);
+  assert.deepEqual([...ranking.take()], []);
+  t.mock.timers.tick(1);
+  assert.deepEqual(replies, [[{ id: 1, accepted: true }]]);
+  assert.equal([...ranking.take()].length, 1);
+
+  for (let id = 2; id <= 32; id++) send(id);
+  assert.equal(replies.length, 1);
+  send(33);
+  assert.deepEqual(replies[1], Array.from({ length: 32 }, (_, index) => ({ id: index + 2, accepted: true })));
+  assert.equal([...ranking.take()].length, 32);
+  t.mock.timers.tick(1000);
+  assert.equal(replies.length, 2);
+});
+
+test('combines devices once per round and keeps original timestamps on relay', () => {
   const rankings = createTokensRankings();
   const account = { id: 11, username: 'player' };
   const [a, b, c] = Array.from({ length: 3 }, () => randomUUID());
-  const send = (packet, time) => rankings.receive(account, validatePacket(JSON.stringify(packet), account.id, time, 1e6), time);
-  send(packet(a, 10), at);
-  send(packet(b, 20), at);
-  send(packet(c, 30), at);
-  send(packet(b, 20), at + 100);
-  send(packet(b, 7, at - 1000), at + 100);
-  const publish = time => rankings.publish(time, TOKENS_DEFAULT_INTERVALS);
-  const first = publish(at + 100);
+  const entry = (raw, receivedAt) => ({ account, receivedAt,
+    packet: validatePacket(JSON.stringify(raw), account.id, receivedAt, 1e6) });
+  const publish = (entries, time) => rankings.publish(entries, time, TOKENS_DEFAULT_INTERVALS);
+  const first = publish([
+    entry(packet(a, 10), at), entry(packet(b, 20), at), entry(packet(c, 30), at),
+    entry(packet(b, 20), at + 100), entry(packet(b, 7, at - 1000), at + 100)
+  ], at + 5000);
   assert.equal(first.boards[24].rows[0].tokens, 60);
   assert.equal(first.boards[24].rows.length, 1);
   assert.equal(first.boards[168].rows[0].daily.some(row => row.tokens === 60), true);
-  send(packet(b, 20), at + 5000);
-  assert.equal(publish(at + 10_000).boards[24].rows[0].tokens, 20);
-  assert.deepEqual(publish(at + 15_000).boards[24].rows, []);
+  assert.deepEqual(publish([], at + 10_000).boards[24].rows, []);
+  assert.equal(publish([entry(packet(b, 20), at + 11_000)], at + 15_000).boards[24].rows[0].tokens, 20);
   assert.equal(validatePacket(JSON.stringify(packet(a, 10)), 12, at, 1e6), null);
 });
 
-test('publishes one shared HTTP snapshot after authenticated uploads through receiving workers', async t => {
+test('publishes uploads from both workers, drops an empty round, and includes the next upload', { timeout: 25_000 }, async t => {
   const token = randomBytes(32).toString('base64url');
-  const store = { prune() {}, pruneRecent() {}, session() { return { id: 11, username: 'player' }; } };
+  const directory = await mkdtemp(path.join(tmpdir(), 'tps-manager-http-'));
+  const filename = path.join(directory, 'leaderboard.bin');
+  const digest = createHash('sha256').update(token).digest('hex');
+  openLeaderboardStore(filename).issueSession({ id: 11, login: 'player' }, digest, 'plugin', at + hour, at);
+  const store = openLeaderboardStore(filename);
   const jobs = createTokensManagerJobs({ maxTokens: 1e6, now: () => at, intervals: { publishMs: 1000 }, log() {} });
   const server = createLeaderboardServer({ tokensJobs: jobs, store, baseUrl: 'http://localhost', now: () => at });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
     await jobs.close();
+    await rm(directory, { force: true, recursive: true });
   });
   const base = `http://127.0.0.1:${server.address().port}/api/tokens-manager`;
   const config = await fetch(base + '/config').then(res => res.json());
   assert.equal(config.intervals.scanMs, 5000);
-  assert.equal(config.intervals.publishMs, 1000);
+  assert.equal(config.intervals.publishMs, 5000);
   const upload = body => fetch(base + '/packets', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
   const guid = randomUUID();
-  const responses = await Promise.all([upload(packet(guid, 100)), upload(packet(guid, 100)), upload(packet(randomUUID(), 400))]);
+  const responses = await Promise.all([
+    upload(packet(guid, 100)), upload(packet(guid, 200, at - 1)), upload(packet(randomUUID(), 400))
+  ]);
   assert.deepEqual(responses.map(res => res.status), [202, 202, 202]);
-  let snapshot;
-  for (let attempt = 0; attempt < 40; attempt++) {
-    snapshot = await fetch(base + '/snapshot').then(res => res.json());
-    if (snapshot.boards?.[24]?.rows.length) break;
-    await setTimeout(80);
+
+  const readSnapshot = () => fetch(base + '/snapshot').then(res => res.json());
+  async function waitForSnapshot(matches) {
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      const snapshot = await readSnapshot();
+      if (snapshot.boards && matches(snapshot)) return snapshot;
+      await setTimeout(150);
+    }
+    assert.fail('expected leaderboard round was not published');
   }
+
+  const snapshot = await waitForSnapshot(next => next.boards[24].rows.length > 0);
   assert.equal(snapshot.boards[24].rows[0].tokens, 500);
-  const second = await fetch(base + '/snapshot').then(res => res.json());
-  assert.deepEqual(second, snapshot);
+  assert.deepEqual(await readSnapshot(), snapshot);
   const anonymous = await fetch(base + '/packets', { method: 'POST', body: JSON.stringify(packet(guid, 100)) });
   assert.equal(anonymous.status, 401);
+
+  const empty = await waitForSnapshot(next => next.version > snapshot.version);
+  assert.ok(Object.values(empty.boards).every(board => board.rows.length === 0));
+  assert.equal((await upload(packet(guid, 100))).status, 202);
+  const returned = await waitForSnapshot(next => next.version > empty.version);
+  assert.equal(returned.boards[24].rows[0].tokens, 100);
 });
 
 test('uses one process, waits for the first scan and keeps its lease across a short disconnect', async t => {
@@ -126,8 +309,14 @@ test('uses one process, waits for the first scan and keeps its lease across a sh
   let scans = 0;
   let clock = at;
   let stopped = false;
+  const submitted = [];
   const processJob = runTokensManager(root, { clock: () => clock,
-    fetcher: async () => Response.json({ code: 'accepted' }), async scan(root, db, { progress }) {
+    async fetcher(url, options) {
+      if (url.endsWith('/config')) return Response.json({ intervals: { personalMs: 6000 } });
+      submitted.push(JSON.parse(options.body));
+      return Response.json({ code: 'accepted' });
+    },
+    async scan(root, db, { progress }) {
     progress({ done: 0, total: 1 });
     if (++scans === 2) {
       startedClosingScan();
@@ -147,7 +336,7 @@ test('uses one process, waits for the first scan and keeps its lease across a sh
     await rm(root, { recursive: true, force: true });
   });
   function subscribe() {
-    const child = spawn(process.execPath, ['src/tokens-manager.mjs', '--connect'],
+    const child = spawn(process.execPath, ['src/token_manager.mjs', '--connect'],
       { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, ORCA_TPS_TOKENS_ROOT: root } });
     const events = [];
     const reader = createInterface({ input: child.stdout });
@@ -174,11 +363,19 @@ test('uses one process, waits for the first scan and keeps its lease across a sh
   await runTokensManager(root, { scan: () => assert.fail('second process acquired the socket') });
   await a.event('progress');
   assert.equal(a.events.some(event => event.type === 'personal'), false);
+  a.send({ type: 'channels', channels: [{ channelId: 'test-channel', target: { key: 'project', worktreePath: '/project' } }] });
   allowScan();
   assert.equal((await a.event('personal')).packet.days[0].counters[0], 1);
+  const channel = await a.event('channel');
+  assert.equal(channel.channelId, 'test-channel');
+  assert.equal(channel.result.session.records[0].id, 'today');
   await b.event('personal');
   a.send({ type: 'credential', endpoint: 'http://localhost', accountId: 11, token: randomBytes(32).toString('base64url') });
   assert.equal((await a.event('leaderboard')).packet.accountId, 11);
+  assert.equal((await a.event('uploaded')).accountId, 11);
+  assert.equal((await a.event('intervals')).intervals.personalMs, 6000);
+  assert.equal(submitted[0].deviceGuid, first.deviceGuid);
+  assert.equal(submitted[0].accountId, 11);
   assert.equal(b.events.some(event => event.type === 'leaderboard'), false);
   a.send({ type: 'unsubscribe' });
   a.stop();
@@ -204,7 +401,6 @@ test('uses one process, waits for the first scan and keeps its lease across a sh
 });
 
 test('scans real Copilot, WorkBuddy and Hermes fixtures and ignores a broken log entry', async t => {
-  try { await access(scannerArchive); } catch { return t.skip('No bundled scanner for this platform'); }
   const root = await mkdtemp(path.join(tmpdir(), 'tps-manager-native-'));
   t.after(() => rm(root, { force: true, recursive: true }));
   const copilot = path.join(root, 'copilot'), workbuddy = path.join(root, 'workbuddy'), hermes = path.join(root, 'hermes');
@@ -229,8 +425,8 @@ test('scans real Copilot, WorkBuddy and Hermes fixtures and ignores a broken log
     `${time.slice(0, 23).replace('T', ' ').replace('.', ',')} INFO [local-hermes] agent.conversation_loop: API call #1: model=test-hermes provider=example in=50 out=56 total=106 latency=3.3s id=fixture-3\n`);
   const script = `
     import { mkdir } from 'node:fs/promises';
-    import { openTokensManagerDb } from './src/tokens-manager-db.mjs';
-    import { scanTokens } from './src/tokens-manager-scan.mjs';
+    import { openTokensManagerDb } from './src/database.mjs';
+    import { scanTokens } from './src/token_manager.mjs';
     const root = process.env.TPS_FIXTURE_DB;
     await mkdir(root + '/bin', { recursive: true });
     const db = openTokensManagerDb(root, { timeZone: 'UTC' });
@@ -246,6 +442,7 @@ test('scans real Copilot, WorkBuddy and Hermes fixtures and ignores a broken log
   const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script], {
     timeout: 20_000,
     env: { ...process.env, HOME: root, USERPROFILE: root, ORCA_USER_DATA_PATH: root,
+      APPDATA: path.join(root, 'appdata'), LOCALAPPDATA: path.join(root, 'localappdata'),
       CODEX_HOME: path.join(root, 'codex'), CLAUDE_CONFIG_DIR: path.join(root, 'claude'),
       XDG_DATA_HOME: path.join(root, 'data'), COPILOT_HOME: copilot, WORKBUDDY_CONFIG_DIR: workbuddy,
       HERMES_HOME: hermes, TZ: 'UTC', TPS_FIXTURE_DB: path.join(root, 'manager') }

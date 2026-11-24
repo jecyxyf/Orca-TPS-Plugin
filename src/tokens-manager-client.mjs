@@ -4,78 +4,98 @@ import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { fileURLToPath } from 'node:url';
-import { calendarFor } from './tokens-manager-db.mjs';
 import { publicChannelId } from './controller.mjs';
-import { validInstallationId } from './leaderboard-installation.mjs';
+import { tokensIntervals, validInstallationId } from './leaderboard_stats.mjs';
 import { createRuntimeLookup, launchSsh } from './remote-channel.mjs';
-import { TOKENS_HEARTBEAT_MS, TOKENS_LEASE_MS, TOKENS_RETRY_MS, TOKENS_ROOT, tokensMessage } from './tokens-manager.mjs';
-import { mergePersonalPackets, tokensIntervals } from './tokens-manager-stats.mjs';
+import { TOKEN_MANAGER_ENTRY, TOKENS_HEARTBEAT_MS, TOKENS_LEASE_MS, TOKENS_RETRY_MS, TOKENS_ROOT, tokensMessage } from './orca_connection.mjs';
+import { calendarFor, mergePersonalPackets } from './personal_stats.mjs';
 
 const localHost = '';
 const timezoneKey = 'tokens-manager:timezone';
-const transmittable = /^(?:[\w-]+\.mjs|locales\/[\w-]+\.xml)$/;
+const managerFiles = [
+  'database.mjs', 'harness_parser.mjs', 'leaderboard_stats.mjs', 'orca_connection.mjs', 'personal_stats.mjs', TOKEN_MANAGER_ENTRY
+];
 const json = async file => JSON.parse(await readFile(file, 'utf8'));
 
-async function install(root, payload) {
-  const { mkdir, readFile, rename, writeFile } = await import('node:fs/promises');
-  const { dirname, join } = await import('node:path');
-  const { gunzipSync } = await import('node:zlib');
-  const { randomUUID } = await import('node:crypto');
+async function installedManagerVersion(root, names) {
+  const { lstat, readFile, readdir } = await import('node:fs/promises');
+  const { join } = await import('node:path');
   const bin = join(root, 'bin');
-  await mkdir(bin, { recursive: true, mode: 0o700 });
-  const remember = join(bin, 'version');
-  if (await readFile(remember, 'utf8').catch(() => '') === payload.version) return;
-  async function put(name, bytes, mode = 0o600) {
-    const filename = join(bin, name), next = filename + '.' + randomUUID() + '.next';
-    await mkdir(dirname(filename), { recursive: true, mode: 0o700 });
-    await writeFile(next, bytes, { flag: 'wx', mode });
-    await rename(next, filename);
+  try {
+    if (!(await lstat(bin)).isDirectory()) return '';
+    const entries = await readdir(bin, { withFileTypes: true });
+    if (entries.length !== names.length || entries.some(entry => !entry.isFile() || !names.includes(entry.name))) return '';
+    return await readFile(join(root, 'bundle-version'), 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return '';
+    throw error;
   }
-  for (const [name, bytes] of Object.entries(payload.files)) {
-    if (!/^(?:[\w-]+\.mjs|locales\/[\w-]+\.xml)$/.test(name)) throw new Error('Invalid manager bundle path');
-    await put(name, Buffer.from(bytes, 'base64'));
-  }
-  const scanner = payload.scanners?.[process.platform + '-' + process.arch];
-  if (scanner) await put(process.platform === 'win32' ? 'tokens-manager-scan.exe' : 'tokens-manager-scan',
-    gunzipSync(Buffer.from(scanner, 'base64')), 0o700);
-  await put('version', payload.version);
 }
 
-async function readBundle() {
-  const files = {}, scanners = {};
+async function installManagerFiles(root, payload, names, versionOf) {
+  const { lstat, mkdir, readdir, realpath, rename, rm, writeFile } = await import('node:fs/promises');
+  const { dirname, join } = await import('node:path');
+  const { randomUUID } = await import('node:crypto');
+  const files = Object.entries(payload.files ?? {});
+  if (!/^[a-f0-9]{64}$/.test(payload.version) || files.length !== names.length ||
+      files.some(([name, data]) => !names.includes(name) || typeof data !== 'string')) {
+    throw new Error('Invalid manager bundle');
+  }
+  const directory = join(root, 'bin');
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  if (!(await lstat(directory)).isDirectory()) throw new Error('Invalid manager bin directory');
+  const parent = await realpath(root);
+  const bin = await realpath(directory);
+  if (bin !== join(parent, 'bin')) throw new Error('Invalid manager bin directory');
+  if (await versionOf(parent, names) === payload.version) return;
+
+  // Replace modules atomically and stamp the completed installation last.
+  async function put(filename, bytes) {
+    const next = join(parent, '.bundle-' + randomUUID() + '.next');
+    await writeFile(next, bytes, { flag: 'wx', mode: 0o600 });
+    try { await rename(next, filename); }
+    finally { await rm(next, { force: true }); }
+  }
+  for (const entry of await readdir(bin, { withFileTypes: true })) {
+    if (entry.isFile() && names.includes(entry.name)) continue;
+    const obsolete = join(bin, entry.name);
+    if (entry.isDirectory() && dirname(await realpath(obsolete)) !== bin) throw new Error('Invalid manager cleanup path');
+    await rm(obsolete, { force: true, recursive: entry.isDirectory() });
+  }
+  for (const [name, bytes] of files) {
+    await put(join(bin, name), Buffer.from(bytes, 'base64'));
+  }
+  await put(join(parent, 'bundle-version'), payload.version);
+}
+
+export function installTokensManagerBundle(root, payload) {
+  return installManagerFiles(root, payload, managerFiles, installedManagerVersion);
+}
+
+export async function readTokensManagerBundle() {
+  const files = {};
   const source = new URL('./', import.meta.url);
-  const read = async name => { files[name] = (await readFile(new URL(name, source))).toString('base64'); };
-  for (const file of (await readdir(source)).sort().filter(name => transmittable.test(name))) await read(file);
-  for (const file of (await readdir(new URL('./locales/', source))).sort().filter(name => name.endsWith('.xml'))) await read('locales/' + file);
-  const archive = new URL('../native/bin/', source);
-  for (const platform of (await readdir(archive).catch(() => [])).sort()) {
-    const filename = `${platform}/tokens-manager-scan${platform.startsWith('win32-') ? '.exe' : ''}.gz`;
-    const bytes = await readFile(new URL(filename, archive)).catch(() => null);
-    if (bytes) scanners[platform] = bytes.toString('base64');
-  }
-  const version = createHash('sha256').update(JSON.stringify({ files, scanners })).digest('hex');
-  return { version, files, scanners };
+  for (const name of managerFiles) files[name] = (await readFile(new URL(name, source))).toString('base64');
+  const version = createHash('sha256').update(JSON.stringify(files)).digest('hex');
+  return { files, version };
 }
 
-async function remoteBootstrap(install) {
+async function remoteBootstrap(install, versionOf, names, entry) {
   const { createInterface } = await import('node:readline');
-  const { readFile } = await import('node:fs/promises');
   const { homedir } = await import('node:os');
   const { join } = await import('node:path');
   const { spawn } = await import('node:child_process');
   const root = join(homedir(), '.orca', 'tpsplugin');
-  const platform = process.platform + '-' + process.arch;
-  const version = await readFile(join(root, 'bin', 'version'), 'utf8').catch(() => '');
+  const version = await versionOf(root, names);
   const reader = createInterface({ input: process.stdin });
   const request = new Promise((resolve, reject) => {
     reader.once('line', line => { reader.close(); process.stdin.pause(); resolve(JSON.parse(line)); });
     reader.once('close', () => queueMicrotask(() => reject(new Error('Manager installation cancelled'))));
   });
-  console.log(JSON.stringify({ type: 'bootstrap', platform, version }));
+  console.log(JSON.stringify({ type: 'bootstrap', version }));
   const payload = await request;
-  if (payload.version !== version) await install(root, payload);
-  const child = spawn(process.execPath, [join(root, 'bin', 'tokens-manager.mjs'), '--connect'],
+  if (payload.version !== version) await install(root, payload, names, versionOf);
+  const child = spawn(process.execPath, [join(root, 'bin', entry), '--connect'],
     { stdio: ['pipe', 'inherit', 'inherit'], env: { ...process.env, ORCA_TPS_TOKENS_ROOT: root } });
   process.stdin.pipe(child.stdin);
   child.stdin.on('error', () => {});
@@ -84,10 +104,10 @@ async function remoteBootstrap(install) {
   process.stdin.destroy();
 }
 
-const bootstrap = `await (${remoteBootstrap})(${install});`;
+export const tokensManagerBootstrap = `await (${remoteBootstrap})(${installManagerFiles}, ${installedManagerVersion}, ${JSON.stringify(managerFiles)}, ${JSON.stringify(TOKEN_MANAGER_ENTRY)});`;
 
 function localBridge(root) {
-  return spawn(process.execPath, [path.join(root, 'bin', 'tokens-manager.mjs'), '--connect'], {
+  return spawn(process.execPath, [path.join(root, 'bin', TOKEN_MANAGER_ENTRY), '--connect'], {
     stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true,
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ORCA_TPS_TOKENS_ROOT: root }
   });
@@ -114,7 +134,7 @@ export async function createTokensManagerClient(orca, {
     try { timeZone = calendarFor(initialZone || undefined).timeZone; } catch {}
   }
   let intervals = tokensIntervals(), progress = null, lastUploadedAt = null, uploadStatus;
-  const bundle = readBundle();
+  const bundle = readTokensManagerBundle();
   await mkdir(root, { recursive: true, mode: 0o700 });
   for (const name of await readdir(root)) {
     if (!/^personal-[a-f0-9-]+\.json$|^leaderboard-\d+-[a-f0-9-]+\.json$/.test(name)) continue;
@@ -166,7 +186,7 @@ export async function createTokensManagerClient(orca, {
     switch (event.type) {
       case 'bootstrap':
         if (event.version === payload.version) send(connection, { version: payload.version });
-        else send(connection, { ...payload, scanners: { [event.platform]: payload.scanners[event.platform] } });
+        else send(connection, payload);
         break;
       case 'installed':
         send(connection, { type: 'hello', endpoint, timeZone });
@@ -229,7 +249,7 @@ export async function createTokensManagerClient(orca, {
     const payload = await bundle;
     let child;
     if (connection.host === localHost) {
-      await install(root, payload);
+      await installTokensManagerBundle(root, payload);
       if (stopped || connections.get(connection.host) !== connection) return;
       child = localBridge(root);
     } else {
@@ -237,7 +257,7 @@ export async function createTokensManagerClient(orca, {
       if (!target || !orca.grantedCapabilities?.includes('workspace:read')) throw new Error('Remote project unavailable');
       const destination = await resolveRuntime(target, AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]));
       if (stopped || connections.get(connection.host) !== connection) return;
-      child = launchSsh({ ...destination, directory: undefined }, randomBytes(8).toString('hex'), bootstrap);
+      child = launchSsh({ ...destination, directory: undefined }, randomBytes(8).toString('hex'), tokensManagerBootstrap);
     }
     connection.child = child;
     connection.lastSeen = Date.now();

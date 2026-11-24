@@ -1,8 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { HOUR_MS } from './leaderboard-stats.mjs';
-import { validInstallationId } from './leaderboard-installation.mjs';
+import { HOUR_MS } from './leaderboard_stats.mjs';
+import { validInstallationId } from './leaderboard_stats.mjs';
 import { HISTORY_DAYS, localHourStart, requestTokens, usageCutoffMs } from './usage-summary.mjs';
 
 export const USAGE_RETENTION_MS = 720 * HOUR_MS;

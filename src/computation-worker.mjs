@@ -1,7 +1,7 @@
 import { parentPort } from 'node:worker_threads';
 import { readActiveConversation } from './active-conversation.mjs';
-import { createLiveSessionReader, discoverUsageUnits, usageRecordPage } from './data.mjs';
-import { decodeCollectorReply, readSshTargets } from './remote-channel.mjs';
+import { createLiveSessionReader, discoverUsageUnits, usageRecordPage } from './harness_parser.mjs';
+import { readSshTargets } from './remote-channel.mjs';
 
 const live = createLiveSessionReader();
 let usageUnits = new Map();
@@ -11,7 +11,6 @@ const operations = {
   active: readActiveConversation,
   live: live.read,
   sshTargets: readSshTargets,
-  remoteReply: decodeCollectorReply,
   async discover(cutoff, options) {
     let complete = true;
     const units = await discoverUsageUnits(cutoff, { ...options, onUnavailable: () => { complete = false; } });

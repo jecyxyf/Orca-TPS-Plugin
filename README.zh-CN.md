@@ -58,7 +58,7 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 - 近 24 小时榜显示最近 5 分钟的用量波形和平均速度。近 7 天和近 30 天的曲线按天显示用量。三个周期都显示最常用模型、Harness 和上次上传时间。
 - 速度榜取每个 GitHub 账号过去 24 小时内最高的上传平均生成速度，再排前 20 名。同一账号在多台设备上传也只占一个名次。上传新增用量超过 500 Token 且速度有效才参与排名。榜上时间、最常用模型、Harness 和完整的新增 Token 数均来自胜出的那笔上传，例如 `1,250,000 tokens`。
 - 曲线从零线的绿色连续过渡到最高点的红色。曲线与零线之间使用同样的渐变，透明度为 50%。
-- 通过 GitHub 登录后参加排名。同一账号下，每台设备的用量只算一次。多个管家可以代报同一台设备的最近用量。10 秒内没有收到该设备的新包或代报，下一轮榜单移除它的数据。头像由插件向 GitHub 获取。
+- 通过 GitHub 登录后参加排名。服务每 5 秒出榜，同一账号下每台设备只计入本轮收到的最新上报，多个管家的代报也只算一次。设备漏报一轮时会从本轮榜单移除，下轮收到就重新参与。头像由插件向 GitHub 获取。
 - 登录后管家默认每 5 秒上传。工具栏显示上次成功时间，也可以手动请求上传。
 
 <p align="center">
@@ -69,7 +69,7 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 ## 4. 支持的 Harness
 
-**个人统计和天梯榜**使用 CC Switch 4.0.39 的扫描规则，并支持 Hermes Agent。来源包括 Claude Code、Codex、Gemini CLI、OpenCode、Grok Build、Pi、Oh My Pi、MiniMax Code、Kimi Code、Antigravity CLI、GitHub Copilot CLI、WorkBuddy 和 DeepSeek Harness。
+**个人统计和天梯榜**在 Windows 和 Linux 上都读取 16 种 Harness 的本地记录，包括 Claude Code、Claude Desktop、Codex、Gemini CLI、Grok Build、OpenCode、OpenClaw、Hermes Agent、Pi、MiniMax Code、Kimi Code、Oh My Pi、Antigravity CLI、GitHub Copilot CLI、WorkBuddy 和 DeepSeek Harness。Claude Desktop 读取 Cowork 的本地审计日志和用量流水。DeepSeek Harness 支持普通和 Zstd 压缩会话日志。
 
 **Orca 会话采集**支持以下工具。
 
@@ -84,7 +84,7 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 Windows 和 Linux 需使用 **Orca 1.4.251 或更新版本**。采集 SSH 工作区的用量时，远程主机需要安装**支持 SQLite 的 Node.js 22.13 或更新版本**。
 
-插件附带 Linux x64 的 Tokens 管家扫描组件。其他平台可安装 Rust stable 和 [CC Switch 构建依赖](https://github.com/farion1231/cc-switch/blob/v4.0.39/CONTRIBUTING.md)，再在插件目录运行 `npm run build:tokens-manager-scan`。Orca 会在每台连接的主机上安装并启动管家，数据保存在 `~/.orca/tpsplugin/`。
+Orca 从各连接主机的 `~/.orca/tpsplugin/bin/token_manager.mjs` 启动 Tokens 管家。`bin` 目录有六个程序文件，SQLite 数据库是 `~/.orca/tpsplugin/database/tpslugin.db`，安装指纹保存在 `~/.orca/tpsplugin/`。
 
 ### Orca 插件目录
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { HOUR_MS, RANKING_HOURS, USAGE_UPLOAD_BYTES, hourStart } from './leaderboard-stats.mjs';
+import { HOUR_MS, RANKING_HOURS, USAGE_UPLOAD_BYTES, hourStart } from './leaderboard_stats.mjs';
 
 const MAX_SPAN = RANKING_HOURS.at(-1) * HOUR_MS;
 const receiptKey = source => 'hourly-source:' + source;
