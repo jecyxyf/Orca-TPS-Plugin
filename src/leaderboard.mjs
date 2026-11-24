@@ -21,6 +21,8 @@ const LOGIN_POLL = 2000;
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const LOGOUT_RETRY = 15_000;
 const UPLOAD_INTERVAL = 10_000;
+const MANAGER_ACCOUNT_RETRY = 5000;
+const MANAGER_BAN_RECHECK = 60_000;
 const SYNC_SUCCEEDED = new Set(['accepted', 'initialized', 'duplicate']);
 const sessionKey = value => value ? createHash('sha256').update(value).digest('hex') : '';
 const tokenPattern = /^[\w-]{43}$/;
@@ -89,6 +91,7 @@ export function startLeaderboard(orca, {
   let rollingProblem = null, retryRollingNext = false;
   let installationReady;
   let uploadWake;
+  let managerToken, managerPending, managerRetry = 0;
   const secretAvailable = method => orca.grantedCapabilities?.includes('secrets:own') && host?.has(method);
   const today = () => leaderboardDay(now().getTime());
 
@@ -226,6 +229,8 @@ export function startLeaderboard(orca, {
     if (changed && manager && token) manager.setCredential({ token: null, accountId: accountId ?? null });
     token = value;
     if (changed) {
+      managerToken = undefined;
+      managerRetry = 0;
       nextAttempt = token && !manager ? now().getTime() + UPLOAD_INTERVAL : null;
       lastSyncAt = null;
       manualQueued = false;
@@ -366,7 +371,7 @@ export function startLeaderboard(orca, {
 
   let sessionSignature;
   function publishSession() {
-    if (lifetime.signal.aborted || !orca.panels.post) return;
+    if (lifetime.signal.aborted) return;
     if (manager) {
       const at = manager.lastUploaded();
       if (at && at > (lastSyncAt ?? 0) && token && accountId) {
@@ -377,8 +382,17 @@ export function startLeaderboard(orca, {
       const status = manager.uploadStatus();
       if (token && status?.code && status.code !== 'accepted' && status.at > (lastUpload?.at ?? 0)) {
         lastUpload = { code: status.code, kind: 'automatic', at: status.at };
+        if (status.code === 'login_required') {
+          managerToken = undefined;
+          managerRetry = 0;
+          bindManager();
+        } else if (status.code === 'banned') {
+          banned = true;
+          managerRetry = now().getTime() + MANAGER_BAN_RECHECK;
+        }
       }
     }
+    if (!orca.panels.post) return;
     const snapshot = panelState(1), signature = JSON.stringify(snapshot);
     if (signature === sessionSignature) return;
     try {
@@ -840,19 +854,20 @@ export function startLeaderboard(orca, {
     uploadWake.unref?.();
   }
 
-  let managerToken, managerPending, managerRetry = 0;
   function bindManager() {
-    if (!token || managerToken === token || managerPending || now().getTime() < managerRetry) return;
+    if (!token || (managerToken === token && !banned) || managerPending || now().getTime() < managerRetry) return;
     const current = token;
-    managerRetry = now().getTime() + 5000;
+    managerRetry = now().getTime() + MANAGER_ACCOUNT_RETRY;
     managerPending = request(TOKENS_LEADERBOARD + '/account').then(result => {
       if (token !== current || lifetime.signal.aborted || !(Number.isSafeInteger(result.accountId) && result.accountId > 0)) return;
       accountId = result.accountId;
       banned = result.banned === true;
       managerToken = current;
-      if (!banned) manager.setCredential({ token: current, accountId });
+      if (banned) managerRetry = now().getTime() + MANAGER_BAN_RECHECK;
+      else manager.setCredential({ token: current, accountId });
       if (validUsername(result.username)) rememberUsername(result.username);
       saveAccount();
+      publishSession();
     }).finally(() => { managerPending = undefined; });
   }
 

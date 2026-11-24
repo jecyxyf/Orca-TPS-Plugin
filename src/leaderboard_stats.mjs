@@ -11,7 +11,9 @@ export const RANKING_HOURS = [24, 168, 720];
 export const RANKING_REFRESH_MS = 10_000;
 export const USAGE_UPLOAD_BYTES = 64 * 1024;
 export const SPEED_WINDOW_MS = 24 * HOUR_MS;
+export const SPEED_SAMPLE_WINDOW_MS = SPEED_WINDOW_MS + HOUR_MS;
 export const SPEED_MIN_DELTA = 500;
+export const LEADERBOARD_DEVICE_LIMIT = 4;
 export const hourStart = time => Math.floor(time / HOUR_MS) * HOUR_MS;
 export const isHourStart = time => Number.isSafeInteger(time) && time >= 0 && time % HOUR_MS === 0;
 export const isUsageTime = time => Number.isSafeInteger(time) && time >= 0 && time < 8_640_000_000_000_000;
@@ -75,14 +77,13 @@ export function validLeaderboardUsageTimes(usage, from, end = Infinity) {
   });
 }
 
-const dayMs = 24 * HOUR_MS;
 const label = value => validStatsLabel(value) ? value : null;
 const add = (map, key, amount) => map.set(key, (map.get(key) ?? 0) + amount);
 
 export function makeLeaderboardPacket(db, accountId, publishedAt) {
   const hourTotals = new Map(), daily = new Map(), samples = [];
   const firstHour = hourStart(publishedAt) - 720 * HOUR_MS;
-  const recentFrom = publishedAt - dayMs;
+  const recentFrom = publishedAt - SPEED_SAMPLE_WINDOW_MS;
   for (const row of db.details(firstHour)) {
     if (row.completedAt > publishedAt) continue;
     const tokens = requestTokens(row), hour = hourStart(row.completedAt);

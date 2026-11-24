@@ -1602,7 +1602,7 @@
       const messageFor = code => Object.hasOwn(messages, code) ? t(messages[code]) : undefined;
       let session, pendingLogin, retryLogin, rankDays = 1, rankingMode = 'calendar';
       const cachedRankings = new Map();
-      const RANK_REFRESH_MS = 10_000, RECENT_STATS_MS = 5 * 60_000, DAY_MS = 86_400_000;
+      const RANK_REFRESH_MS = 10_000, RECENT_STATS_MS = 5 * 60_000, HOUR_MS = 3_600_000, DAY_MS = 24 * HOUR_MS;
       let rankingPending, rankWake, nextRankRefresh, rankingProblem, sessionPushVersion = 0, rankingSubscription;
       let uploadUnlockAt, uploadUnlockWake;
       let rankingAccess, rankingPreferenceSubscription, rankingPreferenceVersion = 0, rankingPreferenceFailed = false;
@@ -1923,7 +1923,7 @@
           axis.className = 'ladder-chart-axis';
           for (const offset of [0, Math.round((rankDays - 1) / 2), rankDays - 1]) {
             const label = document.createElement('span');
-            label.textContent = dateLabel(left + (offset + (rankingMode === 'hourly' ? 1 : 0)) * DAY_MS);
+            label.textContent = dateLabel(left + offset * DAY_MS + (rankingMode === 'hourly' ? DAY_MS - 1 : 0));
             axis.append(label);
           }
           container.append(axis);
@@ -1974,9 +1974,14 @@
         nextRecentExpiry = Infinity;
         if (speedBoard) {
           const offset = ranking?.clockOffset ?? 0;
-          rows = rows.filter(row => row.submittedAt + DAY_MS - offset > now)
+          const expiry = ({ submittedAt }) => {
+            if (!Number.isFinite(ranking?.windowStart)) return submittedAt + DAY_MS - offset;
+            if (rankingMode === 'hourly') return Math.floor(submittedAt / HOUR_MS) * HOUR_MS + DAY_MS + HOUR_MS - offset;
+            return Math.floor((submittedAt + 8 * HOUR_MS) / DAY_MS) * DAY_MS + DAY_MS - 8 * HOUR_MS - offset;
+          };
+          rows = rows.filter(row => expiry(row) > now)
             .map((row, index) => ({ ...row, rank: index + 1 }));
-          for (const row of rows) nextRecentExpiry = Math.min(nextRecentExpiry, row.submittedAt + DAY_MS - offset);
+          for (const row of rows) nextRecentExpiry = Math.min(nextRecentExpiry, expiry(row));
         }
         rows = rows.map(row => {
           if (!row.recent) return row;
@@ -2016,12 +2021,12 @@
           user.append(avatar, name);
           total.textContent = speedBoard ? speedText(row.avgTps) : formatMillionTokens(row.tokens);
           if (speedBoard) total.title = t('leaderboard-average-speed');
-          const uploadedAt = row.lastUploadAt ?? row.submittedAt;
-          const uploaded = speedBoard ? leaderboardTime(uploadedAt) : clock(uploadedAt);
+          const shownAt = speedBoard ? row.submittedAt : (row.lastUploadAt ?? row.submittedAt);
+          const shownTime = speedBoard ? leaderboardTime(shownAt) : clock(shownAt);
           time.setAttribute('data-localized-text', '');
-          time.textContent = (speedBoard ? uploaded : t('last-upload-at', uploaded)) +
+          time.textContent = (speedBoard ? shownTime : t('last-upload-at', shownTime)) +
             (row.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '');
-          time.dateTime = new Date(uploadedAt).toISOString();
+          time.dateTime = new Date(shownAt).toISOString();
           item.append(rank, user, total);
           if (speedBoard) {
             const meta = document.createElement('div');

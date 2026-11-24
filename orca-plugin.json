@@ -32,8 +32,8 @@
     },
     {
       "path": "assets/1.6.5/leaderboard.png",
-      "alt": "Orca sidebar showing the 30-day usage ranking and the 24-hour speed ranking",
-      "caption": "Leaderboard · Compare usage trends and each user's best speed",
+      "alt": "Orca sidebar showing 30-day usage trends and the Speed tab with Day and Hour modes",
+      "caption": "Leaderboard · Compare usage and speed by day or by hour",
       "theme": "dark"
     }
   ],

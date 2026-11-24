@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import { isIP, SocketAddress } from 'node:net';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
-import { TOKENS_LEADERBOARD } from '../src/leaderboard_stats.mjs';
+import { LEADERBOARD_DEVICE_LIMIT, SPEED_SAMPLE_WINDOW_MS, TOKENS_LEADERBOARD } from '../src/leaderboard_stats.mjs';
 import { leaderboardSnapshotForMode } from './tokens-manager-rankings.mjs';
 
 const GITHUB = 'https://github.com';
@@ -83,6 +83,20 @@ export function createLeaderboardServer({
   const browserLogins = new Map();
   const requests = new Map();
   let minute;
+  // Each active device can upload its own report and relay the other devices' reports.
+  const uploadLimit = tokensJobs ? LEADERBOARD_DEVICE_LIMIT ** 2 * (Math.ceil(60_000 / (tokensJobs.intervals.uploadMs ?? 3000)) + 1) : 0;
+
+  function allowRequest(key, limit) {
+    const count = requests.get(key) ?? 0;
+    if (count >= limit) return false;
+    requests.set(key, count + 1);
+    return true;
+  }
+
+  function rateLimited(res, time) {
+    res.setHeader('Retry-After', String(Math.ceil((60_000 - time % 60_000) / 1000)));
+    return send(res, 429, { code: 'rate_limited' });
+  }
 
   const adminCookie = secure ? '__Host-orca_admin' : 'orca_admin';
   const stateCookie = secure ? '__Host-orca_state' : 'orca_state';
@@ -328,10 +342,11 @@ export function createLeaderboardServer({
     const forwarded = trustedProxies.has(address) ? normalizeIp(req.headers['x-real-ip']) : null;
     const ip = forwarded ?? address;
     const auth = route.startsWith('/auth/') || route.startsWith('/api/auth/');
-    const requestKey = (auth ? 'auth/' : 'other/') + ip;
-    const count = (requests.get(requestKey) ?? 0) + 1;
-    if (count > (auth ? 120 : 240)) return send(res, 429, { code: 'rate_limited' });
-    requests.set(requestKey, count);
+    const packetRoute = tokensJobs && method === 'POST' && route === TOKENS_LEADERBOARD + '/packets';
+    const publicRanking = tokensJobs && method === 'GET' &&
+      (route === TOKENS_LEADERBOARD + '/snapshot' || route === TOKENS_LEADERBOARD + '/config');
+    if (!packetRoute && !allowRequest((auth ? 'auth/' : publicRanking ? 'ranking/' : 'other/') + ip,
+      auth ? 120 : publicRanking ? 2400 : 240)) return rateLimited(res, time);
 
     if (method === 'GET' && route === '/healthz') return send(res, 200, { ok: true, githubConfigured });
     if (method === 'GET' && route === '/') return redirect(res, '/admin');
@@ -355,7 +370,7 @@ export function createLeaderboardServer({
     if (!route.startsWith('/api/')) return send(res, 404, { code: 'not_found' });
     if (tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/config') {
       res.setHeader('Cache-Control', 'no-store');
-      return send(res, 200, { intervals: tokensJobs.intervals });
+      return send(res, 200, { intervals: tokensJobs.intervals, speedSampleWindowMs: SPEED_SAMPLE_WINDOW_MS });
     }
     if (tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/snapshot') {
       res.setHeader('Cache-Control', 'no-store');
@@ -370,20 +385,23 @@ export function createLeaderboardServer({
       return view ? send(res, 200, view) : send(res, 404, { code: 'server_update_required' });
     }
     const accountRoute = tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/account';
-    const packetRoute = tokensJobs && method === 'POST' && route === TOKENS_LEADERBOARD + '/packets';
     const logoutRoute = method === 'POST' && route === '/api/auth/logout';
     if (!accountRoute && !packetRoute && !logoutRoute) return send(res, 404, { code: 'not_found' });
 
     const token = /^Bearer ([\w-]{43})$/.exec(req.headers.authorization ?? '')?.[1];
     const sessionDigest = token ? digest(token) : null;
     const account = sessionDigest ? store.session(sessionDigest, 'plugin', time) : null;
-    if (!account) return send(res, 401, { code: 'login_required' });
+    if (!account) {
+      if (packetRoute && !allowRequest('invalid-packet/' + ip, 240)) return rateLimited(res, time);
+      return send(res, 401, { code: 'login_required' });
+    }
     if (accountRoute) return send(res, 200, { accountId: account.id, username: account.username, banned: Boolean(account.banned) });
     if (logoutRoute) {
       store.removeSession(sessionDigest, time);
       return send(res, 200, { ok: true });
     }
     if (account.banned) return send(res, 403, { code: 'banned', username: account.username });
+    if (!allowRequest('packet/' + account.id, uploadLimit)) return rateLimited(res, time);
 
     const raw = await readBody(req, 1024 * 1024);
     return raw && await tokensJobs.receive(account, raw)

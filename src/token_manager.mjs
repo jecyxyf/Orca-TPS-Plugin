@@ -1,17 +1,26 @@
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { bridgeOrca, createManagerLinks, createOrcaConnection, createSnapshotSender, TOKENS_LEASE_MS, TOKENS_ROOT } from './orca_connection.mjs';
-import { openRemoteDeviceCache, openTokensManagerDb } from './database.mjs';
-import { HarnessParser, normalizeComparePath, readTargetSession } from './harness_parser.mjs';
+import { channelProvider, openRemoteDeviceCache, openTokensManagerDb } from './database.mjs';
+import { enrichChannelRecords, HarnessParser, normalizeComparePath, readTargetSession } from './harness_parser.mjs';
 import { calendarFor, makePersonalPacket, RETENTION_DAYS } from './personal_stats.mjs';
-import { HOUR_MS, makeLeaderboardPacket, TOKENS_LEADERBOARD, tokensIntervals, validInstallationId } from './leaderboard_stats.mjs';
+import { HOUR_MS, LEADERBOARD_DEVICE_LIMIT, makeLeaderboardPacket, SPEED_SAMPLE_WINDOW_MS, SPEED_WINDOW_MS, TOKENS_LEADERBOARD,
+  tokensIntervals, validInstallationId } from './leaderboard_stats.mjs';
 
 const entry = fileURLToPath(import.meta.url);
 const DAY_MS = 24 * HOUR_MS;
+const CONFIG_REFRESH_MS = 60_000;
 const tokenPattern = /^[\w-]{43}$/;
+
+function installedBundleVersion(root) {
+  try { return readFileSync(path.join(root, 'bundle-version'), 'utf8').trim(); }
+  catch { return ''; }
+}
 
 export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, scan = scanTokens, fetcher = fetch, openSyncPeer } = {}) {
   let startupTimer, tickTimer, finished, stopped = false, syncDue = false;
+  const bundleVersion = installedBundleVersion(root);
   const remoteDevices = await openRemoteDeviceCache(root);
   const connection = createOrcaConnection(root, { clock, onHello, onSyncHello, onMessage, onUnsubscribe });
   const sendSnapshot = createSnapshotSender(devicePackets);
@@ -36,12 +45,16 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
   if (!await connection.listen()) return;
 
   function onHello(peer, message) {
+    if (message.bundleVersion && message.bundleVersion !== bundleVersion) {
+      if (message.bundleVersion === installedBundleVersion(root)) void stop();
+      return false;
+    }
     peer.localClient = message.local === true;
     peer.syncTargets = [];
     const timeZone = collection.initialize(message);
     const db = collection.db;
     leaderboard.initialize(db, message.endpoint);
-    connection.reply(peer, { type: 'ready', deviceGuid: db.deviceGuid, timeZone, intervals: leaderboard.intervals });
+    connection.reply(peer, { type: 'ready', deviceGuid: db.deviceGuid, timeZone, bundleVersion, intervals: leaderboard.intervals });
     if (collection.ready && personalPacket) connection.reply(peer, { type: 'personal', packet: personalPacket });
     else connection.reply(peer, { type: 'progress', ...collection.progress });
     if (peer.localClient) {
@@ -177,19 +190,15 @@ export async function scanTokens(_root, db, { at = Date.now(), signal, progress 
 }
 
 export async function readManagerChannel(db, target) {
-  const aliases = new Map([['agy', 'antigravity'], ['opencode2', 'opencode']]);
-  const provider = value => aliases.get(value) ?? value;
-  const sessions = new Set((target.sessions ?? []).map(session => JSON.stringify([provider(session.provider), session.sessionId])));
-  const cwd = normalizeComparePath(target.worktreePath);
-  const matches = row => (cwd && normalizeComparePath(row.cwd) === cwd) ||
-    sessions.has(JSON.stringify([provider(row.provider), row.sessionId]));
-  const records = db.details().filter(matches).slice(0, 100);
-  const fallback = records.length < 100 ? await readTargetSession(target, { ccSwitchDb: null }).catch(() => null) : null;
+  const sessions = target.sessions ?? (target.sessionId ? [{ provider: target.provider, sessionId: target.sessionId }] : []);
+  const records = db.channelDetails(normalizeComparePath(target.worktreePath), sessions);
+  const fallback = records.length < 100
+    ? await readTargetSession(target, { ccSwitchDb: null, includeUsageRecords: true }).catch(() => null) : null;
   const combined = new Map();
-  for (const row of [...(fallback?.session?.records ?? []), ...records]) {
-    combined.set(JSON.stringify([provider(row.provider), row.id, row.completedAt]), row);
+  for (const row of [...(fallback?.usageRecords ?? []), ...records]) {
+    combined.set(JSON.stringify([channelProvider(row.provider), row.sessionId, row.id, row.completedAt]), row);
   }
-  const display = [...combined.values()].sort((a, b) => b.completedAt - a.completedAt).slice(0, 100)
+  const display = (await enrichChannelRecords([...combined.values()], sessions))
     .map(({ cwd, project, sessionId, ...record }) => record);
   return { session: {
     id: `channel:${target.worktreeId || target.key || 'active'}`, provider: 'channel', title: target.title,
@@ -279,6 +288,7 @@ function safeOrigin(value) {
 function createLeaderboardReporter({ clock, fetcher, connection, remoteDevices }) {
   const abort = new AbortController();
   let credential, endpoint, packet, uploadState;
+  let extendedSpeedOrigin;
   let intervals = tokensIntervals();
   let nextConfig = 0, nextUpload = 0;
   let uploading = false;
@@ -327,10 +337,11 @@ function createLeaderboardReporter({ clock, fetcher, connection, remoteDevices }
   function configure(db) {
     if (!endpoint || clock() < nextConfig) return;
     const origin = endpoint;
-    nextConfig = clock() + intervals.readMs;
+    nextConfig = clock() + CONFIG_REFRESH_MS;
     void fetcher(origin + TOKENS_LEADERBOARD + '/config', { signal: requestSignal() })
       .then(response => response.ok ? response.json() : null).then(result => {
         if (origin !== endpoint || !result?.intervals || abort.signal.aborted) return;
+        extendedSpeedOrigin = result.speedSampleWindowMs === SPEED_SAMPLE_WINDOW_MS ? origin : undefined;
         const updated = tokensIntervals(result.intervals, intervals);
         if (JSON.stringify(updated) !== JSON.stringify(intervals)) {
           intervals = updated;
@@ -349,20 +360,32 @@ function createLeaderboardReporter({ clock, fetcher, connection, remoteDevices }
     uploading = true;
     uploadState = { type: 'upload-state', accountId: active.accountId, nextAt: nextUpload, pending: true };
     connection.broadcast(uploadState, active.accountId);
-    const packets = [packet];
+    const relays = [];
     for (const [device, accounts] of remoteDevices.relays) {
       const other = accounts.get(active.accountId);
-      if (device !== db.deviceGuid && other) packets.push(other);
+      if (device !== db.deviceGuid && other) relays.push(other);
     }
-    void Promise.all(packets.map(item => fetcher(active.origin + TOKENS_LEADERBOARD + '/packets', {
-      method: 'POST', redirect: 'error', signal: requestSignal(),
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + active.token }, body: JSON.stringify(item)
-    }).then(async response => response.ok ? 'accepted' : (await response.json()).code ?? 'unavailable')
-      .catch(() => 'unavailable'))).then(([code]) => {
+    relays.sort((a, b) => b.publishedAt - a.publishedAt);
+    const packets = [packet, ...relays.slice(0, LEADERBOARD_DEVICE_LIMIT - 1)];
+    const uploadPacket = item => {
+      const body = extendedSpeedOrigin === active.origin ? item : {
+        ...item, samples: Array.isArray(item.samples) ? item.samples.filter(sample => sample?.[1] >= item.publishedAt - SPEED_WINDOW_MS) : []
+      };
+      return fetcher(active.origin + TOKENS_LEADERBOARD + '/packets', {
+        method: 'POST', redirect: 'error', signal: requestSignal(),
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + active.token }, body: JSON.stringify(body)
+      }).then(async response => {
+        if (response.ok) return 'accepted';
+        if (response.status === 401) return 'login_required';
+        return (await response.json()).code ?? 'unavailable';
+      }).catch(() => 'unavailable');
+    };
+    void Promise.all(packets.map(uploadPacket)).then(([code]) => {
       if (credential !== active || abort.signal.aborted) return;
       uploadState = { type: 'upload-state', accountId: active.accountId, nextAt: nextUpload, pending: false, code, at: clock() };
       connection.broadcast(uploadState, active.accountId);
       if (code === 'accepted') connection.broadcast({ type: 'uploaded', at: uploadState.at, accountId: active.accountId }, active.accountId);
+      if (code === 'login_required' || code === 'banned') clearCredential();
     }).finally(() => { uploading = false; });
   }
 

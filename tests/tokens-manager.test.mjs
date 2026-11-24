@@ -13,7 +13,7 @@ import { pathToFileURL } from 'node:url';
 import { calendarFor } from '../src/personal_stats.mjs';
 import { openTokensManagerDb, readRemoteDeviceCache } from '../src/database.mjs';
 import { makePersonalPacket, mergePersonalPackets } from '../src/personal_stats.mjs';
-import { TOKENS_DEFAULT_INTERVALS } from '../src/leaderboard_stats.mjs';
+import { makeLeaderboardPacket, TOKENS_DEFAULT_INTERVALS } from '../src/leaderboard_stats.mjs';
 import { createPacketReceiver, createTokensRankings, validatePacket } from '../server/tokens-manager-rankings.mjs';
 import { createTokensManagerJobs } from '../server/tokens-manager-jobs.mjs';
 import { createPacketBuffer, openPacketBuffer } from '../server/tokens-manager-buffer.mjs';
@@ -211,6 +211,33 @@ test('merges legacy databases and WAL changes without counting already-applied b
   } finally { db.close(); }
 });
 
+test('backfills indexed channel lookups and retrieves the newest matching requests only', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tps-manager-channel-index-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const open = () => openTokensManagerDb(root, { timeZone: 'UTC', now: () => at });
+  const db = open();
+  const rows = Array.from({ length: 160 }, (_, i) => ({ ...entry('request-' + i, 0), completedAt: at - i,
+    cwd: i % 2 ? '/project/other' : '/project/x/', provider: i === 1 ? 'opencode2' : 'codex', sessionId: 'session-' + i }));
+  db.commitSource('fixture', '321', rows, at);
+  db.close();
+  const old = new DatabaseSync(path.join(root, 'database', 'tpslugin.db'));
+  old.exec('DROP TRIGGER detail_channels_delete; DROP TRIGGER detail_channels_insert; DROP TABLE detail_channels;');
+  old.close();
+  const migrated = open();
+  try {
+    assert.equal(migrated.details().length, 160);
+    assert.equal(migrated.channelDetails('/project/x', []).length, 80);
+    assert.equal(migrated.channelDetails('/project/other', []).length, 80);
+    const results = migrated.channelDetails('/project/x', [{ provider: 'opencode', sessionId: 'session-1' },
+      { provider: 'codex', sessionId: 'session-0' }]);
+    assert.equal(results.length, 81);
+    assert.deepEqual(results.slice(0, 3).map(row => row.id), ['request-0', 'request-1', 'request-2']);
+    migrated.commitSource('fixture-2', '123', [{ ...rows[0], cwd: '/project/new' }], at);
+    assert.deepEqual(migrated.channelDetails('/project/new', []).map(row => row.id), ['request-0']);
+    assert.equal(migrated.channelDetails('/project/x', []).length, 79);
+  } finally { migrated.close(); }
+});
+
 function packet(guid, tokens, publishedAt = at) {
   return { deviceGuid: guid, accountId: 11, publishedAt, hours: [[Date.parse('2026-06-15T11:00:00Z'), tokens]],
     daily: [['2026-06-15', tokens]], samples: [] };
@@ -329,17 +356,45 @@ test('retains four device summaries and replaces the oldest when a new device re
   assert.equal(refreshed.boards[24].rows[0].tokens, 145);
 });
 
-test('combines speed samples from different devices in each round and keeps the winning point while offline', () => {
+test('combines device samples and retains separate speed winners until each window ends', () => {
   const rankings = createTokensRankings();
   const account = { id: 11, username: 'player' };
   const reports = [100, 200].map((rate, index) => ({
     account, receivedAt: at,
-    packet: { ...packet(randomUUID(), 10), samples: [[String(index).repeat(24), at, 300, rate, 'model', 'codex']] }
+    packet: { ...packet(randomUUID(), 10), samples: [
+      [String(index).repeat(24), at - hour, 300, rate, 'model', 'codex'],
+      [String(index + 2).repeat(24), at, 300, rate + 100, 'model', 'codex']
+    ] }
   }));
-  const rows = rankings.publish(reports, at, TOKENS_DEFAULT_INTERVALS).boards[0].rows;
+  const first = rankings.publish(reports, at, TOKENS_DEFAULT_INTERVALS);
+  const rows = first.boards[0].rows;
   assert.equal(rows[0].deltaTokens, 600);
   assert.equal(rows[0].avgTps, 150);
-  assert.deepEqual(rankings.publish([], at + day, TOKENS_DEFAULT_INTERVALS).boards[0].rows, rows);
+  assert.equal(first.calendar.boards[0].rows[0].avgTps, 250);
+  const next = rankings.publish([], at + 1000, TOKENS_DEFAULT_INTERVALS);
+  assert.deepEqual(next.boards[0].rows, rows);
+  assert.deepEqual(next.calendar.boards[0].rows, first.calendar.boards[0].rows);
+  const midnight = Date.parse('2026-06-16T00:00:00+08:00');
+  const afterMidnight = rankings.publish([], midnight, TOKENS_DEFAULT_INTERVALS);
+  assert.deepEqual(afterMidnight.boards[0].rows, first.calendar.boards[0].rows);
+  assert.deepEqual(afterMidnight.calendar.boards[0].rows, []);
+  assert.deepEqual(rankings.publish([], at + day + hour, TOKENS_DEFAULT_INTERVALS).boards[0].rows, []);
+});
+
+test('uploads speed samples from the oldest hour the completed-hour board can include', () => {
+  const publishedAt = Date.parse('2026-06-15T12:59:00Z');
+  const firstCompleteHour = Date.parse('2026-06-14T12:00:00Z');
+  const rows = [firstCompleteHour, publishedAt - 25 * hour - 1].map((completedAt, i) => ({
+    ...entry('speed-' + i, 0, 1000), completedAt
+  }));
+  const raw = makeLeaderboardPacket({ deviceGuid: randomUUID(), calendar: calendarFor('UTC'), details: () => rows }, 11, publishedAt);
+  assert.deepEqual(raw.samples.map(sample => sample[1]), [firstCompleteHour]);
+  const report = { account: { id: 11, username: 'oldest' }, receivedAt: publishedAt,
+    packet: validatePacket(JSON.stringify(raw), 11, publishedAt, 1e6) };
+  assert.ok(report.packet);
+  const { boards, calendar } = createTokensRankings().publish([report], publishedAt, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(boards[0].rows[0].submittedAt, firstCompleteHour);
+  assert.equal(calendar.boards[0].rows.length, 0);
 });
 
 test('a ban evicts the cached account and an unban admits only subsequent uploads', () => {
@@ -383,18 +438,23 @@ test('keeps separate rankings and cutoffs across Beijing midnight', () => {
   assert.equal(calendar.boards[168].windowStart, midnight - 6 * day);
   assert.equal(calendar.boards[168].rows[0].tokens, 600);
   assert.equal(calendar.boards[720].rows[0].tokens, 635);
+  assert.equal(boards[168].rows[0].daily.reduce((total, point) => total + point.tokens, 0), boards[168].rows[0].tokens);
+  assert.equal(boards[168].rows[0].daily.at(-1).tokens, 400);
   assert.deepEqual(calendar.boards[168].rows[0].daily.slice(-2).map(({ at, tokens }) => [at, tokens]),
     [[midnight - day, 100], [midnight, 500]]);
 });
 
-test('retains 10,000 ranks in both usage modes and 100 in the shared speed board', () => {
+test('retains 10,000 ranks in both usage modes and 100 in each speed board', () => {
   const rankings = createTokensRankings();
   const device = randomUUID();
   const base = packet(device, 1);
   const reports = Array.from({ length: 10_001 }, (_, index) => {
     const id = index + 1;
     return { account: { id, username: 'player-' + id }, receivedAt: at, packet: { ...base, accountId: id,
-      hours: [[base.hours[0][0], id]], samples: [['a'.repeat(24), at, 600, id, 'model', 'codex']] } };
+      hours: [[base.hours[0][0], id]], samples: [
+        ['a'.repeat(24), at - hour, 600, id, 'model', 'codex'],
+        ['b'.repeat(24), at, 600, 30_000 - id, 'model', 'codex']
+      ] } };
   });
   const snapshot = rankings.publish(reports, at, TOKENS_DEFAULT_INTERVALS);
   for (const set of [snapshot.boards, snapshot.calendar.boards]) {
@@ -407,19 +467,24 @@ test('retains 10,000 ranks in both usage modes and 100 in the shared speed board
   }
   assert.equal(snapshot.boards[0].rows.length, 100);
   assert.equal(snapshot.boards[0].rows.at(-1).avgTps, 9902);
-  assert.equal(snapshot.calendar.boards[0], undefined);
+  assert.equal(snapshot.calendar.boards[0].rows.length, 100);
+  assert.equal(snapshot.calendar.boards[0].rows[0].username, 'player-1');
   assert.equal(rankings.snapshot(), snapshot);
   rankings.setBan(10_001, true, 0);
   const afterBan = rankings.publish([], at, TOKENS_DEFAULT_INTERVALS);
-  assert.equal(afterBan.boards[24].rows.length, 9_999);
+  assert.equal(afterBan.boards[24].rows.length, 10_000);
+  assert.equal(afterBan.boards[24].rows.at(-1).username, 'player-1');
   assert.equal(afterBan.boards[0].rows.length, 99);
 
-  const refreshed = rankings.publish([{
-    ...reports[0], packet: { ...reports[0].packet, deviceGuid: randomUUID() }
-  }], at, TOKENS_DEFAULT_INTERVALS);
+  const refreshed = rankings.publish([reports[0]], at, TOKENS_DEFAULT_INTERVALS);
   assert.equal(refreshed.boards[24].rows.length, 10_000);
   assert.equal(refreshed.boards[24].rows.at(-1).username, 'player-1');
   assert.equal(refreshed.boards[24].rows.at(-1).tokens, 1);
+
+  const future = at + day + hour;
+  const fresh = { ...reports[0], receivedAt: future, packet: { ...packet(device, 1, future), accountId: 1,
+    samples: [['a'.repeat(24), future - hour, 600, 50, 'model', 'codex']] } };
+  assert.deepEqual(rankings.publish([fresh], future, TOKENS_DEFAULT_INTERVALS).boards[0].rows.map(row => row.username), ['player-1']);
 
 });
 
@@ -462,10 +527,15 @@ test('publishes every three seconds and retains successful uploads through an un
   const base = `http://127.0.0.1:${server.address().port}/api/tokens-manager`;
   const config = await fetch(base + '/config').then(res => res.json());
   assert.deepEqual(config.intervals, { ...TOKENS_DEFAULT_INTERVALS, uploadMs: 3000, publishMs: 3000, readMs: 3000 });
+  assert.equal(config.speedSampleWindowMs, 25 * hour);
   const upload = body => fetch(base + '/packets', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
   const guid = randomUUID();
   const latest = packet(guid, 100);
   latest.hours.push([Math.floor(at / hour) * hour, 25]);
+  latest.samples = [
+    ['a'.repeat(24), at - 4 * 60_000, 700, 40, 'hourly-model', 'codex'],
+    ['b'.repeat(24), at - 1000, 700, 120, 'calendar-model', 'codex']
+  ];
   const responses = await Promise.all([
     upload(latest), upload(packet(guid, 200, at - 1)), upload(packet(randomUUID(), 400))
   ]);
@@ -492,7 +562,10 @@ test('publishes every three seconds and retains successful uploads through an un
   assert.equal(calendar.mode, 'calendar');
   assert.equal(calendar.boards[24].rows[0].tokens, 525);
   assert.equal(calendar.cutoffAt, at);
-  assert.deepEqual(calendar.boards[0], snapshot.boards[0]);
+  assert.equal(calendar.boards[0].windowStart, Date.parse('2026-06-15T00:00:00+08:00'));
+  assert.equal(snapshot.boards[0].windowStart, Math.floor(at / hour) * hour - day);
+  assert.equal(calendar.boards[0].rows[0].avgTps, 120);
+  assert.equal(snapshot.boards[0].rows[0].avgTps, 40);
   const hourlyBytes = jobs.snapshot('hourly');
   const calendarBytes = jobs.snapshot('calendar');
   const readers = await Promise.all(Array.from({ length: 16 }, (_, i) =>
@@ -513,8 +586,11 @@ test('publishes every three seconds and retains successful uploads through an un
   assert.equal(returned.boards[24].rows[0].tokens, 550);
 });
 
-test('uses one process, waits for the first scan and keeps its lease across a short disconnect', async t => {
+test('keeps its lease across disconnects and drains before replacing the running bundle', async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'tps-manager-process-'));
+  const stamp = path.join(root, 'bundle-version');
+  const previousVersion = 'a'.repeat(64), nextVersion = 'b'.repeat(64);
+  await writeFile(stamp, previousVersion);
   let allowScan;
   const waitForScan = new Promise(resolve => { allowScan = resolve; });
   let allowClosingScan, startedClosingScan;
@@ -549,7 +625,7 @@ test('uses one process, waits for the first scan and keeps its lease across a sh
     await processJob;
     await rm(root, { recursive: true, force: true });
   });
-  function subscribe() {
+  function subscribe(bundleVersion = previousVersion) {
     const child = spawn(process.execPath, ['src/token_manager.mjs', '--connect'],
       { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, ORCA_TPS_TOKENS_ROOT: root } });
     const events = [];
@@ -568,11 +644,12 @@ test('uses one process, waits for the first scan and keeps its lease across a sh
     const exit = new Promise(resolve => child.once('exit', resolve));
     const peer = { events, event, stop, send, exit };
     peers.add(peer);
-    send({ type: 'hello', timeZone: 'UTC' });
+    send({ type: 'hello', timeZone: 'UTC', bundleVersion });
     return peer;
   }
   const a = subscribe(), b = subscribe();
   const first = await a.event('ready');
+  assert.equal(first.bundleVersion, previousVersion);
   assert.equal((await b.event('ready')).deviceGuid, first.deviceGuid);
   await runTokensManager(root, { scan: () => assert.fail('second process acquired the socket') });
   await a.event('progress');
@@ -603,15 +680,29 @@ test('uses one process, waits for the first scan and keeps its lease across a sh
   c.send({ type: 'heartbeat' });
   await c.event('heartbeat');
   await closingStarted;
-  c.send({ type: 'unsubscribe' });
-  c.stop();
+  await writeFile(stamp, nextVersion);
+  const upgrade = subscribe(nextVersion);
+  await upgrade.exit;
+  assert.equal(upgrade.events.some(event => event.type === 'ready'), false);
   await c.exit;
-  const duringShutdown = subscribe();
+  const duringShutdown = subscribe(nextVersion);
   await duringShutdown.exit;
   assert.equal(duringShutdown.events.some(event => event.type === 'ready'), false);
   allowClosingScan();
   await processJob;
   assert.equal(stopped, true);
+  const replacement = runTokensManager(root, { clock: () => clock, scan: async () => {} });
+  const d = subscribe(nextVersion);
+  try {
+    const updated = await d.event('ready');
+    assert.equal(updated.bundleVersion, nextVersion);
+    assert.equal(updated.deviceGuid, first.deviceGuid);
+  } finally {
+    d.send({ type: 'unsubscribe' });
+    d.stop();
+    clock += 60_000;
+    await replacement;
+  }
 });
 
 test('three managers exchange device statistics across two links and restore them after the hub leaves', { timeout: 25_000 }, async t => {

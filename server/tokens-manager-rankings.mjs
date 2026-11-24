@@ -1,7 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import {
-  HOUR_MS, MAX_RECENT_REQUESTS, RANKING_HOURS, RECENT_STATS_MS, SPEED_MIN_DELTA, hourStart, isHourStart,
-  isUsageTime, validInstallationId, validRecentRequest
+  HOUR_MS, LEADERBOARD_DEVICE_LIMIT, MAX_RECENT_REQUESTS, RANKING_HOURS, RECENT_STATS_MS, SPEED_SAMPLE_WINDOW_MS,
+  hourStart, isHourStart, isUsageTime, qualifyingSpeed, validInstallationId, validRecentRequest
 } from '../src/leaderboard_stats.mjs';
 import { calendarFor } from '../src/personal_stats.mjs';
 import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
@@ -10,9 +10,10 @@ import { openPacketBuffer } from './tokens-manager-buffer.mjs';
 const dayMs = 24 * HOUR_MS;
 const usageLimit = 10_000;
 const publicLimit = 100;
-const deviceLimit = 4;
-const speedIndex = RANKING_HOURS.length * 2;
-const boardLimits = [...Array(speedIndex).fill(usageLimit), publicLimit];
+const usageBoardCount = RANKING_HOURS.length * 2;
+const hourlySpeedIndex = usageBoardCount;
+const calendarSpeedIndex = hourlySpeedIndex + 1;
+const boardLimits = [...Array(usageBoardCount).fill(usageLimit), publicLimit, publicLimit];
 const timeZones = new Map();
 const sum = (map, key, amount) => map.set(key, (map.get(key) ?? 0) + amount);
 
@@ -38,7 +39,7 @@ export function validatePacket(json, accountId, receivedAt, maxTokens) {
       !series(daily, 32, day => typeof day === 'string' && /^\d{4}-\d\d-\d\d$/.test(day) &&
         Number.isFinite(leaderboardDayStart(day)) && leaderboardDay(leaderboardDayStart(day)) === day) ||
       !Array.isArray(samples) || samples.length > MAX_RECENT_REQUESTS || !samples.every(row => validRecentRequest(row) &&
-        row[1] >= publishedAt - dayMs && row[1] <= publishedAt && row[2] <= max)) return null;
+        row[1] >= publishedAt - SPEED_SAMPLE_WINDOW_MS && row[1] <= publishedAt && row[2] <= max)) return null;
   const keys = new Set(samples.map(row => row[0]));
   if (keys.size !== samples.length) return null;
   return { accountId, deviceGuid: packet.deviceGuid, publishedAt, timeZone, hours, daily, samples };
@@ -47,13 +48,27 @@ export function validatePacket(json, accountId, receivedAt, maxTokens) {
 function topLabel(rows, index) {
   const totals = new Map();
   for (const row of rows) if (row[index]) sum(totals, row[index], row[2]);
-  return [...totals].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+  let title = null, highest = -Infinity;
+  for (const [label, tokens] of totals) {
+    if (tokens > highest || (tokens === highest && label.localeCompare(title) < 0)) {
+      title = label;
+      highest = tokens;
+    }
+  }
+  return title;
 }
 
-function samplePoint(rows, submittedAt) {
-  const speed = rows.filter(row => row[3] !== null);
-  return { submittedAt, deltaTokens: rows.reduce((total, row) => total + row[2], 0),
-    avgTps: speed.length ? speed.reduce((total, row) => total + row[3], 0) / speed.length : null };
+function samplePoint(rows) {
+  let submittedAt = 0, deltaTokens = 0, sumTps = 0, speedCount = 0;
+  for (const row of rows) {
+    submittedAt = Math.max(submittedAt, row[1]);
+    deltaTokens += row[2];
+    if (row[3] !== null) {
+      sumTps += row[3];
+      speedCount++;
+    }
+  }
+  return { submittedAt, deltaTokens, avgTps: speedCount ? sumTps / speedCount : null };
 }
 
 function recentStats(rows, at) {
@@ -65,26 +80,29 @@ function recentStats(rows, at) {
     grouped.get(slot).push(row);
   }
   return { topModel: topLabel(recent, 4), topCli: topLabel(recent, 5),
-    points: [...grouped].sort((a, b) => a[0] - b[0]).slice(-30).map(([, rows]) =>
-      samplePoint(rows, Math.max(...rows.map(row => row[1])))) };
+    points: [...grouped].sort((a, b) => a[0] - b[0]).slice(-30).map(([, rows]) => samplePoint(rows)) };
 }
 
-function aggregateBestSpeed(rows, at) {
+function aggregateBestSpeeds(rows, hourlyFrom, cutoff, midnight, at) {
   const grouped = new Map();
   for (const row of rows) {
-    if (row[1] <= at - dayMs || row[1] > at) continue;
+    if (row[1] < hourlyFrom || row[1] > at) continue;
     const slot = Math.floor(row[1] / 10_000) * 10_000;
     if (!grouped.has(slot)) grouped.set(slot, []);
     grouped.get(slot).push(row);
   }
-  let best;
+  let hourly, calendar;
   for (const rows of grouped.values()) {
-    const point = samplePoint(rows, Math.max(...rows.map(row => row[1])));
-    if (point.deltaTokens > SPEED_MIN_DELTA && (point.avgTps ?? 0) > (best?.avgTps ?? 0)) {
-      best = { ...point, topModel: topLabel(rows, 4), topCli: topLabel(rows, 5) };
-    }
+    const point = samplePoint(rows);
+    if (!qualifyingSpeed(point)) continue;
+    const inHourly = point.submittedAt < cutoff && point.avgTps > (hourly?.avgTps ?? 0);
+    const inCalendar = point.submittedAt >= midnight && point.avgTps > (calendar?.avgTps ?? 0);
+    if (!inHourly && !inCalendar) continue;
+    const best = { ...point, topModel: topLabel(rows, 4), topCli: topLabel(rows, 5) };
+    if (inHourly) hourly = best;
+    if (inCalendar) calendar = best;
   }
-  return best;
+  return [hourly, calendar];
 }
 
 function compareReceipt(previous, receivedAt, sequence = 0) {
@@ -96,7 +114,7 @@ function compareUpload(previous, publishedAt, receivedAt, sequence = 0) {
 }
 
 function summarizeDevice(packet, receivedAt, sequence = 0) {
-  const { hours, daily, publishedAt, timeZone } = packet;
+  const { hours, publishedAt } = packet;
   const firstHour = hours[0]?.[0] ?? 0;
   const storage = new ArrayBuffer(hours.length * (Float64Array.BYTES_PER_ELEMENT + Uint16Array.BYTES_PER_ELEMENT));
   const tokens = new Float64Array(storage, 0, hours.length);
@@ -105,19 +123,14 @@ function summarizeDevice(packet, receivedAt, sequence = 0) {
     hourOffsets[i] = (hours[i][0] - firstHour) / HOUR_MS;
     tokens[i] = hours[i][1];
   }
-  const localDays = new Float64Array(daily.length * 2);
-  for (let i = 0; i < daily.length; i++) {
-    localDays[2 * i] = Math.floor(leaderboardDayStart(daily[i][0]) / dayMs);
-    localDays[2 * i + 1] = daily[i][1];
-  }
-  return { publishedAt, receivedAt, sequence, timeZone, firstHour, hourOffsets, tokens, localDays };
+  return { publishedAt, receivedAt, sequence, firstHour, hourOffsets, tokens };
 }
 
 function recordDevice(row, packet, receivedAt, sequence) {
   const previous = row.devices.get(packet.deviceGuid);
   if (previous && compareUpload(previous, packet.publishedAt, receivedAt, sequence) < 0) return;
   let replaced;
-  if (!previous && row.devices.size === deviceLimit) {
+  if (!previous && row.devices.size === LEADERBOARD_DEVICE_LIMIT) {
     for (const [guid, device] of row.devices) {
       if (!replaced || compareReceipt(replaced[1], device.receivedAt, device.sequence) < 0) replaced = [guid, device];
     }
@@ -131,7 +144,7 @@ function recordDevice(row, packet, receivedAt, sequence) {
 }
 
 function usageScores(devices, cutoff, midnight) {
-  const scores = new Float64Array(speedIndex);
+  const scores = new Float64Array(usageBoardCount);
   const calendarStart = midnight - 29 * dayMs;
   for (const { firstHour, hourOffsets, tokens } of devices.values()) {
     for (let i = 0; i < tokens.length; i++) {
@@ -152,44 +165,29 @@ function usageScores(devices, cutoff, midnight) {
   return scores;
 }
 
-function calendarCurve(row, dates, cutoff) {
+function usageCurve(row, dates, lastHour) {
   const start = dates[0].at;
   const tokens = new Float64Array(dates.length);
   for (const device of row.devices.values()) {
     for (let i = 0; i < device.tokens.length; i++) {
       const at = device.firstHour + device.hourOffsets[i] * HOUR_MS;
-      if (at >= start && at <= cutoff) tokens[Math.floor((at - start) / dayMs)] += device.tokens[i];
+      if (at >= start && at <= lastHour) tokens[Math.floor((at - start) / dayMs)] += device.tokens[i];
     }
   }
   return dates.map((point, i) => ({ ...point, tokens: tokens[i] }));
 }
 
-function hourlyCurve(row, dates, dayNumberAt) {
-  const tokens = new Map();
-  for (const device of row.devices.values()) {
-    if (device.timeZone === row.timeZone) {
-      for (let i = 0; i < device.localDays.length; i += 2) sum(tokens, device.localDays[i], device.localDays[i + 1]);
-      continue;
-    }
-    for (let i = 0; i < device.tokens.length; i++) {
-      const at = device.firstHour + device.hourOffsets[i] * HOUR_MS;
-      sum(tokens, dayNumberAt(at), device.tokens[i]);
-    }
-  }
-  return dates.map(point => ({ ...point, tokens: tokens.get(Math.floor(leaderboardDayStart(point.day) / dayMs)) ?? 0 }));
-}
-
 export function leaderboardSnapshotForMode({ calendar, ...hourly }, mode) {
   if (mode !== 'calendar') return hourly;
-  if (calendar) return { ...hourly, ...calendar, mode, boards: { 0: hourly.boards[0], ...calendar.boards } };
+  if (calendar) return { ...hourly, ...calendar, mode };
 }
 
 export function createTokensRankings(bans = new Map()) {
-  let version = 0, snapshot;
+  let version = 0, snapshot, lastHourCutoff;
   const accounts = new Map();
   const leaders = boardLimits.map(() => []);
   const dirty = boardLimits.map(() => false);
-  const score = (row, board) => board === speedIndex ? row.speed?.avgTps ?? 0 : row.scores[board];
+  const score = (row, board) => board < usageBoardCount ? row.scores[board] : row.speeds[board - usageBoardCount]?.avgTps ?? 0;
 
   function setBan(accountId, banned, sequence, evict = banned) {
     bans.set(accountId, { banned, sequence });
@@ -208,15 +206,38 @@ export function createTokensRankings(bans = new Map()) {
       }
       for (const row of leaders[board]) kept.add(row.id);
     }
-    const speedWinners = new Set(leaders[speedIndex]);
+    const speedWinners = [new Set(leaders[hourlySpeedIndex]), new Set(leaders[calendarSpeedIndex])];
     for (const [id, row] of accounts) {
       if (!kept.has(id)) accounts.delete(id);
-      else if (!speedWinners.has(row)) row.speed = undefined;
+      else for (const [index, winners] of speedWinners.entries()) if (!winners.has(row)) row.speeds[index] = undefined;
     }
     dirty.fill(false);
   }
 
+  function expireSpeeds(from, index) {
+    const board = usageBoardCount + index;
+    for (const row of leaders[board]) {
+      const speed = row.speeds[index];
+      if (speed && speed.submittedAt < from) {
+        row.speeds[index] = undefined;
+        dirty[board] = true;
+      }
+    }
+  }
+
   function updateAccounts(entries, at, cutoff, midnight) {
+    const hourlyFrom = cutoff - dayMs;
+    expireSpeeds(hourlyFrom, 0);
+    if (cutoff !== lastHourCutoff) {
+      for (const row of leaders[calendarSpeedIndex]) {
+        const speed = row.speeds[1];
+        if (speed.submittedAt < hourlyFrom || speed.submittedAt >= cutoff || speed.avgTps <= score(row, hourlySpeedIndex)) continue;
+        row.speeds[0] = speed;
+        dirty[hourlySpeedIndex] = true;
+      }
+      lastHourCutoff = cutoff;
+    }
+    expireSpeeds(midnight, 1);
     const touched = new Map();
     const earliest = cutoff - RANKING_HOURS.at(-1) * HOUR_MS;
     for (const { account, packet, receivedAt, sequence } of entries) {
@@ -225,7 +246,7 @@ export function createTokensRankings(bans = new Map()) {
       if ((ban && (ban.banned || !(sequence > ban.sequence))) || packet.publishedAt < earliest) continue;
       let row = accounts.get(account.id);
       if (!row) {
-        row = { id: account.id, username: account.username, devices: new Map(), scores: new Float64Array(speedIndex) };
+        row = { id: account.id, username: account.username, devices: new Map(), scores: new Float64Array(usageBoardCount), speeds: [] };
         accounts.set(account.id, row);
       }
       const accepted = recordDevice(row, packet, receivedAt, sequence);
@@ -249,13 +270,15 @@ export function createTokensRankings(bans = new Map()) {
         if (!newest || compareUpload(newest, device.publishedAt, device.receivedAt, device.sequence) > 0) newest = device;
       }
       row.submittedAt = newest.publishedAt;
-      row.timeZone = newest.timeZone;
       // Merge speed samples across sources in this round, then retain only the winning point.
       const samples = fresh.size === 1 ? fresh.values().next().value : Array.from(fresh.values()).flat();
       row.recent = recentStats(samples, at);
-      const speed = aggregateBestSpeed(samples, at);
-      if ((speed?.avgTps ?? 0) !== score(row, speedIndex)) dirty[speedIndex] = true;
-      row.speed = speed;
+      const speeds = aggregateBestSpeeds(samples, hourlyFrom, cutoff, midnight, at);
+      for (const [index, speed] of speeds.entries()) {
+        const board = usageBoardCount + index;
+        if ((speed?.avgTps ?? 0) !== score(row, board)) dirty[board] = true;
+      }
+      row.speeds = speeds;
     }
     if (touched.size || dirty.includes(true)) updateLeaders();
   }
@@ -266,38 +289,20 @@ export function createTokensRankings(bans = new Map()) {
     updateAccounts(entries, at, cutoffAt, midnight);
 
     const boards = {}, calendarBoards = {};
-    const dateDetails = new Map(), hourDetails = new Map(), hourCalendars = new Map();
+    const dateDetails = new Map(), hourDetails = new Map();
     const calendarDates = Array.from({ length: 30 }, (_, i) => {
       const at = midnight - (29 - i) * dayMs;
       return { at, day: leaderboardDay(at), complete: true };
+    });
+    const hourlyDates = Array.from({ length: 30 }, (_, i) => {
+      const at = cutoffAt - (30 - i) * dayMs;
+      return { at, day: leaderboardDay(at + dayMs - 1), complete: true };
     });
 
     function details(row, byDate) {
       const cache = byDate ? dateDetails : hourDetails;
       if (cache.has(row)) return cache.get(row);
-      let curve;
-      if (byDate) curve = calendarCurve(row, calendarDates, cutoffAt);
-      else {
-        let period = hourCalendars.get(row.timeZone);
-        if (!period) {
-          const calendar = calendarFor(row.timeZone);
-          const daysByHour = new Map();
-          const dayNumberAt = at => {
-            let day = daysByHour.get(at);
-            if (day === undefined) {
-              day = Math.floor(leaderboardDayStart(calendar.day(at)) / dayMs);
-              daysByHour.set(at, day);
-            }
-            return day;
-          };
-          const dates = Array.from({ length: 30 }, (_, i) => {
-            const at = cutoffAt - (30 - i) * dayMs;
-            return { at, day: calendar.day(at + dayMs - 1), complete: true };
-          });
-          hourCalendars.set(row.timeZone, period = { dayNumberAt, dates });
-        }
-        curve = hourlyCurve(row, period.dates, period.dayNumberAt);
-      }
+      const curve = byDate ? usageCurve(row, calendarDates, cutoffAt) : usageCurve(row, hourlyDates, cutoffAt - HOUR_MS);
       cache.set(row, curve);
       return curve;
     }
@@ -317,9 +322,14 @@ export function createTokensRankings(bans = new Map()) {
       calendarBoards[hours] = { hours, cutoffAt: at, nextAt: at + intervals.publishMs,
         windowStart: midnight - (count - 1) * dayMs, rows: usageRows(index + RANKING_HOURS.length, count, true) };
     }
-    boards[0] = { rows: leaders[speedIndex].map((row, i) => ({
-      rank: i + 1, username: row.username, ...row.speed, lastUploadAt: row.latest.receivedAt
-    })) };
+    function speedBoard(board, windowStart, cutoffAt) {
+      const index = board - usageBoardCount;
+      return { windowStart, cutoffAt, rows: leaders[board].map((row, i) => ({
+        rank: i + 1, username: row.username, ...row.speeds[index], lastUploadAt: row.latest.receivedAt
+      })) };
+    }
+    boards[0] = speedBoard(hourlySpeedIndex, cutoffAt - dayMs, cutoffAt);
+    calendarBoards[0] = speedBoard(calendarSpeedIndex, midnight, at);
     snapshot = { version: ++version, serverTime: at, refreshAt: at + intervals.readMs, cutoffAt, nextAt, boards,
       calendar: { cutoffAt: at, nextAt: at + intervals.publishMs, boards: calendarBoards } };
     return snapshot;

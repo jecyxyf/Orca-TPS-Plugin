@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/pro
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { HOUR_MS, usageCount, validInstallationId } from './leaderboard_stats.mjs';
+import { normalizeComparePath } from './harness_parser.mjs';
 import { calendarFor, COUNTERS, RETENTION_DAYS } from './personal_stats.mjs';
 
 export const DETAIL_DAYS = 32;
@@ -15,6 +16,9 @@ const DAILY_DATABASE = 'daily.db';
 const DAY_MS = 24 * HOUR_MS;
 const EMPTY_COUNTERS = () => Array(COUNTERS).fill(0);
 const validTime = value => Number.isSafeInteger(value) && value >= 0 && value <= 8_640_000_000_000_000;
+const channelAliases = new Map([['agy', 'antigravity'], ['opencode2', 'opencode']]);
+export const channelProvider = provider => channelAliases.get(provider) ?? provider;
+const sessionKey = ({ provider, sessionId }) => provider && sessionId ? JSON.stringify([channelProvider(provider), sessionId]) : null;
 
 function openDatabase(filename) {
   const db = new DatabaseSync(filename, { enableExtensionLoading: false });
@@ -123,6 +127,15 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
     CREATE TABLE IF NOT EXISTS details (id TEXT PRIMARY KEY, day TEXT NOT NULL, at INTEGER NOT NULL, record TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS details_at ON details(at);
     CREATE INDEX IF NOT EXISTS details_day ON details(day);
+    CREATE TABLE IF NOT EXISTS detail_channels (id TEXT PRIMARY KEY, cwd TEXT, session TEXT, at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS detail_channels_cwd ON detail_channels(cwd, at DESC, id);
+    CREATE INDEX IF NOT EXISTS detail_channels_session ON detail_channels(session, at DESC, id);
+    CREATE TRIGGER IF NOT EXISTS detail_channels_delete AFTER DELETE ON details BEGIN
+      DELETE FROM detail_channels WHERE id = OLD.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS detail_channels_insert AFTER INSERT ON details BEGIN
+      DELETE FROM detail_channels WHERE id = NEW.id;
+    END;
     CREATE TABLE IF NOT EXISTS buckets (
       kind INTEGER NOT NULL, day TEXT NOT NULL, at INTEGER NOT NULL, project TEXT NOT NULL,
       provider TEXT NOT NULL, model TEXT NOT NULL, counters TEXT NOT NULL,
@@ -139,6 +152,13 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
     remember: 'INSERT OR REPLACE INTO seen VALUES (?, ?)',
     detail: 'SELECT record FROM details WHERE id = ?',
     addDetail: 'INSERT OR REPLACE INTO details VALUES (?, ?, ?, ?)',
+    channelDetail: 'INSERT INTO detail_channels VALUES (?, ?, ?, ?)',
+    channelBackfill: `SELECT d.id, d.at, d.record FROM details AS d
+      WHERE NOT EXISTS (SELECT 1 FROM detail_channels AS c WHERE c.id = d.id)`,
+    channelByCwd: `SELECT c.id, c.at, d.record FROM detail_channels AS c JOIN details AS d USING (id)
+      WHERE c.cwd = ? ORDER BY c.at DESC, c.id LIMIT 100`,
+    channelBySession: `SELECT c.id, c.at, d.record FROM detail_channels AS c JOIN details AS d USING (id)
+      WHERE c.session = ? ORDER BY c.at DESC, c.id LIMIT 100`,
     details: 'SELECT record FROM details WHERE at >= ? ORDER BY at DESC, id',
     pruneDetails: 'DELETE FROM details WHERE day < ?',
     pruneSeen: 'DELETE FROM seen WHERE day < ?',
@@ -155,6 +175,10 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
   };
   const saveSetting = (key, value) => m.save.run(key, JSON.stringify(value));
   let calendar = calendarFor(setting('timeZone', timeZone));
+
+  function indexDetail(id, at, record) {
+    m.channelDetail.run(id, normalizeComparePath(record.cwd), sessionKey(record), at);
+  }
 
   function reset(next) {
     transaction(main, () => {
@@ -233,6 +257,9 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
   // Keep the marker to retry cleanup on the next startup.
   try { removeMergedDaily(); } catch {}
   saveSetting('deviceGuid', guid);
+  transaction(main, () => {
+    for (const { id, at, record } of m.channelBackfill.iterate()) indexDetail(id, at, JSON.parse(record));
+  });
 
   function setTimeZone(timeZone) {
     const next = calendarFor(timeZone);
@@ -275,7 +302,10 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
         if (record.dataSource === 'claude_desktop_ledger' && priorRecord?.dataSource === 'claude_desktop_audit') continue;
         if (priorRecord) addBucket(buckets, calendar, priorRecord, -1);
         m.remember.run(id, day);
-        if (body) m.addDetail.run(id, day, record.completedAt, body);
+        if (body) {
+          m.addDetail.run(id, day, record.completedAt, body);
+          indexDetail(id, record.completedAt, record);
+        }
         addBucket(buckets, calendar, record, 1);
       }
       writeBuckets(buckets);
@@ -295,10 +325,19 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
     });
   }
 
+  function channelDetails(cwd, sessions) {
+    const rows = new Map();
+    if (cwd) for (const row of m.channelByCwd.all(cwd)) rows.set(row.id, row);
+    const keys = new Set(sessions.map(sessionKey).filter(Boolean));
+    for (const key of keys) for (const row of m.channelBySession.all(key)) rows.set(row.id, row);
+    return [...rows.values()].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : 1)).slice(0, 100)
+      .map(row => JSON.parse(row.record));
+  }
+
   return {
     deviceGuid: guid, get calendar() { return calendar; }, setting, saveSetting, setTimeZone,
     sourceStamp: source => m.source.get(source)?.stamp,
-    commitSource, finishScan,
+    commitSource, finishScan, channelDetails,
     details: (from = 0) => m.details.all(from).map(row => JSON.parse(row.record)),
     buckets: (kind, from = '') => m.buckets.all(kind, from).map(({ kind, counters, ...dimensions }) => ({
       ...dimensions, counters: JSON.parse(counters)

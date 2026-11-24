@@ -85,7 +85,7 @@ export function createOrcaConnection(root, { clock, onHello, onSyncHello, onMess
       return;
     }
     if (type === 'hello') {
-      onHello(peer, message);
+      if (onHello(peer, message) === false) return peer.socket.destroy();
       peer.subscribed = true;
       return;
     }

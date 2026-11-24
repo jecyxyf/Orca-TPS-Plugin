@@ -6,6 +6,7 @@ import path from 'node:path';
 import { scanSessions, readTargetSession } from '../src/harness_parser.mjs';
 import { defaultRoots } from '../src/harness_parser.mjs';
 import { createTpsController } from '../src/controller.mjs';
+import { readManagerChannel } from '../src/token_manager.mjs';
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import('node:sqlite')); }
@@ -162,6 +163,19 @@ test('readTargetSession merges 2xx proxy rows from cc-switch.db in read-only mod
   assert.equal(res.session.records[0].dataSource, 'proxy');
   assert.equal(res.session.records[0].isEstimatedSpeed, false);
   assert.equal(res.session.records[0].tokensPerSecond, 50);
+
+  const previousProxyPath = process.env.CC_SWITCH_DB_PATH;
+  t.after(() => {
+    if (previousProxyPath === undefined) delete process.env.CC_SWITCH_DB_PATH;
+    else process.env.CC_SWITCH_DB_PATH = previousProxyPath;
+  });
+  process.env.CC_SWITCH_DB_PATH = ccDbFile;
+  const channel = await readManagerChannel({ channelDetails: () => [] },
+    { provider: 'claude', sessionId: sid, transcriptPath: mainFile });
+  assert.equal(channel.session.records.length, 1);
+  assert.equal(channel.session.records[0].dataSource, 'proxy');
+  assert.equal(channel.session.records[0].tokensPerSecond, 50);
+  assert.equal(channel.session.records[0].firstTokenMs, 2000);
 });
 
 test('targeted SQLite lookup reads old IDs, separates v1/v2 and never falls back', sqliteTestOptions, async t => {

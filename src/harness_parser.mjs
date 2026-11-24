@@ -1591,8 +1591,9 @@ async function readCcSwitchProxyRows(dbPath, provider, sessionId, records) {
   const dbInfo = await info(canonical);
   if (!dbInfo?.isFile()) return [];
   const wal = await info(`${canonical}-wal`);
-  const minSec = records.length ? Math.min(...records.map(r => r.createdAtSec)) - SESSION_PROXY_DEDUP_WINDOW_SECONDS : null;
-  const maxSec = records.length ? Math.max(...records.map(r => r.createdAtSec)) + SESSION_PROXY_DEDUP_WINDOW_SECONDS : null;
+  const times = records.map(record => record.createdAtSec).filter(Number.isFinite);
+  const minSec = times.length ? Math.min(...times) - SESSION_PROXY_DEDUP_WINDOW_SECONDS : null;
+  const maxSec = times.length ? Math.max(...times) + SESSION_PROXY_DEDUP_WINDOW_SECONDS : null;
   const stamp = fileStamp(dbInfo) + ':' + (wal ? fileStamp(wal) : '');
   const cacheKey = JSON.stringify([canonical, provider, sessionId, minSec, maxSec]);
   const cached = ccSwitchCache.get(cacheKey);
@@ -1761,7 +1762,7 @@ async function readSingleTargetSession(target, options = {}) {
       ...(safeTitle(target.title) ? { title: safeTitle(target.title) } : {})
     };
     return { session: enriched, warnings: [...warnings], ...(options.includeUsageRecords ? {
-      usageRecords: session.records.map(record => ({ ...record, provider: session.provider }))
+      usageRecords: session.records.map(record => ({ ...record, provider: session.provider, sessionId: target.sessionId }))
     } : {}) };
   };
   if (target.provider === 'hermes') {
@@ -1954,7 +1955,7 @@ async function readChannelSessions(target, options = {}) {
     },
     warnings: [...warnings],
     ...(options.includeUsageRecords ? { usageRecords: recentRecords(proxyEntries.flatMap(entry =>
-      entry.records.map(record => ({ ...record, provider: entry.provider })))) } : {})
+      entry.records.map(record => ({ ...record, provider: entry.provider, sessionId: entry.sessionId })))) } : {})
   };
 }
 
@@ -1964,6 +1965,20 @@ export async function readTargetSession(target, options = {}) {
     return readChannelSessions(target, options);
   }
   return readSingleTargetSession(target, options);
+}
+
+export async function enrichChannelRecords(records, sessions, ccSwitchDb = defaultRoots().ccSwitchDb) {
+  const entries = new Map();
+  const keyOf = ({ provider, sessionId }) => JSON.stringify([provider, sessionId ?? '']);
+  for (const { provider, sessionId } of sessions) entries.set(keyOf({ provider, sessionId }), { provider, sessionId, records: [] });
+  for (const row of records) {
+    const key = keyOf(row);
+    if (!entries.has(key)) entries.set(key, { provider: row.provider, sessionId: row.sessionId, records: [] });
+    entries.get(key).records.push(row);
+  }
+  const sources = [...entries.values()];
+  for (const entry of sources) entry.proxyRows = await readCcSwitchProxyRows(ccSwitchDb, entry.provider, entry.sessionId, entry.records);
+  return mergeChannelProxyRecords(sources);
 }
 
 /** File signals keep the 250 ms check cheap when every transcript is quiet. */

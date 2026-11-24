@@ -51,13 +51,18 @@ function validSnapshot({ cutoffAt, nextAt, boards, refreshAt, mode } = {}, expec
   const midnight = mode === 'calendar' && isUsageTime(cutoffAt + 8 * HOUR_MS)
     ? leaderboardDayStart(leaderboardDay(cutoffAt)) : undefined;
   if (mode === 'calendar' && !validTime(midnight)) return false;
-  const speedRows = boards?.[0]?.rows;
+  const speed = boards?.[0];
+  const speedRows = speed?.rows;
+  const speedStart = midnight ?? cutoffAt - dayMs;
+  const hasSpeedWindow = speed?.windowStart !== undefined || speed?.cutoffAt !== undefined;
+  if (hasSpeedWindow && (speed.windowStart !== speedStart || speed.cutoffAt !== cutoffAt)) return false;
   const interval = nextAt - cutoffAt;
   const live = validTime(refreshAt) && interval >= 1000 && interval <= HOUR_MS;
   return (live || interval === RANKING_REFRESH_MS || (interval === HOUR_MS && cutoffAt % HOUR_MS === 0)) &&
     Object.keys(boards ?? {}).length === 4 &&
     RANKING_HOURS.every(hours => validWindow(boards?.[hours], hours, cutoffAt, nextAt, midnight)) &&
     validRows(speedRows) && speedRows.every(row => Number.isFinite(row.avgTps) && row.avgTps > 0 &&
+      (!hasSpeedWindow || (row.submittedAt >= speedStart && (mode === 'calendar' ? row.submittedAt <= cutoffAt : row.submittedAt < cutoffAt))) &&
       (row.deltaTokens === undefined || (Number.isSafeInteger(row.deltaTokens) && row.deltaTokens > SPEED_MIN_DELTA)) &&
       validStatsLabel(row.topModel) && validStatsLabel(row.topCli));
 }

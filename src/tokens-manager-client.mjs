@@ -174,9 +174,10 @@ export async function createTokensManagerClient(orca, {
         else send(connection, payload);
         break;
       case 'installed':
-        send(connection, { type: 'hello', endpoint, timeZone });
+        send(connection, { type: 'hello', endpoint, timeZone, bundleVersion: payload.version });
         break;
       case 'ready':
+        if (event.bundleVersion !== payload.version) return disconnect(connection, true);
         if (!validInstallationId(event.deviceGuid)) return;
         connection.ready = true;
         connection.deviceGuid = event.deviceGuid;
@@ -247,10 +248,12 @@ export async function createTokensManagerClient(orca, {
     reader.on('line', line => {
       try { handle(connection, JSON.parse(line), payload); } catch {}
     });
-    if (connection.host === localHost) send(connection, { type: 'hello', endpoint, timeZone, deviceGuid, local: true });
+    if (connection.host === localHost) {
+      send(connection, { type: 'hello', endpoint, timeZone, deviceGuid, local: true, bundleVersion: payload.version });
+    }
   }
 
-  function disconnect(connection) {
+  function disconnect(connection, graceful = false) {
     if (connections.get(connection.host) !== connection) return;
     connections.delete(connection.host);
     if (connection.host === localHost && uploadStatus?.pending) {
@@ -258,7 +261,10 @@ export async function createTokensManagerClient(orca, {
       notifyUploadState();
     }
     sendSyncTargets();
-    if (connection.child?.exitCode === null) connection.child.kill();
+    if (connection.child?.exitCode === null) {
+      if (graceful && connection.child.stdin.writable) connection.child.stdin.end(tokensMessage({ type: 'unsubscribe' }));
+      else connection.child.kill();
+    }
     if (!stopped && hostTargets.has(connection.host)) {
       const retry = { host: connection.host, retryAt: Date.now() + TOKENS_RETRY_MS };
       connections.set(connection.host, retry);

@@ -6,6 +6,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
+import { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createLeaderboardServer } from '../server/app.mjs';
 import { createTokensRankings } from '../server/tokens-manager-rankings.mjs';
@@ -201,6 +202,32 @@ test('rate limits use the visitor IP only when the connection comes from a trust
     /LEADERBOARD_TRUSTED_PROXY_IPS/);
 });
 
+test('normal clients sharing one exit keep their upload and download allowances', async () => {
+  const tokensJobs = { intervals: { uploadMs: 3000 }, snapshot: () => new Uint8Array([123, 125]), receive: async () => true };
+  const store = { session: digest => accounts.get(digest) };
+  const clients = Array.from({ length: 10 }, (_, id) => ({ id: id + 1, token: String(id).repeat(43) }));
+  const accounts = new Map(clients.map(({ id, token }) => [createHash('sha256').update(token).digest('hex'), { id }]));
+  const server = createLeaderboardServer({ store, baseUrl: ORIGIN, now: () => START, tokensJobs });
+  function request(path, token) {
+    return new Promise(resolve => {
+      const req = Readable.from([Buffer.from('{}')]);
+      Object.assign(req, { method: token ? 'POST' : 'GET', url: '/api/tokens-manager/' + path,
+        socket: { remoteAddress: '192.0.2.10' }, headers: token ? { authorization: 'Bearer ' + token } : {} });
+      let code;
+      server.emit('request', req, { setHeader() {}, writeHead(value) { code = value; }, end() { resolve(code); } });
+    });
+  }
+  for (let i = 0; i < clients.length; i++) assert.equal(await request('config'), 200);
+  for (let round = 0; round < 20; round++) for (const { token } of clients) {
+    assert.equal(await request('snapshot'), 200);
+    assert.equal(await request('packets', token), 202);
+  }
+  for (let packet = 20; packet < 336; packet++) assert.equal(await request('packets', clients[0].token), 202);
+  assert.equal(await request('packets', clients[0].token), 429);
+  assert.equal(await request('packets', clients[1].token), 202);
+  assert.equal(await request('snapshot'), 200);
+});
+
 test('rolling uploader retries the same bounded payload and marks coverage after the last batch', async () => {
   const saved = new Map(), sent = [];
   const now = START + 12 * HOUR_MS;
@@ -344,7 +371,9 @@ test('calendar viewer requests its own snapshot and keeps the two modes in separ
   const dateOptions = { ...options, mode: 'calendar' };
   const calendar = await createWindowViews(dateOptions).fetch(24, false, signal);
   assert.equal(hourly.boards[24].windowStart, clock() - 24 * HOUR_MS);
+  assert.equal(hourly.boards[0].windowStart, clock() - 24 * HOUR_MS);
   assert.equal(calendar.boards[24].windowStart, START);
+  assert.equal(calendar.boards[0].windowStart, START);
   assert.equal(calendar.boards[720].windowStart, START - 29 * 24 * HOUR_MS);
   assert.deepEqual(await createWindowViews(options).load(24, signal), hourly);
   assert.deepEqual(await createWindowViews(dateOptions).load(24, signal), calendar);
@@ -764,6 +793,52 @@ test('manager transfer changes publish the upload state immediately', async t =>
   assert.equal(sessions.at(-1).lastUpload.code, 'unavailable');
   await stop();
   assert.equal(uploadListener, undefined);
+});
+
+test('manager resumes a lifted ban and reports an expired session to the panel', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const token = 'm'.repeat(43);
+  let clock = START, banned = true, expired = false, handler, statusListener, status, checks = 0;
+  const credentials = [];
+  const stop = startLeaderboard({
+    storage: { get: async () => undefined, set: async () => {} },
+    grantedCapabilities: ['secrets:own'],
+    host: { has: () => true, call: async () => ({ value: token }) },
+    panels: { handle(_, fn) { handler = fn; return { dispose() {} }; } }
+  }, {
+    endpoint: ORIGIN, now: () => new Date(clock), readUsage: async () => undefined,
+    manager: { ...managerClient(), setCredential: value => credentials.push(value), uploadStatus: () => status,
+      onUploadState(listener) { statusListener = listener; } },
+    async fetcher(url) {
+      assert.equal(url.pathname, '/api/tokens-manager/account');
+      checks++;
+      return expired ? Response.json({ code: 'login_required' }, { status: 401 })
+        : Response.json({ accountId: 13, username: 'alice', banned });
+    }
+  });
+  t.after(stop);
+  const settle = () => delay(0);
+  await settle();
+  assert.equal((await handler({ action: 'session' })).board.banned, true);
+  assert.deepEqual(credentials, []);
+  clock += 59_000;
+  t.mock.timers.tick(1000);
+  await settle();
+  assert.equal(checks, 1);
+  banned = false;
+  clock += 1000;
+  t.mock.timers.tick(1000);
+  await settle();
+  assert.deepEqual(credentials, [{ token, accountId: 13 }]);
+  assert.equal((await handler({ action: 'session' })).board.banned, false);
+  expired = true;
+  status = { code: 'login_required', at: clock };
+  statusListener();
+  await settle();
+  const next = await handler({ action: 'session' });
+  assert.equal(next.signedIn, false);
+  assert.equal(next.sessionProblem, 'session_expired');
+  assert.deepEqual(credentials.at(-1), { token: null, accountId: 13 });
 });
 
 test('login retries a lost authorization response and logout does not wait for the network', { timeout: 8000 }, async t => {
