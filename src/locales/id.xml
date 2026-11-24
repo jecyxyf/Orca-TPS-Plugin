@@ -266,7 +266,6 @@
   <message id="sync-queued">Dalam antrean unggahan berikutnya</message>
   <message id="last-twenty-four-hours">24 jam terakhir</message>
   <message id="leaderboard-speed-tab">Kecepatan</message>
-  <message id="leaderboard-cutoff">Hingga {0} (waktu Beijing)</message>
   <message id="leaderboard-usage-incomplete">Data penggunaan belum lengkap</message>
   <message id="leaderboard-server-update-required">Perbarui server papan peringkat untuk melihat hasil ini.</message>
   <message id="ranking-update-mode">Cara memperbarui peringkat</message>

@@ -266,7 +266,6 @@
   <message id="sync-queued">اگلے اپ لوڈ کی قطار میں</message>
   <message id="last-twenty-four-hours">گزشتہ 24 گھنٹے</message>
   <message id="leaderboard-speed-tab">رفتار</message>
-  <message id="leaderboard-cutoff">{0} تک (بیجنگ کا وقت)</message>
   <message id="leaderboard-usage-incomplete">استعمال کا ڈیٹا نامکمل ہے</message>
   <message id="leaderboard-server-update-required">یہ درجہ بندی دیکھنے کے لیے لیڈر بورڈ سرور اپ ڈیٹ کریں۔</message>
   <message id="ranking-update-mode">درجہ بندی اپ ڈیٹ کرنے کا طریقہ</message>

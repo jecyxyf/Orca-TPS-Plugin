@@ -56,14 +56,14 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - View usage rankings in M. Day mode uses Beijing calendar days for today, the last 7 days, and the last 30 days. Hour mode counts the last 24, 168, and 720 completed hours. The service refreshes all seven boards together every three seconds by default. The top three get gold, silver, and bronze medals.
 - Use the switch next to Rankings to control leaderboard viewing. Turning it off hides the rankings and stops fetching them. The plugin remembers your choice. Guests can view rankings.
 - The shortest usage window shows the latest five minutes of usage and average generation speed. Missing or invalid values in this chart display as zero. The longer windows show daily usage. Every usage board shows the most-used model, Harness, and latest upload time.
-- The Speed tab ranks up to 100 GitHub accounts by their best average generation speed from a qualifying 10-second interval in the 24 hours before scoring. Each account appears once across all its devices. An interval qualifies with more than 500 new tokens and a valid speed. The winning interval supplies the time, most-used model, Harness, and full count of new tokens, such as `1,250,000 tokens`.
+- The Speed tab ranks up to 100 GitHub accounts by their best average generation speed from a qualifying 10-second interval in the 24 hours before scoring. Each account appears once across all its devices. The top three earn gold, silver, and bronze medals marked `S`. An interval qualifies with more than 500 new tokens and a valid speed. The winning interval supplies the time, most-used model, Harness, and full count of new tokens, such as `1,250,000 tokens`.
 - Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
 - Sign in with GitHub to participate. Each account combines the latest usage totals from up to four recently active devices. Relayed copies of the same device report count once. If an account misses a round, its score stays on the board until a new report updates it or other scores push it out. Avatars load from GitHub.
 - While signed in, the Tokens Manager uploads every three seconds by default. Use the toolbar icons to upload or download manually. Each icon spins during its transfer. The times show the last successful upload and download.
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English leaderboard with a 30-day usage curve, the cutoff time, and the Speed tab">
+    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English leaderboard with a 30-day usage curve and the Speed tab">
   </a>
 </p>
 

@@ -155,7 +155,7 @@
     #ladder-controls, .ladder-personal-data { flex: none; }
     #ladder-controls:has(#ladder-account:not([hidden])) { block-size: 62px; overflow-y: auto; scrollbar-width: thin; }
     .ladder-personal-data, .ladder-rank-card { scrollbar-width: thin; scrollbar-gutter: stable; }
-    .ladder-personal-data { block-size: 208px; overflow-y: auto; }
+    .ladder-personal-data { max-block-size: 208px; padding-block-end: 8px; overflow-y: auto; }
     .ladder-rank-card { display: flex; flex: 1; flex-direction: column; min-block-size: 224px; overflow: hidden; }
     #ladder-ranking-notice { overflow-y: auto; scrollbar-width: thin; }
     #ladder-ranking-content { display: flex; flex: 1; flex-direction: column; min-block-size: 0; }
@@ -390,11 +390,10 @@
       font-size: 14px; line-height: 1.15; font-weight: 750; text-align: end; overflow-wrap: anywhere; max-width: 15ch;
     }
     .ladder-time { grid-area: time; color: var(--muted); font-size: 11px; }
-    .ladder-rows .ladder-speed-row { --ladder-row-size: 32px; }
+    .ladder-rows .ladder-speed-row:not(:has(.ladder-medal)) { --ladder-row-size: 32px; }
     .ladder-speed-row .ladder-total { white-space: nowrap; }
     .ladder-speed-row .ladder-recent-meta { margin-top: 0; }
     .ladder-speed-tokens { flex: none; color: var(--muted); white-space: nowrap; }
-    .ladder-recent-caption { margin: 7px 0 0; color: var(--muted); font-size: 11px; }
     .ladder-recent { grid-area: recent; min-width: 0; }
     .ladder-chart {
       display: block; width: 100%; height: 30px;
@@ -536,8 +535,12 @@
       }
       .ladder-toolbar-field { gap: 3px; }
       .ladder-rows li { --ladder-row-gap: 6px; }
+      .ladder-rows .ladder-speed-row { --ladder-row-gap: 4px; }
+      .ladder-speed-row .ladder-rank { min-width: 2ch; font-size: 16px; }
+      .ladder-speed-row .ladder-avatar { --ladder-row-avatar-size: 22px; }
       .war-totals { gap: 6px; }
       .ladder-total { padding-inline: 6px; font-size: 12px; }
+      .ladder-speed-row .ladder-total { padding-inline: 4px; font-size: 11px; }
     }
     @media (max-width: 280px) {
       .war-period-tabs { grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.15fr); gap: 2px; }
@@ -684,7 +687,6 @@
             <button class="war-tab" type="button" data-rank-days="0" aria-pressed="false"><span data-i18n="leaderboard-speed-tab"></span></button>
           </div>
           <p class="ladder-note" id="ladder-freshness" role="status" data-localized-text hidden></p>
-          <p class="ladder-recent-caption" id="ladder-recent-caption" data-i18n="leaderboard-five-minute-usage" hidden></p>
           <div class="ladder-ranking-scroll" role="region" tabindex="0" aria-labelledby="ladder-rank-title">
             <ol class="ladder-rows" id="ladder-rows" data-i18n-aria-label="daily-usage-rankings"></ol>
             <p class="ladder-note" id="ladder-empty" data-localized-text hidden><span data-i18n="empty-today"></span></p>
@@ -1580,6 +1582,7 @@
         { days: 1, mark: 'Ⅰ', title: 'last-twenty-four-hours' }, { days: 7, mark: '7', title: 'seven-day-period' },
         { days: 30, mark: '30', title: 'thirty-day-period' }
       ];
+      const speedPeriod = { days: 0, mark: 'S', title: 'leaderboard-speed-tab' };
       const podium = ['gold-medal', 'silver-medal', 'bronze-medal'];
       const messages = {
         unavailable: 'leaderboard-unavailable', github_unavailable: 'github-login-unavailable',
@@ -1986,7 +1989,7 @@
         latestPulses = new Map(rankDays === 1 ? rows.map(row => [row.username, row.recent?.points.at(-1)?.submittedAt ?? -Infinity]) : []);
         const signature = JSON.stringify([rankingMode, rankDays, ranking?.windowStart, username, rows]);
         if (signature === drawnRows) return;
-        const period = periods.find(entry => entry.days === rankDays);
+        const period = speedBoard ? speedPeriod : periods.find(entry => entry.days === rankDays);
         drawnRows = signature;
         const keyOf = row => JSON.stringify([rankingMode, rankDays, ranking?.windowStart, username === row.username, row]);
         rankingNodes = updateList(element('rows'), rows, rankingNodes, keyOf, row => {
@@ -2160,9 +2163,6 @@
         const speedBoard = rankDays === 0;
         element('rows').setAttribute('aria-label', t(speedBoard ? 'leaderboard-speed-tab' : 'period-rankings'));
         element('empty').textContent = t('empty-rankings');
-        element('recent-caption').textContent = ranking?.cutoffAt === undefined ? usageChartLabel()
-          : `${usageChartLabel()} · ${t('leaderboard-cutoff', leaderboardTime(ranking.cutoffAt))}`;
-        element('recent-caption').hidden = speedBoard || !ranking;
         const username = signedIn ? account.username : '';
         renderRows(ranking?.rows ?? [], username, ranking);
         element('empty').hidden = !ranking || rankingNodes.size > 0;

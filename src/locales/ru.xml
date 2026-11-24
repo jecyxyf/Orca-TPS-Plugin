@@ -266,7 +266,6 @@
   <message id="sync-queued">В очереди на следующую загрузку</message>
   <message id="last-twenty-four-hours">Последние 24 ч</message>
   <message id="leaderboard-speed-tab">Скорость</message>
-  <message id="leaderboard-cutoff">По {0} (пекинское время)</message>
   <message id="leaderboard-usage-incomplete">Данные о расходе неполные</message>
   <message id="leaderboard-server-update-required">Обновите сервер рейтинга, чтобы увидеть эти результаты.</message>
   <message id="ranking-update-mode">Способ обновления рейтинга</message>

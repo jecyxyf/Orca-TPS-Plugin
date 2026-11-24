@@ -266,7 +266,6 @@
   <message id="sync-queued">Na fila para o próximo envio</message>
   <message id="last-twenty-four-hours">Últimas 24 h</message>
   <message id="leaderboard-speed-tab">Velocidade</message>
-  <message id="leaderboard-cutoff">Até {0} (hora de Pequim)</message>
   <message id="leaderboard-usage-incomplete">Dados de uso incompletos</message>
   <message id="leaderboard-server-update-required">Atualize o servidor do ranking para ver estes resultados.</message>
   <message id="ranking-update-mode">Modo de atualização da classificação</message>

@@ -266,7 +266,6 @@
   <message id="sync-queued">Für den nächsten Upload vorgemerkt</message>
   <message id="last-twenty-four-hours">Letzte 24 Std.</message>
   <message id="leaderboard-speed-tab">Tempo</message>
-  <message id="leaderboard-cutoff">Stand {0} (Pekinger Zeit)</message>
   <message id="leaderboard-usage-incomplete">Verbrauchsdaten unvollständig</message>
   <message id="leaderboard-server-update-required">Aktualisieren Sie den Bestenlisten-Server, um diese Ranglisten anzuzeigen.</message>
   <message id="ranking-update-mode">Art der Ranglistenaktualisierung</message>

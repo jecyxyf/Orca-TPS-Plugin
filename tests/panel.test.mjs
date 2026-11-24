@@ -248,6 +248,51 @@ test('today usage draws a full zero line and animates real-time pulses once', as
   assert.equal(frames.length, 0);
 });
 
+test('usage rankings omit the subtitle beneath the period selector', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  assert.doesNotMatch(html, /ladder-recent-caption|leaderboard-cutoff/);
+  assert.match(html, /chart\.setAttribute\('aria-label', usageChartLabel\(\)\)/);
+});
+
+test('the speed ranking uses S medals for the first three places', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const speed = /const speedPeriod = \{[^\n]*\};/.exec(html)?.[0];
+  const podium = /const podium = \[[^\n]*\];/.exec(html)?.[0];
+  const render = /function medal\(rank, period\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
+  const period = /const period = speedBoard \? speedPeriod : periods\.find\(entry => entry\.days === rankDays\);/.exec(html)?.[0];
+  assert.ok(speed && podium && render && period);
+  const document = { createElement() {
+    return {
+      attributes: {}, dataset: {}, children: [], style: { setProperty() {} },
+      setAttribute(key, value) { this.attributes[key] = value; },
+      append(...children) { this.children.push(...children); },
+      cloneNode() { return { ...this }; }
+    };
+  } };
+  const t = (key, ...args) => [key, ...args].join(' ');
+  const badgeFor = new Function('document', 't', `
+    ${speed}
+    ${podium}
+    ${render}
+    const periods = [{ days: 30, mark: '30', title: 'thirty-day-period' }];
+    return (rank, rankDays) => {
+      const speedBoard = rankDays === 0;
+      ${period}
+      return medal(rank, period);
+    };
+  `)(document, t);
+  for (const [index, color] of ['gold', 'silver', 'bronze'].entries()) {
+    const badge = badgeFor(index + 1, 0);
+    assert.equal(badge.dataset.place, index + 1);
+    assert.equal(badge.children.at(-1).children[0].textContent, 'S');
+    assert.equal(badge.attributes['aria-label'], `medal-position leaderboard-speed-tab ${color}-medal`);
+  }
+  assert.equal(badgeFor(4, 0), null);
+  assert.equal(badgeFor(1, 30).children.at(-1).children[0].textContent, '30');
+  const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(css.get('.ladder-rows .ladder-speed-row:not(:has(.ladder-medal))')['--ladder-row-size'], '32px');
+});
+
 test('leaderboard transfer controls occupy the columns beside the last-transfer times', async () => {
   const html = await readFile(panelPath, 'utf8');
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
@@ -262,6 +307,8 @@ test('leaderboard transfer controls occupy the columns beside the last-transfer 
   assert.deepEqual(css.get('.ladder-refresh svg'), css.get('.ladder-toolbar-field svg'));
   assert.equal(css.get('.ladder-toolbar-field')['grid-template-columns'], 'var(--ladder-toolbar-icon-size) minmax(0, 1fr)');
   assert.equal(css.get('.ladder-personal-data')['scrollbar-gutter'], 'stable');
+  assert.equal(css.get('.ladder-personal-data')['max-block-size'], '208px');
+  assert.equal(css.get('.ladder-personal-data')['padding-block-end'], '8px');
   assert.equal(css.get('.ladder-rank-card')['scrollbar-gutter'], 'stable');
   assert.equal(css.get('.ladder-refresh[aria-busy="true"] .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
   assert.doesNotMatch(html, /ladder-(?:sync|refresh)-countdown/);

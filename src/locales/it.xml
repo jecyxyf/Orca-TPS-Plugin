@@ -266,7 +266,6 @@
   <message id="sync-queued">In coda per il prossimo caricamento</message>
   <message id="last-twenty-four-hours">Ultime 24 ore</message>
   <message id="leaderboard-speed-tab">Velocità</message>
-  <message id="leaderboard-cutoff">Fino al {0} (ora di Pechino)</message>
   <message id="leaderboard-usage-incomplete">Dati di utilizzo incompleti</message>
   <message id="leaderboard-server-update-required">Aggiorna il server della classifica per vedere questi risultati.</message>
   <message id="ranking-update-mode">Metodo di aggiornamento della classifica</message>

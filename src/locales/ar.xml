@@ -266,7 +266,6 @@
   <message id="sync-queued">في قائمة انتظار الرفع التالي</message>
   <message id="last-twenty-four-hours">آخر 24 ساعة</message>
   <message id="leaderboard-speed-tab">السرعة</message>
-  <message id="leaderboard-cutoff">حتى {0} (بتوقيت بكين)</message>
   <message id="leaderboard-usage-incomplete">بيانات الاستخدام غير مكتملة</message>
   <message id="leaderboard-server-update-required">حدّث خادم لوحة الصدارة لعرض هذا الترتيب.</message>
   <message id="ranking-update-mode">طريقة تحديث الترتيب</message>

@@ -266,7 +266,6 @@
   <message id="sync-queued">次回のアップロード待ち</message>
   <message id="last-twenty-four-hours">過去 24 時間</message>
   <message id="leaderboard-speed-tab">速度</message>
-  <message id="leaderboard-cutoff">{0} まで（北京時間）</message>
   <message id="leaderboard-usage-incomplete">使用量データが不完全です</message>
   <message id="leaderboard-server-update-required">このランキングを表示するにはサーバーを更新してください。</message>
   <message id="ranking-update-mode">ランキングの更新方法</message>
