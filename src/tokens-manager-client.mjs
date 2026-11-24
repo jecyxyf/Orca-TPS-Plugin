@@ -118,6 +118,7 @@ export async function createTokensManagerClient(orca, {
 } = {}) {
   const controller = new AbortController();
   const personal = new Map(), connections = new Map(), hostTargets = new Map([[localHost, []]]);
+  const uploadStateListeners = new Set();
   const storedZone = await orca.storage.get(timezoneKey).catch(() => undefined);
   let timeZone = calendarFor(storedZone || undefined).timeZone, credentials, stopped = false;
   if (initialZone !== undefined) {
@@ -128,6 +129,10 @@ export async function createTokensManagerClient(orca, {
 
   const summary = () => mergePersonalPackets(personal.values(), timeZone) ?? (progress
     ? { updatedAt: null, timeZone, progress } : null);
+
+  function notifyUploadState() {
+    for (const listener of uploadStateListeners) listener();
+  }
 
   function send(connection, message) {
     if (!connection.child?.stdin.destroyed && connection.child?.stdin.writable) {
@@ -202,13 +207,17 @@ export async function createTokensManagerClient(orca, {
         }
         break;
       case 'uploaded':
-        if (connection.host === localHost && event.accountId === credentials?.accountId) {
+        if (connection === connections.get(localHost) && event.accountId === credentials?.accountId) {
           lastUploadedAt = event.at;
           onUploaded(event.at);
+          notifyUploadState();
         }
         break;
       case 'upload-state':
-        if (connection.host === localHost && event.accountId === credentials?.accountId) uploadStatus = event;
+        if (connection === connections.get(localHost) && event.accountId === credentials?.accountId) {
+          uploadStatus = event;
+          notifyUploadState();
+        }
         break;
     }
   }
@@ -244,6 +253,10 @@ export async function createTokensManagerClient(orca, {
   function disconnect(connection) {
     if (connections.get(connection.host) !== connection) return;
     connections.delete(connection.host);
+    if (connection.host === localHost && uploadStatus?.pending) {
+      uploadStatus = undefined;
+      notifyUploadState();
+    }
     sendSyncTargets();
     if (connection.child?.exitCode === null) connection.child.kill();
     if (!stopped && hostTargets.has(connection.host)) {
@@ -299,6 +312,10 @@ export async function createTokensManagerClient(orca, {
   tick();
   return {
     summary, setTargets, intervals: () => intervals, lastUploaded: () => lastUploadedAt, uploadStatus: () => uploadStatus,
+    onUploadState(listener) {
+      uploadStateListeners.add(listener);
+      return () => uploadStateListeners.delete(listener);
+    },
     read(target) {
       const connection = connections.get(target.executionHostId || localHost);
       return connection?.channels?.get(publicChannelId(target)) ?? { session: null, warnings: [] };
@@ -329,6 +346,7 @@ export async function createTokensManagerClient(orca, {
       stopped = true;
       clearInterval(timer);
       controller.abort();
+      uploadStateListeners.clear();
       for (const connection of connections.values()) remove(connection);
     }
   };

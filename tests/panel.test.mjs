@@ -157,19 +157,23 @@ test('the panel title has a logo and Current Data shows the update time beside a
   assert.doesNotMatch(html, /recent-requests|request-speed-note/);
 });
 
-test('Personal Stats opens with hourly updates as the first option above the period tabs', async () => {
+test('Personal Stats and the Leaderboard show calendar mode first and select it by default', async () => {
   const html = await readFile(panelPath, 'utf8');
   const toolbar = /<section\b[^>]*\bid="usage"[^>]*>\s*<div class="war-mode">([\s\S]*?)\n      <section class="war"/.exec(html)?.[1];
   assert.ok(toolbar);
+  const expectedModes = [['calendar', 'true'], ['hourly', 'false']];
   assert.deepEqual([...toolbar.matchAll(/data-usage-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
-    .map(match => match.slice(1)), [['hourly', 'true'], ['calendar', 'false']]);
-  assert.match(html, /usageMode = 'hourly'/);
-  assert.equal([...toolbar.matchAll(/<li data-i18n="usage-update-hint-/g)].length, 4);
+    .map(match => match.slice(1)), expectedModes);
+  assert.deepEqual([...html.matchAll(/data-ladder-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
+    .map(match => match.slice(1)), expectedModes);
+  assert.match(html, /usageMode = 'calendar'/);
+  assert.match(html, /rankingMode = 'calendar'/);
+  assert.doesNotMatch(html, /war-mode-help|war-mode-hint|usage-update-(?:help|hint)/);
 });
 
-test('today usage connects pulses at real timestamps and animates new points once', async () => {
+test('today usage draws a full zero line and animates real-time pulses once', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const source = /const chartVerticalPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];
+  const source = /const chartVerticalPadding = 4;[\s\S]*?(?=\n      function renderRows)/.exec(html)?.[0];
   assert.ok(source);
   assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart').background, 'transparent');
   const frames = [], painters = new WeakMap(), paths = [], areas = [], stops = [];
@@ -197,14 +201,20 @@ test('today usage connects pulses at real timestamps and animates new points onc
   let width = 300;
   const chart = { width: 320, height: 60, isConnected: true,
     getBoundingClientRect: () => ({ width, height: 30 }), getContext: () => ctx };
-  const { draw, pulseX } = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
-    const RECENT_STATS_MS = 300000;
-    ${source.replace(/\n      function usageCard$/, '')}
-    return { draw: drawSubmissionPulses, pulseX };
+  function createElement(tag) {
+    return { ...(tag === 'canvas' ? chart : {}), children: [], setAttribute() {},
+      append(...children) { this.children.push(...children); } };
+  }
+  const { draw, pulseX, usageCard } = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
+    const RECENT_STATS_MS = 300000, rankDays = 1;
+    const usageChartLabel = () => 'Recent usage', toolText = () => '', t = key => key;
+    const formatMillionTokens = tokens => tokens + ' M', speedText = speed => speed + ' tokens/s';
+    ${source}
+    return { draw: drawSubmissionPulses, pulseX, usageCard };
   `)(painters, callback => frames.push(callback), { signal: { aborted: false } }, {
     devicePixelRatio: 2, matchMedia: () => ({ matches: false }),
     getComputedStyle: () => ({ getPropertyValue: name => name === '--usage-wave-low' ? '#60a589' : '#ff6b72' })
-  }, { documentElement: {} }, TestPath);
+  }, { documentElement: {}, createElement }, TestPath);
   assert.equal(pulseX({ submittedAt: 1_000 }, 1_000, width), 0);
   assert.equal(pulseX({ submittedAt: 301_000 }, 1_000, width), width);
   draw(chart, [{ submittedAt: 20_000, deltaTokens: 100 }, { submittedAt: 40_000, deltaTokens: 0 },
@@ -212,9 +222,10 @@ test('today usage connects pulses at real timestamps and animates new points onc
   frames.shift()(1000);
   assert.deepEqual([chart.width, chart.height], [600, 60]);
   assert.deepEqual(stops, [[0, '#60a589'], [1, '#ff6b72']]);
+  assert.deepEqual([paths[0][0], paths[0].at(-1)], [[0, 26], [300, 26]]);
   assert.deepEqual(paths[0].slice(2, 7), [[20, 15], [23.25, 26], [40, 26], [89.75, 26], [93, 26]]);
   assert.deepEqual(paths[1][0], [40, 26, 1.4]);
-  assert.deepEqual(areas[0].points, [...paths[0], [96.25, 26], [16.75, 26], 'closed']);
+  assert.deepEqual(areas[0].points, [...paths[0], [300, 26], [0, 26], 'closed']);
   assert.equal(areas[0].opacity, 0.5);
   assert.equal(areas[0].style, ctx.strokeStyle);
   assert.equal(ctx.globalAlpha, 1);
@@ -228,30 +239,76 @@ test('today usage connects pulses at real timestamps and animates new points onc
   assert.deepEqual([chart.width, chart.height], [300, 60]);
   assert.deepEqual(paths[0][6], [46.5, 4]);
   assert.equal(frames.length, 0);
+  const empty = usageCard({}, 301_000, Infinity);
+  const [emptyChart, emptyMeta] = empty.children;
+  assert.equal(emptyMeta.children.at(-1).textContent, '0 tokens/s');
+  assert.equal(emptyChart.title, 'Recent usage\n0 M · 0 tokens/s');
+  frames.shift()(1600);
+  assert.deepEqual(paths, [[[0, 26], [150, 26]]]);
+  assert.equal(frames.length, 0);
 });
 
-test('leaderboard countdown is shared across all periods of the snapshot', async () => {
+test('leaderboard transfer controls occupy the columns beside the last-transfer times', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const countdown = /function countdownText\([\s\S]*?\n      \}/.exec(html)?.[0];
-  const render = /function renderRankCountdown\([\s\S]*?\n      \}/.exec(html)?.[0];
-  assert.ok(countdown && render);
-  const showCountdown = new Function('state', 'time', `
-    const { nextRankRefresh, rankingPending } = state;
-    const note = { textContent: '' };
-    const element = () => note;
-    const locale = { number: (value, options) => new Intl.NumberFormat('en', options).format(value) };
+  const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(css.get('.ladder-toolbar')['grid-template-areas'], '"title . action last"');
+  assert.equal(css.get('.ladder-rank-toolbar')['grid-template-areas'], '"title toggle action last"');
+  assert.equal(css.get('.ladder-refresh').background, 'transparent');
+  assert.equal(css.get('.ladder-refresh')['justify-content'], 'flex-end');
+  assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-action-width'], '40px');
+  assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-icon-size'], '16px');
+  assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-label-size'], '13px');
+  assert.equal(css.get('.ladder-toolbar-field')['font-size'], css.get('.ladder-toolbar .section-title')['font-size']);
+  assert.deepEqual(css.get('.ladder-refresh svg'), css.get('.ladder-toolbar-field svg'));
+  assert.equal(css.get('.ladder-toolbar-field')['grid-template-columns'], 'var(--ladder-toolbar-icon-size) minmax(0, 1fr)');
+  assert.equal(css.get('.ladder-personal-data')['scrollbar-gutter'], 'stable');
+  assert.equal(css.get('.ladder-rank-card')['scrollbar-gutter'], 'stable');
+  assert.equal(css.get('.ladder-refresh[aria-busy="true"] .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
+  assert.doesNotMatch(html, /ladder-(?:sync|refresh)-countdown/);
+  for (const id of ['sync-now', 'update']) {
+    const button = new RegExp(`<button[^>]*id="ladder-${id}"[\\s\\S]*?<\\/button>`).exec(html)?.[0];
+    assert.ok(button);
+    assert.match(button, /aria-busy="false"/);
+    assert.match(button, /class="ladder-transfer-icon"/);
+    assert.match(button, /class="ladder-transfer-spinner"/);
+  }
+});
+
+test('leaderboard upload and download indicate active transfers independently', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function renderTransferButton\([\s\S]*?(?=\n      function renderToolbarTime)/.exec(html)?.[0];
+  assert.ok(source);
+  const buttons = Object.fromEntries(['sync-now', 'update'].map(id => {
+    const attrs = new Map();
+    return [id, {
+      attrs, classList: { toggle() {} },
+      setAttribute: (name, value) => attrs.set(name, value),
+      getAttribute: name => attrs.get(name)
+    }];
+  }));
+  const show = new Function('element', 'state', `
+    const { manualSyncPending, rankingPending, rankingAccess = true } = state;
+    const busy = false;
     const t = key => key;
-    ${countdown}
-    ${render}
-    renderRankCountdown(time);
-    return note.textContent;
+    ${source}
+    renderUploadButton(state.snapshot, state.signedIn !== false, 1000);
+    renderDownloadButton();
   `);
-  const state = { nextRankRefresh: 12_000 };
-  assert.equal(showCountdown(state, 2_100), '00:10');
-  assert.equal(showCountdown(state, 6_000), '00:06');
-  assert.equal(showCountdown({ ...state, rankingPending: true }, 6_000), 'sync-in-progress');
-  assert.equal(showCountdown(state, 12_000), 'sync-waiting');
-  assert.equal(showCountdown({}, 2_100), '—');
+  const state = id => [buttons[id].attrs.get('aria-busy'), buttons[id].disabled, buttons[id].title];
+  show(id => buttons[id], { snapshot: { uploading: true } });
+  assert.deepEqual(state('sync-now'), ['true', true, 'uploading']);
+  assert.deepEqual(state('update'), ['false', false, 'refresh-leaderboard']);
+  show(id => buttons[id], { rankingPending: true });
+  assert.deepEqual(state('sync-now'), ['false', false, 'upload-now']);
+  assert.deepEqual(state('update'), ['true', true, 'sync-in-progress']);
+  show(id => buttons[id], { manualSyncPending: true, rankingAccess: false });
+  assert.deepEqual(state('sync-now'), ['true', true, 'uploading']);
+  assert.deepEqual(state('update'), ['false', true, 'refresh-leaderboard']);
+  show(id => buttons[id], { snapshot: { manualQueued: true } });
+  assert.deepEqual(state('sync-now'), ['false', true, 'sync-queued']);
+  show(id => buttons[id], { signedIn: false, snapshot: { uploading: true } });
+  assert.deepEqual(state('sync-now'), ['false', true, 'upload-now']);
+  assert.deepEqual(state('update'), ['false', false, 'refresh-leaderboard']);
 });
 
 test('daily usage fills missing dates with zero across the entire selected window', async () => {

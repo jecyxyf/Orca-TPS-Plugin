@@ -257,7 +257,20 @@ test('flushes a receiver batch after one second or 32 packets without waiting fo
   assert.equal(replies.length, 2);
 });
 
-test('combines devices once per round and keeps original timestamps on relay', () => {
+test('flushes a partial receiver batch at the configured 100 ms', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const shared = createPacketBuffer(4096);
+  const replies = [];
+  const receive = createPacketReceiver(openPacketBuffer(shared), 1e6, batch => replies.push(batch), 100);
+  receive({ id: 1, raw: JSON.stringify(packet(randomUUID(), 100)), account: { id: 11, username: 'player' }, at });
+  t.mock.timers.tick(99);
+  assert.deepEqual(replies, []);
+  t.mock.timers.tick(1);
+  assert.deepEqual(replies, [[{ id: 1, accepted: true }]]);
+  assert.equal([...openPacketBuffer(shared).take()].length, 1);
+});
+
+test('keeps the last successful scores across rounds, with original curve dates', () => {
   const rankings = createTokensRankings();
   const account = { id: 11, username: 'player' };
   const [a, b, c] = Array.from({ length: 3 }, () => randomUUID());
@@ -271,19 +284,174 @@ test('combines devices once per round and keeps original timestamps on relay', (
   assert.equal(first.boards[24].rows[0].tokens, 60);
   assert.equal(first.boards[24].rows.length, 1);
   assert.equal(first.boards[168].rows[0].daily.some(row => row.tokens === 60), true);
-  assert.deepEqual(publish([], at + 10_000).boards[24].rows, []);
-  assert.equal(publish([entry(packet(b, 20), at + 11_000)], at + 15_000).boards[24].rows[0].tokens, 20);
+  assert.deepEqual(publish([], at + 10_000).boards[24].rows, first.boards[24].rows);
+  const delayed = publish([entry(packet(b, 7, at - 1000), at + 11_000)], at + 15_000);
+  assert.deepEqual(delayed.boards[24].rows, first.boards[24].rows);
+  const replaced = publish([entry(packet(b, 35, at + 16_000), at + 16_000)], at + 20_000);
+  assert.equal(replaced.boards[24].rows[0].tokens, 75);
+  assert.equal(replaced.calendar.boards[24].rows[0].tokens, 75);
+  assert.equal(replaced.boards[24].rows[0].lastUploadAt, at + 16_000);
+  const later = publish([], at + day);
+  assert.equal(later.boards[24].rows[0].tokens, 75);
+  assert.equal(later.calendar.boards[24].rows[0].tokens, 75);
+  assert.deepEqual(later.calendar.boards[168].rows[0].daily.slice(-2).map(point => [point.day, point.tokens]),
+    [['2026-06-15', 75], ['2026-06-16', 0]]);
+  assert.deepEqual(later.boards[168].rows[0].daily.slice(-2).map(point => [point.day, point.tokens]),
+    [['2026-06-15', 75], ['2026-06-16', 0]]);
+  assert.equal(later.boards[168].rows[0].tokens, 75);
+  assert.equal(later.calendar.boards[168].rows[0].tokens, 75);
+  const longOffline = publish([], at + 31 * day);
+  assert.equal(longOffline.boards[24].rows[0].tokens, 75);
+  assert.equal(longOffline.calendar.boards[24].rows[0].lastUploadAt, at + 16_000);
+  assert.ok(longOffline.calendar.boards[720].rows[0].daily.every(point => point.tokens === 0));
   assert.equal(validatePacket(JSON.stringify(packet(a, 10)), 12, at, 1e6), null);
 });
 
-test('publishes uploads from both workers, drops an empty round, and includes the next upload', { timeout: 25_000 }, async t => {
+test('retains four device summaries and replaces the oldest when a new device reports', () => {
+  const rankings = createTokensRankings();
+  const account = { id: 11, username: 'player' };
+  const devices = Array.from({ length: 6 }, () => randomUUID());
+  const report = (device, tokens, offset, receivedOffset = offset) => ({
+    account, receivedAt: at + receivedOffset, sequence: receivedOffset + 1,
+    packet: { ...packet(device, tokens, at + offset), timeZone: 'Asia/Shanghai' }
+  });
+  const first = rankings.publish(devices.slice(0, 4).map((device, i) => report(device, 10 * (i + 1), i)),
+    at + 100, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(first.boards[24].rows[0].tokens, 100);
+
+  const replaced = rankings.publish([
+    report(devices[4], 50, 1000), report(devices[0], 900, 0, 1200), report(devices[5], 900, 1500, 0)
+  ], at + 2000, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(replaced.boards[24].rows[0].tokens, 140);
+  assert.equal(replaced.boards[24].rows[0].lastUploadAt, at + 1000);
+
+  const refreshed = rankings.publish([report(devices[1], 25, 3000)], at + 3000, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(refreshed.boards[24].rows[0].tokens, 145);
+});
+
+test('combines speed samples from different devices in each round and keeps the winning point while offline', () => {
+  const rankings = createTokensRankings();
+  const account = { id: 11, username: 'player' };
+  const reports = [100, 200].map((rate, index) => ({
+    account, receivedAt: at,
+    packet: { ...packet(randomUUID(), 10), samples: [[String(index).repeat(24), at, 300, rate, 'model', 'codex']] }
+  }));
+  const rows = rankings.publish(reports, at, TOKENS_DEFAULT_INTERVALS).boards[0].rows;
+  assert.equal(rows[0].deltaTokens, 600);
+  assert.equal(rows[0].avgTps, 150);
+  assert.deepEqual(rankings.publish([], at + day, TOKENS_DEFAULT_INTERVALS).boards[0].rows, rows);
+});
+
+test('a ban evicts the cached account and an unban admits only subsequent uploads', () => {
+  const rankings = createTokensRankings();
+  const report = (id, sequence) => ({ account: { id, username: 'player-' + id }, receivedAt: at,
+    sequence, packet: { ...packet(randomUUID(), 100), accountId: id } });
+  const publish = entries => rankings.publish(entries, at, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(publish([report(11, 1), report(12, 2)]).boards[24].rows.length, 2);
+  assert.equal(rankings.setBan(11, true, 3), true);
+  const banned = publish([report(11, 3), report(11, 4)]);
+  assert.deepEqual(banned.boards[24].rows.map(row => row.username), ['player-12']);
+  assert.deepEqual(banned.calendar.boards[24].rows.map(row => row.username), ['player-12']);
+  rankings.setBan(11, false, 4);
+  assert.equal(publish([report(11, 4)]).boards[24].rows.length, 1);
+  assert.equal(publish([report(11, 5)]).boards[24].rows.length, 2);
+});
+
+test('keeps separate rankings and cutoffs across Beijing midnight', () => {
+  const midnight = Date.parse('2026-06-16T00:00:00+08:00');
+  const now = midnight + 3 * 60_000;
+  const report = (id, username, yesterday, today) => {
+    const account = { id, username };
+    const raw = { ...packet(randomUUID(), 0, now), accountId: id, timeZone: 'UTC',
+      hours: [[midnight - 29 * day, 10], [midnight - 7 * day, 25], [midnight - hour, yesterday], [midnight, today]],
+      daily: [['2026-06-15', yesterday + today]] };
+    return { account, receivedAt: now, packet: validatePacket(JSON.stringify(raw), id, now, 1e6) };
+  };
+  const { boards, calendar } = createTokensRankings().publish([
+    report(11, 'alice', 400, 20), report(12, 'bob', 100, 500)
+  ], now, TOKENS_DEFAULT_INTERVALS);
+  const totals = rows => rows.map(({ username, tokens, rank }) => ({ username, tokens, rank }));
+  assert.deepEqual(totals(boards[24].rows), [
+    { username: 'alice', tokens: 400, rank: 1 }, { username: 'bob', tokens: 100, rank: 2 }
+  ]);
+  assert.deepEqual(totals(calendar.boards[24].rows), [
+    { username: 'bob', tokens: 500, rank: 1 }, { username: 'alice', tokens: 20, rank: 2 }
+  ]);
+  assert.equal(boards[24].cutoffAt, midnight);
+  assert.equal(calendar.cutoffAt, now);
+  assert.equal(calendar.boards[24].windowStart, midnight);
+  assert.equal(calendar.boards[168].windowStart, midnight - 6 * day);
+  assert.equal(calendar.boards[168].rows[0].tokens, 600);
+  assert.equal(calendar.boards[720].rows[0].tokens, 635);
+  assert.deepEqual(calendar.boards[168].rows[0].daily.slice(-2).map(({ at, tokens }) => [at, tokens]),
+    [[midnight - day, 100], [midnight, 500]]);
+});
+
+test('retains 10,000 ranks in both usage modes and 100 in the shared speed board', () => {
+  const rankings = createTokensRankings();
+  const device = randomUUID();
+  const base = packet(device, 1);
+  const reports = Array.from({ length: 10_001 }, (_, index) => {
+    const id = index + 1;
+    return { account: { id, username: 'player-' + id }, receivedAt: at, packet: { ...base, accountId: id,
+      hours: [[base.hours[0][0], id]], samples: [['a'.repeat(24), at, 600, id, 'model', 'codex']] } };
+  });
+  const snapshot = rankings.publish(reports, at, TOKENS_DEFAULT_INTERVALS);
+  for (const set of [snapshot.boards, snapshot.calendar.boards]) {
+    for (const hours of [24, 168, 720]) {
+      assert.equal(set[hours].rows.length, 10_000);
+      assert.equal(set[hours].rows[0].username, 'player-10001');
+      assert.equal(set[hours].rows.at(-1).username, 'player-2');
+      assert.equal(set[hours].rows.at(-1).rank, 10_000);
+    }
+  }
+  assert.equal(snapshot.boards[0].rows.length, 100);
+  assert.equal(snapshot.boards[0].rows.at(-1).avgTps, 9902);
+  assert.equal(snapshot.calendar.boards[0], undefined);
+  assert.equal(rankings.snapshot(), snapshot);
+  rankings.setBan(10_001, true, 0);
+  const afterBan = rankings.publish([], at, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(afterBan.boards[24].rows.length, 9_999);
+  assert.equal(afterBan.boards[0].rows.length, 99);
+
+  const refreshed = rankings.publish([{
+    ...reports[0], packet: { ...reports[0].packet, deviceGuid: randomUUID() }
+  }], at, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(refreshed.boards[24].rows.length, 10_000);
+  assert.equal(refreshed.boards[24].rows.at(-1).username, 'player-1');
+  assert.equal(refreshed.boards[24].rows.at(-1).tokens, 1);
+
+});
+
+test('collapses overlapping ticks to one extra ranking and advances to the newest cutoff', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let clock = at;
+  const jobs = createTokensManagerJobs({ maxTokens: 1e6, now: () => clock, receiverCount: 1, log() {} });
+  t.after(() => jobs.close());
+  const read = () => {
+    const bytes = jobs.snapshot('hourly');
+    return bytes && JSON.parse(new TextDecoder().decode(bytes));
+  };
+  for (let i = 0; i < 200 && !read(); i++) await setTimeout(10);
+  assert.equal(read()?.version, 1);
+  for (let i = 0; i < 10; i++) {
+    clock += 3000;
+    t.mock.timers.tick(3000);
+  }
+  for (let i = 0; i < 200 && read()?.version < 3; i++) await setTimeout(10);
+  assert.equal(read()?.version, 3);
+  assert.equal(read()?.serverTime, clock);
+});
+
+test('publishes every three seconds and retains successful uploads through an unsuccessful round', { timeout: 25_000 }, async t => {
   const token = randomBytes(32).toString('base64url');
   const directory = await mkdtemp(path.join(tmpdir(), 'tps-manager-http-'));
   const filename = path.join(directory, 'leaderboard.bin');
   const digest = createHash('sha256').update(token).digest('hex');
   openLeaderboardStore(filename).issueSession({ id: 11, login: 'player' }, digest, 'plugin', at + hour, at);
   const store = openLeaderboardStore(filename);
-  const jobs = createTokensManagerJobs({ maxTokens: 1e6, now: () => at, intervals: { publishMs: 1000 }, log() {} });
+  const jobs = createTokensManagerJobs({ maxTokens: 1e6, now: () => at, receiverCount: 8, flushMs: 100,
+    intervals: { uploadMs: 3000, publishMs: 3000, readMs: 3000 }, log() {} });
   const server = createLeaderboardServer({ tokensJobs: jobs, store, baseUrl: 'http://localhost', now: () => at });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
@@ -293,12 +461,13 @@ test('publishes uploads from both workers, drops an empty round, and includes th
   });
   const base = `http://127.0.0.1:${server.address().port}/api/tokens-manager`;
   const config = await fetch(base + '/config').then(res => res.json());
-  assert.equal(config.intervals.scanMs, 5000);
-  assert.equal(config.intervals.publishMs, 5000);
+  assert.deepEqual(config.intervals, { ...TOKENS_DEFAULT_INTERVALS, uploadMs: 3000, publishMs: 3000, readMs: 3000 });
   const upload = body => fetch(base + '/packets', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
   const guid = randomUUID();
+  const latest = packet(guid, 100);
+  latest.hours.push([Math.floor(at / hour) * hour, 25]);
   const responses = await Promise.all([
-    upload(packet(guid, 100)), upload(packet(guid, 200, at - 1)), upload(packet(randomUUID(), 400))
+    upload(latest), upload(packet(guid, 200, at - 1)), upload(packet(randomUUID(), 400))
   ]);
   assert.deepEqual(responses.map(res => res.status), [202, 202, 202]);
 
@@ -315,15 +484,33 @@ test('publishes uploads from both workers, drops an empty round, and includes th
 
   const snapshot = await waitForSnapshot(next => next.boards[24].rows.length > 0);
   assert.equal(snapshot.boards[24].rows[0].tokens, 500);
+  assert.equal(snapshot.nextAt - snapshot.cutoffAt, 3000);
+  assert.equal(snapshot.refreshAt - snapshot.serverTime, 3000);
   assert.deepEqual(await readSnapshot(), snapshot);
+  const calendar = await fetch(base + '/snapshot?mode=calendar').then(res => res.json());
+  assert.equal(calendar.version, snapshot.version);
+  assert.equal(calendar.mode, 'calendar');
+  assert.equal(calendar.boards[24].rows[0].tokens, 525);
+  assert.equal(calendar.cutoffAt, at);
+  assert.deepEqual(calendar.boards[0], snapshot.boards[0]);
+  const hourlyBytes = jobs.snapshot('hourly');
+  const calendarBytes = jobs.snapshot('calendar');
+  const readers = await Promise.all(Array.from({ length: 16 }, (_, i) =>
+    fetch(base + '/snapshot' + (i % 2 ? '?mode=calendar' : '')).then(res => res.bytes())));
+  for (const [i, bytes] of readers.entries()) assert.deepEqual(bytes, i % 2 ? calendarBytes : hourlyBytes);
+  assert.equal(jobs.snapshot('hourly'), hourlyBytes);
+  assert.equal(jobs.snapshot('calendar'), calendarBytes);
   const anonymous = await fetch(base + '/packets', { method: 'POST', body: JSON.stringify(packet(guid, 100)) });
   assert.equal(anonymous.status, 401);
 
-  const empty = await waitForSnapshot(next => next.version > snapshot.version);
-  assert.ok(Object.values(empty.boards).every(board => board.rows.length === 0));
-  assert.equal((await upload(packet(guid, 100))).status, 202);
-  const returned = await waitForSnapshot(next => next.version > empty.version);
-  assert.equal(returned.boards[24].rows[0].tokens, 100);
+  assert.equal((await upload({ ...packet(guid, 100), accountId: 12 })).status, 400);
+  const kept = await waitForSnapshot(next => next.version > snapshot.version);
+  assert.deepEqual(kept.boards[24].rows, snapshot.boards[24].rows);
+  assert.deepEqual((await fetch(base + '/snapshot?mode=calendar').then(res => res.json())).boards[24].rows,
+    calendar.boards[24].rows);
+  assert.equal((await upload(packet(guid, 150))).status, 202);
+  const returned = await waitForSnapshot(next => next.version > kept.version);
+  assert.equal(returned.boards[24].rows[0].tokens, 550);
 });
 
 test('uses one process, waits for the first scan and keeps its lease across a short disconnect', async t => {

@@ -39,11 +39,6 @@
   <message id="usage-update-mode">Metodo di aggiornamento</message>
   <message id="usage-update-daily">Per data</message>
   <message id="usage-update-hourly">Ogni ora</message>
-  <message id="usage-update-help">Informazioni sull’aggiornamento</message>
-  <message id="usage-update-hint-daily">Per data. Le statistiche di oggi ripartono da zero a mezzanotte, ora locale.</message>
-  <message id="usage-update-hint-hourly">All’inizio di ogni ora locale vengono ricalcolate le statistiche del periodo selezionato.</message>
-  <message id="usage-update-hint-ranking">Le variazioni di utilizzo possono influire sulla classifica.</message>
-  <message id="usage-update-hint-recommended">Consigliamo l’aggiornamento ogni ora.</message>
   <message id="total-usage">Uso totale (incluse letture e scritture della cache)</message>
   <message id="request-count">Richieste</message>
   <message id="max-speed">Velocità massima</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">Motivo non disponibile</message>
   <message id="data-upload">Caricamento dati</message>
   <message id="upload-now">Carica ora</message>
-  <message id="next-upload-countdown">Prossimo caricamento</message>
   <message id="last-upload-time">Ultimo caricamento</message>
-  <message id="uploading-countdown">Caricamento…</message>
-  <message id="upload-waiting">In attesa di caricare…</message>
-  <message id="next-sync-countdown">Prossima sincronizzazione</message>
+  <message id="uploading">Caricamento…</message>
   <message id="sync-in-progress">Sincronizzazione…</message>
-  <message id="sync-waiting">In attesa di sincronizzare…</message>
   <message id="sync-now">Sincronizza ora</message>
   <message id="sync-queued">In coda per il prossimo caricamento</message>
   <message id="last-twenty-four-hours">Ultime 24 ore</message>

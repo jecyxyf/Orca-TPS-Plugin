@@ -37,13 +37,8 @@
   <message id="usage-overview">用量概览</message>
   <message id="usage-period">统计范围</message>
   <message id="usage-update-mode">统计更新方式</message>
-  <message id="usage-update-daily">按日期更新</message>
+  <message id="usage-update-daily">按天数更新</message>
   <message id="usage-update-hourly">按小时更新</message>
-  <message id="usage-update-help">统计更新方式说明</message>
-  <message id="usage-update-hint-daily">按日期更新。每天本地时间 00:00，今日统计归零并重新累计。</message>
-  <message id="usage-update-hint-hourly">按小时更新。每到本地整点，重新汇总所选时间范围的数据。</message>
-  <message id="usage-update-hint-ranking">用量变化可能影响天梯榜排名。</message>
-  <message id="usage-update-hint-recommended">建议选择「按小时更新」。</message>
   <message id="total-usage">总用量（含缓存读写）</message>
   <message id="request-count">请求数</message>
   <message id="max-speed">最大速度</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">原因未记录</message>
   <message id="data-upload">数据上传</message>
   <message id="upload-now">手动上传</message>
-  <message id="next-upload-countdown">下次上传</message>
   <message id="last-upload-time">上次上传</message>
-  <message id="uploading-countdown">上传中…</message>
-  <message id="upload-waiting">等待上传…</message>
-  <message id="next-sync-countdown">下次同步</message>
+  <message id="uploading">上传中…</message>
   <message id="sync-in-progress">同步中…</message>
-  <message id="sync-waiting">等待同步…</message>
   <message id="sync-now">手动同步</message>
   <message id="sync-queued">已加入下次上传</message>
   <message id="last-twenty-four-hours">近 24 小时</message>
@@ -280,5 +271,5 @@
   <message id="leaderboard-server-update-required">更新榜单服务端后即可查看。</message>
   <message id="ranking-update-mode">排名更新方式</message>
   <message id="ranking-update-daily">按天数更新</message>
-  <message id="ranking-update-hourly">按24小时更新</message>
+  <message id="ranking-update-hourly">按小时更新</message>
 </messages>

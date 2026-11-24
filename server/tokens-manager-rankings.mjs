@@ -1,14 +1,19 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { validInstallationId } from '../src/leaderboard_stats.mjs';
 import {
   HOUR_MS, MAX_RECENT_REQUESTS, RANKING_HOURS, RECENT_STATS_MS, SPEED_MIN_DELTA, hourStart, isHourStart,
-  isUsageTime, validRecentRequest
+  isUsageTime, validInstallationId, validRecentRequest
 } from '../src/leaderboard_stats.mjs';
 import { calendarFor } from '../src/personal_stats.mjs';
 import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
 import { openPacketBuffer } from './tokens-manager-buffer.mjs';
 
 const dayMs = 24 * HOUR_MS;
+const usageLimit = 10_000;
+const publicLimit = 100;
+const deviceLimit = 4;
+const speedIndex = RANKING_HOURS.length * 2;
+const boardLimits = [...Array(speedIndex).fill(usageLimit), publicLimit];
+const timeZones = new Map();
 const sum = (map, key, amount) => map.set(key, (map.get(key) ?? 0) + amount);
 
 export function validatePacket(json, accountId, receivedAt, maxTokens) {
@@ -17,8 +22,12 @@ export function validatePacket(json, accountId, receivedAt, maxTokens) {
   if (!validInstallationId(packet?.deviceGuid) || accountId !== packet.accountId ||
       !isUsageTime(packet.publishedAt) || packet.publishedAt > receivedAt + dayMs) return null;
   const { hours, daily, samples, publishedAt } = packet;
-  let timeZone;
-  try { timeZone = calendarFor(packet.timeZone ?? 'Asia/Shanghai').timeZone; } catch { return null; }
+  const requestedZone = packet.timeZone ?? 'Asia/Shanghai';
+  let timeZone = timeZones.get(requestedZone);
+  if (timeZone === undefined) {
+    try { timeZone = calendarFor(requestedZone).timeZone; } catch { return null; }
+    if (timeZones.size < 32) timeZones.set(requestedZone, timeZone);
+  }
   const max = Math.max(1, maxTokens);
   function series(rows, limit, validKey) {
     return Array.isArray(rows) && rows.length <= limit && rows.every((row, i) => Array.isArray(row) &&
@@ -78,84 +87,247 @@ function aggregateBestSpeed(rows, at) {
   return best;
 }
 
-const ranked = (rows, compare, limit = 100) => rows.sort((a, b) => compare(a, b) || a.username.localeCompare(b.username))
-  .slice(0, limit).map((row, i) => ({ ...row, rank: i + 1 }));
-
-export function createTokensRankings() {
-  let version = 0;
-
-  function publish(entries, at, intervals) {
-    const latest = new Map();
-    for (const entry of entries) {
-      const { account, packet, receivedAt } = entry;
-      const key = `${account.id}/${packet.deviceGuid}`;
-      const previous = latest.get(key);
-      if (!previous || packet.publishedAt > previous.packet.publishedAt ||
-          (packet.publishedAt === previous.packet.publishedAt && receivedAt >= previous.receivedAt)) {
-        latest.set(key, entry);
-      }
-    }
-    const accounts = new Map();
-    for (const { account, packet, receivedAt } of latest.values()) {
-      let totals = accounts.get(account.id);
-      if (!totals) {
-        totals = { username: account.username, receivedAt, submittedAt: packet.publishedAt, timeZone: packet.timeZone,
-          hours: new Map(), packets: [], samples: [] };
-        accounts.set(account.id, totals);
-      }
-      if (packet.publishedAt > totals.submittedAt) {
-        totals.submittedAt = packet.publishedAt;
-        totals.timeZone = packet.timeZone;
-      }
-      if (receivedAt >= totals.receivedAt) {
-        totals.receivedAt = receivedAt;
-        totals.username = account.username;
-      }
-      for (const [hour, tokens] of packet.hours) sum(totals.hours, hour, tokens);
-      totals.packets.push(packet);
-      for (const sample of packet.samples) totals.samples.push(sample);
-    }
-    const cutoffAt = hourStart(at), nextAt = cutoffAt + intervals.publishMs;
-    const boards = {};
-    const speedRows = [], usage = new Map(RANKING_HOURS.map(hours => [hours, []]));
-    for (const account of accounts.values()) {
-      const { username, submittedAt, receivedAt, hours, packets, samples, timeZone } = account;
-      const calendar = calendarFor(timeZone), days = new Map();
-      for (const packet of packets) {
-        if (packet.timeZone === timeZone) {
-          for (const [day, tokens] of packet.daily) sum(days, day, tokens);
-        } else {
-          for (const [hour, tokens] of packet.hours) sum(days, calendar.day(hour), tokens);
-        }
-      }
-      const recent = recentStats(samples, at);
-      const speed = aggregateBestSpeed(samples, at);
-      if (speed) speedRows.push({ username, ...speed, lastUploadAt: receivedAt });
-      for (const span of RANKING_HOURS) {
-        const start = cutoffAt - span * HOUR_MS;
-        let tokens = 0;
-        for (const [hour, count] of hours) if (hour >= start && hour < cutoffAt) tokens += count;
-        if (!tokens) continue;
-        const row = { username, tokens, submittedAt, lastUploadAt: receivedAt, complete: true, recent };
-        if (span > 24) row.daily = Array.from({ length: span / 24 }, (_, i) => {
-          const at = start + i * dayMs;
-          const day = calendar.day(at + dayMs - 1);
-          return { at, day, tokens: days.get(day) ?? 0, complete: true };
-        });
-        usage.get(span).push(row);
-      }
-    }
-    for (const [hours, rows] of usage) {
-      boards[hours] = { hours, cutoffAt, nextAt, windowStart: cutoffAt - hours * HOUR_MS,
-        rows: ranked(rows, (a, b) => b.tokens - a.tokens) };
-    }
-    boards[0] = { rows: ranked(speedRows, (a, b) => b.avgTps - a.avgTps, 20) };
-    return { version: ++version, serverTime: at, refreshAt: at + intervals.readMs, cutoffAt, nextAt, boards };
-  }
-  return { publish };
+function compareReceipt(previous, receivedAt, sequence = 0) {
+  return receivedAt - previous.receivedAt || sequence - previous.sequence;
 }
 
-export function createPacketReceiver(buffer, maxTokens, reply) {
+function compareUpload(previous, publishedAt, receivedAt, sequence = 0) {
+  return publishedAt - previous.publishedAt || compareReceipt(previous, receivedAt, sequence);
+}
+
+function summarizeDevice(packet, receivedAt, sequence = 0) {
+  const { hours, daily, publishedAt, timeZone } = packet;
+  const firstHour = hours[0]?.[0] ?? 0;
+  const storage = new ArrayBuffer(hours.length * (Float64Array.BYTES_PER_ELEMENT + Uint16Array.BYTES_PER_ELEMENT));
+  const tokens = new Float64Array(storage, 0, hours.length);
+  const hourOffsets = new Uint16Array(storage, tokens.byteLength, hours.length);
+  for (let i = 0; i < hours.length; i++) {
+    hourOffsets[i] = (hours[i][0] - firstHour) / HOUR_MS;
+    tokens[i] = hours[i][1];
+  }
+  const localDays = new Float64Array(daily.length * 2);
+  for (let i = 0; i < daily.length; i++) {
+    localDays[2 * i] = Math.floor(leaderboardDayStart(daily[i][0]) / dayMs);
+    localDays[2 * i + 1] = daily[i][1];
+  }
+  return { publishedAt, receivedAt, sequence, timeZone, firstHour, hourOffsets, tokens, localDays };
+}
+
+function recordDevice(row, packet, receivedAt, sequence) {
+  const previous = row.devices.get(packet.deviceGuid);
+  if (previous && compareUpload(previous, packet.publishedAt, receivedAt, sequence) < 0) return;
+  let replaced;
+  if (!previous && row.devices.size === deviceLimit) {
+    for (const [guid, device] of row.devices) {
+      if (!replaced || compareReceipt(replaced[1], device.receivedAt, device.sequence) < 0) replaced = [guid, device];
+    }
+    // Receiver threads can flush out of order. An earlier receipt or a stale replay cannot displace a newer device.
+    if (compareReceipt(replaced[1], receivedAt, sequence) < 0 || packet.publishedAt < replaced[1].publishedAt) return;
+    row.devices.delete(replaced[0]);
+  }
+  const summary = summarizeDevice(packet, receivedAt, sequence);
+  row.devices.set(packet.deviceGuid, summary);
+  return { summary, replaced: replaced?.[0] };
+}
+
+function usageScores(devices, cutoff, midnight) {
+  const scores = new Float64Array(speedIndex);
+  const calendarStart = midnight - 29 * dayMs;
+  for (const { firstHour, hourOffsets, tokens } of devices.values()) {
+    for (let i = 0; i < tokens.length; i++) {
+      const at = firstHour + hourOffsets[i] * HOUR_MS;
+      const age = cutoff - at;
+      if (age > 0 && age <= 720 * HOUR_MS) {
+        scores[2] += tokens[i];
+        if (age <= 168 * HOUR_MS) scores[1] += tokens[i];
+        if (age <= 24 * HOUR_MS) scores[0] += tokens[i];
+      }
+      if (age >= 0 && at >= calendarStart) {
+        scores[5] += tokens[i];
+        if (at >= midnight - 6 * dayMs) scores[4] += tokens[i];
+        if (at >= midnight) scores[3] += tokens[i];
+      }
+    }
+  }
+  return scores;
+}
+
+function calendarCurve(row, dates, cutoff) {
+  const start = dates[0].at;
+  const tokens = new Float64Array(dates.length);
+  for (const device of row.devices.values()) {
+    for (let i = 0; i < device.tokens.length; i++) {
+      const at = device.firstHour + device.hourOffsets[i] * HOUR_MS;
+      if (at >= start && at <= cutoff) tokens[Math.floor((at - start) / dayMs)] += device.tokens[i];
+    }
+  }
+  return dates.map((point, i) => ({ ...point, tokens: tokens[i] }));
+}
+
+function hourlyCurve(row, dates, dayNumberAt) {
+  const tokens = new Map();
+  for (const device of row.devices.values()) {
+    if (device.timeZone === row.timeZone) {
+      for (let i = 0; i < device.localDays.length; i += 2) sum(tokens, device.localDays[i], device.localDays[i + 1]);
+      continue;
+    }
+    for (let i = 0; i < device.tokens.length; i++) {
+      const at = device.firstHour + device.hourOffsets[i] * HOUR_MS;
+      sum(tokens, dayNumberAt(at), device.tokens[i]);
+    }
+  }
+  return dates.map(point => ({ ...point, tokens: tokens.get(Math.floor(leaderboardDayStart(point.day) / dayMs)) ?? 0 }));
+}
+
+export function leaderboardSnapshotForMode({ calendar, ...hourly }, mode) {
+  if (mode !== 'calendar') return hourly;
+  if (calendar) return { ...hourly, ...calendar, mode, boards: { 0: hourly.boards[0], ...calendar.boards } };
+}
+
+export function createTokensRankings(bans = new Map()) {
+  let version = 0, snapshot;
+  const accounts = new Map();
+  const leaders = boardLimits.map(() => []);
+  const dirty = boardLimits.map(() => false);
+  const score = (row, board) => board === speedIndex ? row.speed?.avgTps ?? 0 : row.scores[board];
+
+  function setBan(accountId, banned, sequence, evict = banned) {
+    bans.set(accountId, { banned, sequence });
+    const removed = evict && accounts.delete(accountId);
+    if (removed) dirty.fill(true);
+    return removed;
+  }
+
+  function updateLeaders() {
+    const kept = new Set();
+    for (const [board, limit] of boardLimits.entries()) {
+      if (dirty[board]) {
+        leaders[board] = Array.from(accounts.values()).filter(row => score(row, board) > 0)
+          .sort((left, right) => score(right, board) - score(left, board) ||
+            left.username.localeCompare(right.username) || left.id - right.id).slice(0, limit);
+      }
+      for (const row of leaders[board]) kept.add(row.id);
+    }
+    const speedWinners = new Set(leaders[speedIndex]);
+    for (const [id, row] of accounts) {
+      if (!kept.has(id)) accounts.delete(id);
+      else if (!speedWinners.has(row)) row.speed = undefined;
+    }
+    dirty.fill(false);
+  }
+
+  function updateAccounts(entries, at, cutoff, midnight) {
+    const touched = new Map();
+    const earliest = cutoff - RANKING_HOURS.at(-1) * HOUR_MS;
+    for (const { account, packet, receivedAt, sequence } of entries) {
+      const ban = bans.get(account.id);
+      // Uploads queued before a ban or unban must not restore an evicted account.
+      if ((ban && (ban.banned || !(sequence > ban.sequence))) || packet.publishedAt < earliest) continue;
+      let row = accounts.get(account.id);
+      if (!row) {
+        row = { id: account.id, username: account.username, devices: new Map(), scores: new Float64Array(speedIndex) };
+        accounts.set(account.id, row);
+      }
+      const accepted = recordDevice(row, packet, receivedAt, sequence);
+      if (!accepted) continue;
+      let fresh = touched.get(row);
+      if (!fresh) touched.set(row, fresh = new Map());
+      fresh.delete(accepted.replaced);
+      fresh.set(packet.deviceGuid, packet.samples);
+      if (!row.latest || compareReceipt(row.latest, receivedAt, accepted.summary.sequence) >= 0) {
+        if (row.username !== account.username) dirty.fill(true);
+        row.username = account.username;
+        row.latest = { receivedAt, sequence: accepted.summary.sequence };
+      }
+    }
+    for (const [row, fresh] of touched) {
+      const scores = usageScores(row.devices, cutoff, midnight);
+      for (let i = 0; i < scores.length; i++) if (scores[i] !== row.scores[i]) dirty[i] = true;
+      row.scores = scores;
+      let newest;
+      for (const device of row.devices.values()) {
+        if (!newest || compareUpload(newest, device.publishedAt, device.receivedAt, device.sequence) > 0) newest = device;
+      }
+      row.submittedAt = newest.publishedAt;
+      row.timeZone = newest.timeZone;
+      // Merge speed samples across sources in this round, then retain only the winning point.
+      const samples = fresh.size === 1 ? fresh.values().next().value : Array.from(fresh.values()).flat();
+      row.recent = recentStats(samples, at);
+      const speed = aggregateBestSpeed(samples, at);
+      if ((speed?.avgTps ?? 0) !== score(row, speedIndex)) dirty[speedIndex] = true;
+      row.speed = speed;
+    }
+    if (touched.size || dirty.includes(true)) updateLeaders();
+  }
+
+  function publish(entries, at, intervals, visibleLimit = usageLimit) {
+    const cutoffAt = hourStart(at), nextAt = cutoffAt + intervals.publishMs;
+    const midnight = leaderboardDayStart(leaderboardDay(at));
+    updateAccounts(entries, at, cutoffAt, midnight);
+
+    const boards = {}, calendarBoards = {};
+    const dateDetails = new Map(), hourDetails = new Map(), hourCalendars = new Map();
+    const calendarDates = Array.from({ length: 30 }, (_, i) => {
+      const at = midnight - (29 - i) * dayMs;
+      return { at, day: leaderboardDay(at), complete: true };
+    });
+
+    function details(row, byDate) {
+      const cache = byDate ? dateDetails : hourDetails;
+      if (cache.has(row)) return cache.get(row);
+      let curve;
+      if (byDate) curve = calendarCurve(row, calendarDates, cutoffAt);
+      else {
+        let period = hourCalendars.get(row.timeZone);
+        if (!period) {
+          const calendar = calendarFor(row.timeZone);
+          const daysByHour = new Map();
+          const dayNumberAt = at => {
+            let day = daysByHour.get(at);
+            if (day === undefined) {
+              day = Math.floor(leaderboardDayStart(calendar.day(at)) / dayMs);
+              daysByHour.set(at, day);
+            }
+            return day;
+          };
+          const dates = Array.from({ length: 30 }, (_, i) => {
+            const at = cutoffAt - (30 - i) * dayMs;
+            return { at, day: calendar.day(at + dayMs - 1), complete: true };
+          });
+          hourCalendars.set(row.timeZone, period = { dayNumberAt, dates });
+        }
+        curve = hourlyCurve(row, period.dates, period.dayNumberAt);
+      }
+      cache.set(row, curve);
+      return curve;
+    }
+
+    function usageRows(board, count, byDate) {
+      return leaders[board].slice(0, visibleLimit).map((row, i) => ({
+        rank: i + 1, username: row.username, submittedAt: row.submittedAt, lastUploadAt: row.latest.receivedAt,
+        complete: true, recent: row.recent, tokens: row.scores[board],
+        ...(count > 1 && { daily: details(row, byDate).slice(-count) })
+      }));
+    }
+
+    for (const [index, hours] of RANKING_HOURS.entries()) {
+      const count = hours / 24;
+      boards[hours] = { hours, cutoffAt, nextAt, windowStart: cutoffAt - hours * HOUR_MS,
+        rows: usageRows(index, count, false) };
+      calendarBoards[hours] = { hours, cutoffAt: at, nextAt: at + intervals.publishMs,
+        windowStart: midnight - (count - 1) * dayMs, rows: usageRows(index + RANKING_HOURS.length, count, true) };
+    }
+    boards[0] = { rows: leaders[speedIndex].map((row, i) => ({
+      rank: i + 1, username: row.username, ...row.speed, lastUploadAt: row.latest.receivedAt
+    })) };
+    snapshot = { version: ++version, serverTime: at, refreshAt: at + intervals.readMs, cutoffAt, nextAt, boards,
+      calendar: { cutoffAt: at, nextAt: at + intervals.publishMs, boards: calendarBoards } };
+    return snapshot;
+  }
+  return { publish, setBan, snapshot: () => snapshot };
+}
+
+export function createPacketReceiver(buffer, maxTokens, reply, flushMs = 1000) {
   let pending = [], timer;
 
   function flush() {
@@ -173,23 +345,28 @@ export function createPacketReceiver(buffer, maxTokens, reply) {
       reply([{ id, accepted: false }]);
       return;
     }
-    pending.push({ id, entry: { account, packet, receivedAt: at } });
+    pending.push({ id, entry: { account, packet, receivedAt: at, sequence: id } });
     if (pending.length === 32) flush();
-    else if (pending.length === 1) timer = setTimeout(flush, 1000);
+    else if (pending.length === 1) timer = setTimeout(flush, flushMs);
   };
 }
 
 if (parentPort && workerData?.mode === 'validate') {
   const receive = createPacketReceiver(openPacketBuffer(workerData.buffer),
-    workerData.maxTokens, results => parentPort.postMessage(results));
+    workerData.maxTokens, results => parentPort.postMessage(results), workerData.flushMs);
   parentPort.on('message', receive);
 }
 
 if (parentPort && workerData?.mode === 'rank') {
   const buffer = openPacketBuffer(workerData.buffer);
-  const rankings = createTokensRankings();
-  parentPort.on('message', ({ at, initial }) => {
-    const entries = initial ? [] : buffer.take();
-    parentPort.postMessage(rankings.publish(entries, at, workerData.intervals));
+  const rankings = createTokensRankings(workerData.bans);
+  const encoder = new TextEncoder();
+  parentPort.on('message', ({ at, takePackets, changes }) => {
+    for (const [accountId, { banned, sequence, evict }] of changes) rankings.setBan(accountId, banned, sequence, evict);
+    const entries = takePackets ? buffer.take() : [];
+    const snapshot = rankings.publish(entries, at, workerData.intervals, publicLimit);
+    const hourly = encoder.encode(JSON.stringify(leaderboardSnapshotForMode(snapshot, 'hourly')));
+    const calendar = encoder.encode(JSON.stringify(leaderboardSnapshotForMode(snapshot, 'calendar')));
+    parentPort.postMessage({ hourly, calendar }, [hourly.buffer, calendar.buffer]);
   });
 }

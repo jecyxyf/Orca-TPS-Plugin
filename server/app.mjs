@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { isIP, SocketAddress } from 'node:net';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
 import { TOKENS_LEADERBOARD } from '../src/leaderboard_stats.mjs';
+import { leaderboardSnapshotForMode } from './tokens-manager-rankings.mjs';
 
 const GITHUB = 'https://github.com';
 const GITHUB_API = 'https://api.github.com';
@@ -304,6 +305,7 @@ export function createLeaderboardServer({
     const target = Number(form.get('account')), action = form.get('ban');
     const changed = Number.isSafeInteger(target) && target > 0 && ['0', '1'].includes(action) &&
       store.setBan(account.id, target, action === '1', time, form.get('reason') ?? '');
+    if (changed) tokensJobs?.setBan?.(target, action === '1');
     redirect(res, '/admin?' + new URLSearchParams({ q: form.get('q')?.slice(0, 39) ?? '', feedback: changed ? 'updated' : 'rejected' }));
   }
 
@@ -357,8 +359,15 @@ export function createLeaderboardServer({
     }
     if (tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/snapshot') {
       res.setHeader('Cache-Control', 'no-store');
-      const snapshot = tokensJobs.snapshot();
-      return snapshot ? send(res, 200, snapshot) : send(res, 503, { code: 'unavailable' });
+      const mode = url.searchParams.get('mode') === 'calendar' ? 'calendar' : 'hourly';
+      const snapshot = tokensJobs.snapshot(mode);
+      if (!snapshot) return send(res, 503, { code: 'unavailable' });
+      if (snapshot instanceof Uint8Array) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(snapshot);
+      }
+      const view = leaderboardSnapshotForMode(snapshot, mode);
+      return view ? send(res, 200, view) : send(res, 404, { code: 'server_update_required' });
     }
     const accountRoute = tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/account';
     const packetRoute = tokensJobs && method === 'POST' && route === TOKENS_LEADERBOARD + '/packets';

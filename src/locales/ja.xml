@@ -39,11 +39,6 @@
   <message id="usage-update-mode">統計の更新方法</message>
   <message id="usage-update-daily">日付で更新</message>
   <message id="usage-update-hourly">毎時更新</message>
-  <message id="usage-update-help">更新方法について</message>
-  <message id="usage-update-hint-daily">日付で更新。現地時刻の午前0時に今日の統計をリセットし、ゼロから集計します。</message>
-  <message id="usage-update-hint-hourly">現地時刻の毎時0分に、選択した期間の統計を更新します。</message>
-  <message id="usage-update-hint-ranking">使用量の変化によって順位が変わることがあります。</message>
-  <message id="usage-update-hint-recommended">毎時更新をおすすめします。</message>
   <message id="total-usage">合計使用量（キャッシュの読み取りと書き込みを含む）</message>
   <message id="request-count">リクエスト数</message>
   <message id="max-speed">最高速度</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">理由を取得できません</message>
   <message id="data-upload">データアップロード</message>
   <message id="upload-now">今すぐアップロード</message>
-  <message id="next-upload-countdown">次回アップロード</message>
   <message id="last-upload-time">最終アップロード</message>
-  <message id="uploading-countdown">アップロード中…</message>
-  <message id="upload-waiting">アップロード待ち…</message>
-  <message id="next-sync-countdown">次回同期</message>
+  <message id="uploading">アップロード中…</message>
   <message id="sync-in-progress">同期中…</message>
-  <message id="sync-waiting">同期待ち…</message>
   <message id="sync-now">今すぐ同期</message>
   <message id="sync-queued">次回のアップロード待ち</message>
   <message id="last-twenty-four-hours">過去 24 時間</message>

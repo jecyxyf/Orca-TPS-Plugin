@@ -39,11 +39,6 @@
   <message id="usage-update-mode">اعداد و شمار اپ ڈیٹ کرنے کا طریقہ</message>
   <message id="usage-update-daily">تاریخ کے مطابق</message>
   <message id="usage-update-hourly">ہر گھنٹے</message>
-  <message id="usage-update-help">اپ ڈیٹ کے طریقے کی معلومات</message>
-  <message id="usage-update-hint-daily">تاریخ کے مطابق۔ مقامی وقت کے مطابق آدھی رات کو آج کے اعداد و شمار صفر سے دوبارہ شمار ہوتے ہیں۔</message>
-  <message id="usage-update-hint-hourly">مقامی وقت کے مطابق ہر گھنٹے کے آغاز پر منتخب مدت کے اعداد و شمار دوبارہ شمار ہوتے ہیں۔</message>
-  <message id="usage-update-hint-ranking">استعمال میں تبدیلی درجہ بندی کو متاثر کر سکتی ہے۔</message>
-  <message id="usage-update-hint-recommended">ہم ہر گھنٹے اپ ڈیٹ کرنے کی تجویز دیتے ہیں۔</message>
   <message id="total-usage">کل استعمال (کیش پڑھنا اور لکھنا شامل ہے)</message>
   <message id="request-count">درخواستیں</message>
   <message id="max-speed">زیادہ سے زیادہ رفتار</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">وجہ دستیاب نہیں</message>
   <message id="data-upload">ڈیٹا اپ لوڈ</message>
   <message id="upload-now">ابھی اپ لوڈ کریں</message>
-  <message id="next-upload-countdown">اگلا اپ لوڈ</message>
   <message id="last-upload-time">آخری اپ لوڈ</message>
-  <message id="uploading-countdown">اپ لوڈ جاری ہے…</message>
-  <message id="upload-waiting">اپ لوڈ کا انتظار…</message>
-  <message id="next-sync-countdown">اگلی ہم آہنگی</message>
+  <message id="uploading">اپ لوڈ جاری ہے…</message>
   <message id="sync-in-progress">ہم آہنگی جاری ہے…</message>
-  <message id="sync-waiting">ہم آہنگی کا انتظار…</message>
   <message id="sync-now">ابھی ہم آہنگ کریں</message>
   <message id="sync-queued">اگلے اپ لوڈ کی قطار میں</message>
   <message id="last-twenty-four-hours">گزشتہ 24 گھنٹے</message>

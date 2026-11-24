@@ -39,11 +39,6 @@
   <message id="usage-update-mode">Personal stats update method</message>
   <message id="usage-update-daily">Update by date</message>
   <message id="usage-update-hourly">Update hourly</message>
-  <message id="usage-update-help">About update methods</message>
-  <message id="usage-update-hint-daily">Update by date. At local midnight, today’s stats reset and start counting again.</message>
-  <message id="usage-update-hint-hourly">At the start of each local hour, stats are recalculated for the selected period.</message>
-  <message id="usage-update-hint-ranking">Usage changes can affect leaderboard rankings.</message>
-  <message id="usage-update-hint-recommended">We recommend hourly updates.</message>
   <message id="total-usage">Total usage (including cache reads and writes)</message>
   <message id="request-count">Requests</message>
   <message id="max-speed">Max speed</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">Reason unavailable</message>
   <message id="data-upload">Data upload</message>
   <message id="upload-now">Upload now</message>
-  <message id="next-upload-countdown">Next upload</message>
   <message id="last-upload-time">Last upload</message>
-  <message id="uploading-countdown">Uploading…</message>
-  <message id="upload-waiting">Waiting to upload…</message>
-  <message id="next-sync-countdown">Next sync</message>
+  <message id="uploading">Uploading…</message>
   <message id="sync-in-progress">Syncing…</message>
-  <message id="sync-waiting">Waiting to sync…</message>
   <message id="sync-now">Sync now</message>
   <message id="sync-queued">Queued for the next upload</message>
   <message id="last-twenty-four-hours">Last 24 h</message>

@@ -11,11 +11,16 @@ const filename = resolve(env.LEADERBOARD_STATE_FILE ?? 'server/.data/leaderboard
 const store = openLeaderboardStore(filename);
 const maxTokens = Number(env.LEADERBOARD_MAX_TOKENS ?? Number.MAX_SAFE_INTEGER);
 const log = message => process.stderr.write(message + '\n');
-const tokensJobs = createTokensManagerJobs({ maxTokens, now: Date.now, log, intervals: {
-  scanMs: Number(env.LEADERBOARD_TOKENS_SCAN_MS), personalMs: Number(env.LEADERBOARD_TOKENS_PERSONAL_MS),
-  uploadMs: Number(env.LEADERBOARD_TOKENS_UPLOAD_MS),
-  readMs: Number(env.LEADERBOARD_TOKENS_READ_MS)
-} });
+const tokensJobs = createTokensManagerJobs({
+  maxTokens, now: Date.now, log,
+  receiverCount: env.LEADERBOARD_TOKENS_RECEIVERS === undefined ? undefined : Number(env.LEADERBOARD_TOKENS_RECEIVERS),
+  flushMs: env.LEADERBOARD_TOKENS_FLUSH_MS === undefined ? undefined : Number(env.LEADERBOARD_TOKENS_FLUSH_MS),
+  intervals: {
+    scanMs: Number(env.LEADERBOARD_TOKENS_SCAN_MS), personalMs: Number(env.LEADERBOARD_TOKENS_PERSONAL_MS),
+    uploadMs: Number(env.LEADERBOARD_TOKENS_UPLOAD_MS), publishMs: Number(env.LEADERBOARD_TOKENS_PUBLISH_MS),
+    readMs: Number(env.LEADERBOARD_TOKENS_READ_MS)
+  }
+});
 const server = createLeaderboardServer({
   store, tokensJobs, maxTokens, log,
   baseUrl: env.LEADERBOARD_BASE_URL ?? `http://127.0.0.1:${port}`,

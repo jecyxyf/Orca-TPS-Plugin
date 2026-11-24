@@ -62,9 +62,11 @@ export function startLeaderboard(orca, {
   }
   const lifetime = new AbortController();
   const avatars = createAvatarCache({ fetcher: avatarFetcher, now: () => now().getTime(), signal: lifetime.signal });
-  const windows = createWindowViews({ storage: orca.storage, origin: base.origin, request, now: () => now().getTime(),
+  const viewOptions = { storage: orca.storage, origin: base.origin, request, now: () => now().getTime(),
     panels: localDb, manager: Boolean(manager),
-    scope: () => `${base.origin}/${manager ? 'tokens-manager/' : ''}${token ? accountId ?? sessionKey(token) : 'guest'}` });
+    scope: () => `${base.origin}/${manager ? 'tokens-manager/' : ''}${token ? accountId ?? sessionKey(token) : 'guest'}` };
+  const windows = createWindowViews(viewOptions);
+  const calendarWindows = createWindowViews({ ...viewOptions, mode: 'calendar' });
   const host = orca.host;
   let token = '', login, submitting, uploadingKind = null, scheduling = false, nextAttempt = null;
   let credentialWrite = Promise.resolve();
@@ -282,6 +284,7 @@ export function startLeaderboard(orca, {
         rankingAccess.abort();
         rankingAccess = undefined;
         windows.clear();
+        calendarWindows.clear();
       }
       try { orca.panels.post?.(METHOD + '.ranking-preference', { enabled }); } catch {}
     }
@@ -772,11 +775,12 @@ export function startLeaderboard(orca, {
       const signal = rankingAccess?.signal;
       if (!signal) return {};
       const hours = payload.days === 0 ? 0 : days * 24;
+      const view = payload.mode === 'calendar' ? calendarWindows : windows;
       if (payload.action === 'window-cache') {
-        const cached = await windows.load(hours, signal);
+        const cached = await view.load(hours, signal);
         return { ranking: cached ? { boards: cached.boards, updatedAt: cached.updatedAt } : null };
       }
-      const result = await windows.fetch(hours, payload.force === true, signal);
+      const result = await view.fetch(hours, payload.force === true, signal);
       if (signal.aborted) return {};
       const { updatedAt, boards, code, cutoffAt, nextAt, refreshAt } = result;
       return boards ? { boards, updatedAt, ...(manager ? { refreshAt } : {}), ...(nextAt - cutoffAt === HOUR_MS ? { cutoffAt, nextAt } : {}) }
@@ -796,7 +800,7 @@ export function startLeaderboard(orca, {
       case 'avatar': {
         const key = githubLoginKey(payload.username);
         if (key === null) return { image: null };
-        const known = githubLoginKey(username) === key || windows.known(key) || [...rankingCaches.values()].some(cache =>
+        const known = githubLoginKey(username) === key || windows.known(key) || calendarWindows.known(key) || [...rankingCaches.values()].some(cache =>
           cache.value?.rows.some(row => githubLoginKey(row.username) === key));
         return { image: known ? await avatars.get(key) : null };
       }
@@ -862,10 +866,12 @@ export function startLeaderboard(orca, {
   }
   const timer = setInterval(tick, 1000);
   timer.unref?.();
+  const stopUploadState = manager?.onUploadState?.(publishSession);
   tick();
   return () => {
     lifetime.abort();
     rankingAccess?.abort();
+    stopUploadState?.();
     clearInterval(timer);
     clearTimeout(uploadWake);
     registration.dispose?.();

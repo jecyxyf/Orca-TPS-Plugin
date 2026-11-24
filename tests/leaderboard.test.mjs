@@ -9,6 +9,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createLeaderboardServer } from '../server/app.mjs';
 import { createTokensRankings } from '../server/tokens-manager-rankings.mjs';
+import { createTokensManagerJobs } from '../server/tokens-manager-jobs.mjs';
 import { TOKENS_DEFAULT_INTERVALS } from '../src/leaderboard_stats.mjs';
 import { openLeaderboardStore } from '../server/store.mjs';
 import { openLocalUsageDb } from '../src/local-usage-db.mjs';
@@ -28,11 +29,13 @@ const START = leaderboardDayStart(TODAY);
 const SESSION_SECRET = 'leaderboard-session';
 const savedToken = secrets => JSON.parse(secrets.get(SESSION_SECRET) ?? '{}').token;
 
-async function fixture(t, names = ['alice', 'bob']) {
+async function fixture(t, names = ['alice', 'bob'], { workers = false } = {}) {
   const directory = await mkdtemp(path.join(tmpdir(), 'tps-board-test-'));
   const store = openLeaderboardStore(path.join(directory, 'leaderboard.bin'));
   const rankings = createTokensRankings();
   let clock = START + 3600_000, count = 0;
+  const jobs = workers && createTokensManagerJobs({ maxTokens: 1_000_000, now: () => clock, intervals: { publishMs: 1000 },
+    flushMs: 100, log: message => t.diagnostic(message) });
   const devices = new Map();
   const users = { alice: 1, bob: 2, admin: 3, visitor: 4 };
   async function mockGitHub(url, options) {
@@ -57,12 +60,13 @@ async function fixture(t, names = ['alice', 'bob']) {
   }
   const server = createLeaderboardServer({
     store, baseUrl: ORIGIN, clientId: 'example-client', clientSecret: 'example-secret',
-    tokensJobs: { intervals: TOKENS_DEFAULT_INTERVALS, snapshot: () => rankings.publish([], clock, TOKENS_DEFAULT_INTERVALS) },
+    tokensJobs: jobs || { intervals: TOKENS_DEFAULT_INTERVALS, snapshot: () => rankings.publish([], clock, TOKENS_DEFAULT_INTERVALS) },
     adminEmail: 'staff@example.test', maxTokens: 1_000_000, fetcher: mockGitHub, now: () => clock,
     log: message => t.diagnostic(message)
   });
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
+    if (jobs) await jobs.close();
     await rm(directory, { force: true, recursive: true });
   });
   server.listen(0, '127.0.0.1');
@@ -125,7 +129,7 @@ const managerClient = () => ({
 });
 
 test('administrator binding, bans and logout use the current accounts and upload routes', async t => {
-  const api = await fixture(t);
+  const api = await fixture(t, ['alice'], { workers: true });
   const token = await api.login();
   assert.equal((await api.websiteLogin('visitor')).redirect, '/admin?feedback=forbidden');
   const { cookie, redirect } = await api.websiteLogin('admin');
@@ -136,9 +140,24 @@ test('administrator binding, bans and logout use the current accounts and upload
   assert.match(page, /alice/);
   assert.match(page, /action="\/admin\/ban"/);
   assert.doesNotMatch(page, /action="\/admin\/clear"/);
+  const headers = { Authorization: 'Bearer ' + token };
+  const route = '/api/tokens-manager';
+  const packet = { accountId: 1, deviceGuid: randomUUID(), publishedAt: api.clock(), timeZone: 'Asia/Shanghai',
+    hours: [[START, 100]], daily: [[TODAY, 100]], samples: [] };
+  assert.equal((await api.call(route + '/packets', { method: 'POST', headers, body: JSON.stringify(packet) })).status, 202);
+  async function waitForRows(total) {
+    for (let attempts = 0; attempts < 40; attempts++) {
+      const response = await api.call(route + '/snapshot');
+      if (response.ok && (await response.json()).boards[24].rows.length === total) return;
+      await delay(100);
+    }
+    assert.fail('expected account to appear or disappear from the published results');
+  }
+  await waitForRows(1);
   assert.equal((await api.form('/admin/ban', cookie, { account: 1, ban: 1, reason: 'test' }, 'https://example.test')).status, 403);
   const ban = await api.form('/admin/ban', cookie, { account: 1, ban: 1, reason: '<reason>' });
   assert.match(ban.headers.get('location'), /feedback=updated/);
+  await waitForRows(0);
   assert.deepEqual(await (await api.get(token)).json(), { accountId: 1, username: 'alice', banned: true });
   assert.match(await (await api.call('/admin', { headers: { cookie } })).text(), /&lt;reason&gt;/);
   const rejected = await api.call('/api/tokens-manager/packets', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: '{}' });
@@ -146,6 +165,9 @@ test('administrator binding, bans and logout use the current accounts and upload
   assert.equal((await api.call('/api/leaderboard/snapshot')).status, 404);
   assert.match((await api.form('/admin/ban', cookie, { account: 1, ban: 0 })).headers.get('location'), /feedback=updated/);
   assert.equal((await (await api.get(token)).json()).banned, false);
+  assert.equal((await api.call(route + '/snapshot?mode=calendar').then(response => response.json())).boards[24].rows.length, 0);
+  assert.equal((await api.call(route + '/packets', { method: 'POST', headers, body: JSON.stringify(packet) })).status, 202);
+  await waitForRows(1);
   assert.equal((await api.form('/admin/logout', cookie, {})).status, 303);
   assert.match(await (await api.call('/admin', { headers: { cookie } })).text(), /用 GitHub 登录/);
 });
@@ -310,6 +332,60 @@ test('viewer receives every rolling window and the speed board in one download a
   assert.equal(second.cutoffAt, first.cutoffAt);
   assert.ok(second.updatedAt > first.updatedAt);
   assert.deepEqual(requests, Array(3).fill('/api/tokens-manager/snapshot'));
+});
+
+test('calendar viewer requests its own snapshot and keeps the two modes in separate caches', async t => {
+  const { call, clock } = await fixture(t);
+  const saved = new Map();
+  const storage = { get: async key => saved.get(key), set: async (key, value) => saved.set(key, value) };
+  const options = { storage, manager: true, origin: ORIGIN, now: clock, request: async route => (await call(route)).json() };
+  const signal = new AbortController().signal;
+  const hourly = await createWindowViews(options).fetch(24, false, signal);
+  const dateOptions = { ...options, mode: 'calendar' };
+  const calendar = await createWindowViews(dateOptions).fetch(24, false, signal);
+  assert.equal(hourly.boards[24].windowStart, clock() - 24 * HOUR_MS);
+  assert.equal(calendar.boards[24].windowStart, START);
+  assert.equal(calendar.boards[720].windowStart, START - 29 * 24 * HOUR_MS);
+  assert.deepEqual(await createWindowViews(options).load(24, signal), hourly);
+  assert.deepEqual(await createWindowViews(dateOptions).load(24, signal), calendar);
+  assert.deepEqual(await createWindowViews({ ...dateOptions, request: async () => (await call('/api/tokens-manager/snapshot')).json() })
+    .fetch(24, true, signal), { code: 'server_update_required' });
+});
+
+test('viewer replaces invalid recent samples with zero in downloaded and cached rankings', async () => {
+  const at = START + HOUR_MS;
+  const snapshot = createTokensRankings().publish([], at, TOKENS_DEFAULT_INTERVALS);
+  const row = { tokens: 5000, complete: true, submittedAt: at, lastUploadAt: at };
+  snapshot.boards[24].rows = [
+    { ...row, rank: 1, username: 'alice', recent: { topModel: 'model', points: [
+      { submittedAt: at - 1000, deltaTokens: -5, avgTps: 12 },
+      { submittedAt: at - 3000, deltaTokens: 200, avgTps: 30 },
+      { submittedAt: at - 2000, deltaTokens: 50 },
+      { submittedAt: at - 4000, avgTps: -5 },
+      { deltaTokens: 200, avgTps: 30 }
+    ] } },
+    { ...row, rank: 2, username: 'bob' }
+  ];
+  const storage = {
+    get: async () => gzipSync(JSON.stringify({ ...snapshot, origin: ORIGIN, updatedAt: at })).toString('base64'),
+    set: async () => {}
+  };
+  const launch = () => createWindowViews({ storage, manager: true, origin: ORIGIN, now: () => at,
+    request: async () => snapshot });
+  const signal = new AbortController().signal;
+  const downloaded = await launch().fetch(24, true, signal);
+  const cached = await launch().load(24, signal);
+  const expected = [
+    { ...row, rank: 1, username: 'alice', recent: { topModel: 'model', topCli: null, points: [
+      { submittedAt: at - 4000, deltaTokens: 0, avgTps: 0 },
+      { submittedAt: at - 3000, deltaTokens: 200, avgTps: 30 },
+      { submittedAt: at - 2000, deltaTokens: 50, avgTps: 0 },
+      { submittedAt: at - 1000, deltaTokens: 0, avgTps: 12 }
+    ] } },
+    { ...row, rank: 2, username: 'bob', recent: { topModel: null, topCli: null, points: [] } }
+  ];
+  assert.deepEqual(downloaded.rows, expected);
+  assert.deepEqual(cached.rows, expected);
 });
 
 test('the client freezes its four statistics across restarts and credits only the confirmed batch', async () => {
@@ -649,6 +725,45 @@ test('the plugin shows the ranking while local usage is still loading', { timeou
   const local = { day: TODAY, ready: true, tokens: 123 };
   finishUsage(local);
   assert.deepEqual(await personal, { local });
+});
+
+test('manager transfer changes publish the upload state immediately', async t => {
+  const api = await fixture(t);
+  let handle, uploadListener, uploadStatus;
+  const sessions = [];
+  const stop = startLeaderboard({
+    storage: { get: async () => undefined, set: async () => {} },
+    panels: {
+      handle: (_, callback) => { handle = callback; return { dispose() {} }; },
+      post(name, state) { if (name === 'tps.leaderboard.session') sessions.push(state); }
+    }
+  }, {
+    endpoint: api.endpoint,
+    now: () => new Date(api.clock()),
+    readUsage: async () => undefined,
+    manager: {
+      ...managerClient(),
+      uploadStatus: () => uploadStatus,
+      onUploadState(listener) {
+        uploadListener = listener;
+        return () => { uploadListener = undefined; };
+      }
+    }
+  });
+  t.after(stop);
+  const login = await handle({ action: 'login' });
+  await api.authorizePlugin(login.loginUrl, 'alice');
+  assert.equal((await handle({ action: 'poll' })).code, 'signed_in');
+
+  uploadStatus = { pending: true };
+  uploadListener();
+  assert.equal(sessions.at(-1).uploading, true);
+  uploadStatus = { pending: false, code: 'unavailable', at: api.clock() };
+  uploadListener();
+  assert.equal(sessions.at(-1).uploading, false);
+  assert.equal(sessions.at(-1).lastUpload.code, 'unavailable');
+  await stop();
+  assert.equal(uploadListener, undefined);
 });
 
 test('login retries a lost authorization response and logout does not wait for the network', { timeout: 8000 }, async t => {

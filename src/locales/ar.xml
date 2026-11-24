@@ -39,11 +39,6 @@
   <message id="usage-update-mode">طريقة تحديث الإحصاءات</message>
   <message id="usage-update-daily">حسب التاريخ</message>
   <message id="usage-update-hourly">كل ساعة</message>
-  <message id="usage-update-help">حول طريقة التحديث</message>
-  <message id="usage-update-hint-daily">حسب التاريخ. تبدأ إحصاءات اليوم من الصفر عند منتصف الليل بالتوقيت المحلي.</message>
-  <message id="usage-update-hint-hourly">كل ساعة. تُحدّث إحصاءات الفترة المحددة عند بداية كل ساعة بالتوقيت المحلي.</message>
-  <message id="usage-update-hint-ranking">قد يؤثر تغيّر الاستخدام في ترتيب لوحة الصدارة.</message>
-  <message id="usage-update-hint-recommended">نوصي بالتحديث كل ساعة.</message>
   <message id="total-usage">إجمالي الاستخدام (يشمل القراءة من ذاكرة التخزين المؤقت والكتابة إليها)</message>
   <message id="request-count">الطلبات</message>
   <message id="max-speed">السرعة القصوى</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">السبب غير متاح</message>
   <message id="data-upload">رفع البيانات</message>
   <message id="upload-now">الرفع الآن</message>
-  <message id="next-upload-countdown">الرفع التالي</message>
   <message id="last-upload-time">آخر رفع</message>
-  <message id="uploading-countdown">جارٍ الرفع…</message>
-  <message id="upload-waiting">في انتظار الرفع…</message>
-  <message id="next-sync-countdown">المزامنة التالية</message>
+  <message id="uploading">جارٍ الرفع…</message>
   <message id="sync-in-progress">جارٍ المزامنة…</message>
-  <message id="sync-waiting">في انتظار المزامنة…</message>
   <message id="sync-now">المزامنة الآن</message>
   <message id="sync-queued">في قائمة انتظار الرفع التالي</message>
   <message id="last-twenty-four-hours">آخر 24 ساعة</message>

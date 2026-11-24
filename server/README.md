@@ -40,11 +40,22 @@
 | `GET /api/tokens-manager/config` | 公开读取扫描、个人统计、上传、榜单发布和读取间隔 |
 | `GET /api/tokens-manager/account` | 用 GitHub 登录凭证获取绑定的账号 ID |
 | `POST /api/tokens-manager/packets` | 上传一台来源设备的小时、每日用量和速度样本 |
-| `GET /api/tokens-manager/snapshot` | 公开读取同一版本的 24 小时、7 天、30 天和速度榜 |
+| `GET /api/tokens-manager/snapshot` | 公开读取近 24、168、720 个完整小时的用量榜和速度榜 |
+| `GET /api/tokens-manager/snapshot?mode=calendar` | 公开读取按北京时间计算的今日、近 7 天、近 30 天用量榜和同一版本的速度榜 |
 
-两个接收线程并行校验上报。每个线程从首包计时，满 1 秒或攒到 32 个包就批量写入同一块共享内存，写入后回执。算榜线程每 5 秒切换缓冲区，在放开写锁后用已写入的包计算四张榜。同一设备的代报只算一次。本轮没有写入的设备退出本轮，下一轮写入后重新参与。服务重启后由管家重新上报。
+默认 8 个接收线程并行校验上报。每个线程等到 100 毫秒或攒到 32 个包就批量写入共享内存，写入后回执。一个算榜线程每 3 秒切换缓冲区，只更新收到有效上报的账号。上一轮还在算时，最多保留一个待算任务。
 
-榜单发布间隔固定为 5000 毫秒。扫描、个人统计、上报和读取间隔默认也是 5000 毫秒，可分别通过 `LEADERBOARD_TOKENS_SCAN_MS`、`LEADERBOARD_TOKENS_PERSONAL_MS`、`LEADERBOARD_TOKENS_UPLOAD_MS` 和 `LEADERBOARD_TOKENS_READ_MS` 设置。上报间隔支持 1000–7500 毫秒。
+六张用量榜各留前 1 万名，速度榜留前 100 名。每轮裁榜后，掉出全部榜单的账号会从内存移除。漏报沿用最近一次成绩，曲线按实际日期和时间展示，缺失点补零。每账号最多合计最近成功上报的 4 台设备，同一设备的代报只算一次。算榜后只保留所需的用量汇总、显示字段和上榜速度记录。插件接口每榜返回前 100 名，按小时和按天的响应各生成一次，供该轮所有读取请求复用。服务重启后由管家重新上报。
+
+| 环境变量 | 默认值 | 用途 |
+| --- | ---: | --- |
+| `LEADERBOARD_TOKENS_RECEIVERS` | 8 | 并行接收线程数 |
+| `LEADERBOARD_TOKENS_FLUSH_MS` | 100 | 单个线程的批次最长等待，单位为毫秒 |
+| `LEADERBOARD_TOKENS_PUBLISH_MS` | 3000 | 榜单发布间隔，单位为毫秒 |
+| `LEADERBOARD_TOKENS_SCAN_MS` | 5000 | 管家扫描间隔，单位为毫秒 |
+| `LEADERBOARD_TOKENS_PERSONAL_MS` | 5000 | 个人统计更新间隔，单位为毫秒 |
+| `LEADERBOARD_TOKENS_UPLOAD_MS` | 3000 | 管家上报间隔，支持 1000–7500 毫秒 |
+| `LEADERBOARD_TOKENS_READ_MS` | 3000 | 榜单读取间隔，单位为毫秒 |
 
 ## 从 SQLite 迁移
 
@@ -120,6 +131,11 @@ WantedBy=multi-user.target
 LEADERBOARD_BASE_URL=https://test.itps8.com
 LEADERBOARD_PORT=8788
 LEADERBOARD_STATE_FILE=/var/lib/orca-tps-test/leaderboard.bin
+LEADERBOARD_TOKENS_RECEIVERS=8
+LEADERBOARD_TOKENS_FLUSH_MS=100
+LEADERBOARD_TOKENS_PUBLISH_MS=3000
+LEADERBOARD_TOKENS_UPLOAD_MS=3000
+LEADERBOARD_TOKENS_READ_MS=3000
 ```
 
 将 `test.itps8.com` 的 A 记录指向硅谷服务器。在主机上的 Caddy 配置中加入测试站点，共用公网 80 和 443。

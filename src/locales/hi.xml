@@ -39,11 +39,6 @@
   <message id="usage-update-mode">आँकड़े अपडेट करने का तरीका</message>
   <message id="usage-update-daily">तारीख के अनुसार</message>
   <message id="usage-update-hourly">हर घंटे</message>
-  <message id="usage-update-help">अपडेट के तरीके की जानकारी</message>
-  <message id="usage-update-hint-daily">तारीख के अनुसार। स्थानीय समय में आधी रात को आज के आँकड़े फिर से शून्य से शुरू होते हैं।</message>
-  <message id="usage-update-hint-hourly">स्थानीय समय में हर घंटे की शुरुआत पर चुनी गई अवधि के आँकड़े फिर से निकाले जाते हैं।</message>
-  <message id="usage-update-hint-ranking">उपयोग में बदलाव से लीडरबोर्ड की रैंकिंग बदल सकती है।</message>
-  <message id="usage-update-hint-recommended">हम हर घंटे अपडेट करने की सलाह देते हैं।</message>
   <message id="total-usage">कुल उपयोग (कैश पढ़ना और लिखना शामिल)</message>
   <message id="request-count">अनुरोध</message>
   <message id="max-speed">अधिकतम गति</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">कारण उपलब्ध नहीं है</message>
   <message id="data-upload">डेटा अपलोड</message>
   <message id="upload-now">अभी अपलोड करें</message>
-  <message id="next-upload-countdown">अगला अपलोड</message>
   <message id="last-upload-time">पिछला अपलोड</message>
-  <message id="uploading-countdown">अपलोड हो रहा है…</message>
-  <message id="upload-waiting">अपलोड का इंतज़ार…</message>
-  <message id="next-sync-countdown">अगला सिंक</message>
+  <message id="uploading">अपलोड हो रहा है…</message>
   <message id="sync-in-progress">सिंक हो रहा है…</message>
-  <message id="sync-waiting">सिंक का इंतज़ार…</message>
   <message id="sync-now">अभी सिंक करें</message>
   <message id="sync-queued">अगले अपलोड की कतार में</message>
   <message id="last-twenty-four-hours">पिछले 24 घंटे</message>

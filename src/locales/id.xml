@@ -39,11 +39,6 @@
   <message id="usage-update-mode">Cara memperbarui statistik</message>
   <message id="usage-update-daily">Menurut tanggal</message>
   <message id="usage-update-hourly">Setiap jam</message>
-  <message id="usage-update-help">Tentang cara pembaruan</message>
-  <message id="usage-update-hint-daily">Menurut tanggal. Statistik hari ini dimulai lagi dari nol pada tengah malam waktu setempat.</message>
-  <message id="usage-update-hint-hourly">Pada awal setiap jam setempat, statistik untuk periode yang dipilih dihitung ulang.</message>
-  <message id="usage-update-hint-ranking">Perubahan penggunaan dapat memengaruhi peringkat.</message>
-  <message id="usage-update-hint-recommended">Kami menyarankan pembaruan setiap jam.</message>
   <message id="total-usage">Total penggunaan (termasuk baca dan tulis cache)</message>
   <message id="request-count">Permintaan</message>
   <message id="max-speed">Kecepatan maksimum</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">Penyebab tidak tersedia</message>
   <message id="data-upload">Unggah data</message>
   <message id="upload-now">Unggah sekarang</message>
-  <message id="next-upload-countdown">Unggahan berikutnya</message>
   <message id="last-upload-time">Unggahan terakhir</message>
-  <message id="uploading-countdown">Mengunggah…</message>
-  <message id="upload-waiting">Menunggu unggahan…</message>
-  <message id="next-sync-countdown">Sinkronisasi berikutnya</message>
+  <message id="uploading">Mengunggah…</message>
   <message id="sync-in-progress">Menyinkronkan…</message>
-  <message id="sync-waiting">Menunggu sinkronisasi…</message>
   <message id="sync-now">Sinkronkan sekarang</message>
   <message id="sync-queued">Dalam antrean unggahan berikutnya</message>
   <message id="last-twenty-four-hours">24 jam terakhir</message>

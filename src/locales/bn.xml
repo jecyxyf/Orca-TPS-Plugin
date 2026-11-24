@@ -39,11 +39,6 @@
   <message id="usage-update-mode">পরিসংখ্যান হালনাগাদের পদ্ধতি</message>
   <message id="usage-update-daily">তারিখ অনুযায়ী</message>
   <message id="usage-update-hourly">প্রতি ঘণ্টায়</message>
-  <message id="usage-update-help">হালনাগাদের পদ্ধতি সম্পর্কে</message>
-  <message id="usage-update-hint-daily">তারিখ অনুযায়ী। স্থানীয় মধ্যরাতে আজকের পরিসংখ্যান আবার শূন্য থেকে শুরু হয়।</message>
-  <message id="usage-update-hint-hourly">স্থানীয় সময়ে প্রতি ঘণ্টার শুরুতে নির্বাচিত সময়সীমার হিসাব হালনাগাদ হয়।</message>
-  <message id="usage-update-hint-ranking">ব্যবহার বদলালে লিডারবোর্ডে অবস্থান বদলাতে পারে।</message>
-  <message id="usage-update-hint-recommended">প্রতি ঘণ্টায় হালনাগাদ বেছে নেওয়ার পরামর্শ দিই।</message>
   <message id="total-usage">মোট ব্যবহার (ক্যাশ পড়া ও লেখা সহ)</message>
   <message id="request-count">অনুরোধ</message>
   <message id="max-speed">সর্বোচ্চ গতি</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">কারণ পাওয়া যায়নি</message>
   <message id="data-upload">ডেটা আপলোড</message>
   <message id="upload-now">এখন আপলোড করুন</message>
-  <message id="next-upload-countdown">পরবর্তী আপলোড</message>
   <message id="last-upload-time">শেষ আপলোড</message>
-  <message id="uploading-countdown">আপলোড হচ্ছে…</message>
-  <message id="upload-waiting">আপলোডের অপেক্ষায়…</message>
-  <message id="next-sync-countdown">পরবর্তী সিঙ্ক</message>
+  <message id="uploading">আপলোড হচ্ছে…</message>
   <message id="sync-in-progress">সিঙ্ক হচ্ছে…</message>
-  <message id="sync-waiting">সিঙ্কের অপেক্ষায়…</message>
   <message id="sync-now">এখন সিঙ্ক করুন</message>
   <message id="sync-queued">পরবর্তী আপলোডের জন্য অপেক্ষমাণ</message>
   <message id="last-twenty-four-hours">গত ২৪ ঘণ্টা</message>

@@ -39,11 +39,6 @@
   <message id="usage-update-mode">Art der Aktualisierung</message>
   <message id="usage-update-daily">Nach Datum</message>
   <message id="usage-update-hourly">Stündlich</message>
-  <message id="usage-update-help">Info zur Aktualisierung</message>
-  <message id="usage-update-hint-daily">Nach Datum. Die heutige Statistik beginnt um Mitternacht Ortszeit wieder bei null.</message>
-  <message id="usage-update-hint-hourly">Zu jeder vollen Ortsstunde werden die Statistiken für den ausgewählten Zeitraum neu berechnet.</message>
-  <message id="usage-update-hint-ranking">Änderungen beim Verbrauch können die Platzierung in der Bestenliste beeinflussen.</message>
-  <message id="usage-update-hint-recommended">Wir empfehlen die stündliche Aktualisierung.</message>
   <message id="total-usage">Gesamtverbrauch (einschließlich Cache-Lese- und Schreibvorgängen)</message>
   <message id="request-count">Anfragen</message>
   <message id="max-speed">Höchstgeschwindigkeit</message>
@@ -264,13 +259,9 @@
   <message id="sync-failure-unknown">Grund nicht verfügbar</message>
   <message id="data-upload">Daten-Upload</message>
   <message id="upload-now">Jetzt hochladen</message>
-  <message id="next-upload-countdown">Nächster Upload</message>
   <message id="last-upload-time">Letzter Upload</message>
-  <message id="uploading-countdown">Upload läuft…</message>
-  <message id="upload-waiting">Wartet auf Upload…</message>
-  <message id="next-sync-countdown">Nächste Synchronisierung</message>
+  <message id="uploading">Upload läuft…</message>
   <message id="sync-in-progress">Wird synchronisiert…</message>
-  <message id="sync-waiting">Wartet auf Synchronisierung…</message>
   <message id="sync-now">Jetzt synchronisieren</message>
   <message id="sync-queued">Für den nächsten Upload vorgemerkt</message>
   <message id="last-twenty-four-hours">Letzte 24 Std.</message>
