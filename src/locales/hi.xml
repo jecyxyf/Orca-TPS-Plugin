@@ -244,6 +244,7 @@
   <message id="status.session-title">{0}: {1}</message>
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">रैंक {0}</message>
+  <message id="rank-not-listed">रैंक नहीं</message>
   <message id="last-upload-at">पिछला अपलोड {0}</message>
   <message id="leaderboard-five-minute-usage">पिछले 5 मिनट का उपयोग</message>
   <message id="leaderboard-daily-usage">दैनिक उपयोग</message>

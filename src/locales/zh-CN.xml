@@ -244,6 +244,7 @@
   <message id="status.session-title">{0}：{1}</message>
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">第 {0} 名</message>
+  <message id="rank-not-listed">未上榜</message>
   <message id="last-upload-at">最近上传 {0}</message>
   <message id="leaderboard-five-minute-usage">最近 5 分钟用量</message>
   <message id="leaderboard-daily-usage">每日用量</message>

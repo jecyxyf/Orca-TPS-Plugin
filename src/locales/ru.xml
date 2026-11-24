@@ -244,6 +244,7 @@
   <message id="status.session-title">{0} · {1}</message>
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">Место {0}</message>
+  <message id="rank-not-listed">Вне рейтинга</message>
   <message id="last-upload-at">Последняя загрузка {0}</message>
   <message id="leaderboard-five-minute-usage">Расход за последние 5 минут</message>
   <message id="leaderboard-daily-usage">Расход по дням</message>

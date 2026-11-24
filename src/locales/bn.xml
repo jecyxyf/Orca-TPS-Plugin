@@ -244,6 +244,7 @@
   <message id="status.session-title">{0}: {1}</message>
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">অবস্থান {0}</message>
+  <message id="rank-not-listed">তালিকায় নেই</message>
   <message id="last-upload-at">শেষ আপলোড {0}</message>
   <message id="leaderboard-five-minute-usage">শেষ ৫ মিনিটের ব্যবহার</message>
   <message id="leaderboard-daily-usage">দৈনিক ব্যবহার</message>

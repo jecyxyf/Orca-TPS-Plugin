@@ -2060,7 +2060,10 @@
         for (const period of periods) {
           const ranking = cachedRankings.get(period.days);
           const row = username && ranking?.rows.find(row => row.username === username);
-          element('user-rank-' + period.days).textContent = row ? t('rank-position', locale.number(row.rank)) : '—';
+          let rankText = '—';
+          if (row) rankText = t('rank-position', locale.number(row.rank));
+          else if (username && ranking && !rankingProblem) rankText = t('rank-not-listed');
+          element('user-rank-' + period.days).textContent = rankText;
           element('user-tokens-' + period.days).textContent = formatMillionTokens(row?.tokens);
           const place = row?.rank >= 1 && row.rank <= podium.length ? row.rank : 0;
           const slot = element('user-badge-' + period.days);

@@ -244,6 +244,7 @@
   <message id="status.session-title">{0} · {1}</message>
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">{0} 位</message>
+  <message id="rank-not-listed">ランク外</message>
   <message id="last-upload-at">最終アップロード {0}</message>
   <message id="leaderboard-five-minute-usage">過去 5 分間の使用量</message>
   <message id="leaderboard-daily-usage">日別使用量</message>

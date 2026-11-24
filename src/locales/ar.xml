@@ -244,6 +244,7 @@
   <message id="status.session-title">{0}: {1}</message>
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">المركز {0}</message>
+  <message id="rank-not-listed">خارج الترتيب</message>
   <message id="last-upload-at">آخر رفع {0}</message>
   <message id="leaderboard-five-minute-usage">الاستخدام في آخر 5 دقائق</message>
   <message id="leaderboard-daily-usage">الاستخدام اليومي</message>

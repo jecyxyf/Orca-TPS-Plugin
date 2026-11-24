@@ -244,6 +244,7 @@
   <message id="status.session-title">{0}: {1}</message>
   <message id="medal-position">{0} · {1}</message>
   <message id="rank-position">Posição {0}</message>
+  <message id="rank-not-listed">Sem posição</message>
   <message id="last-upload-at">Último envio {0}</message>
   <message id="leaderboard-five-minute-usage">Uso nos últimos 5 minutos</message>
   <message id="leaderboard-daily-usage">Uso diário</message>
