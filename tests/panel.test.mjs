@@ -6,30 +6,22 @@ import { fileURLToPath } from 'node:url';
 
 const panelPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'panel.html');
 
-test('the upload notice names the failed part and clears when the rolling retry succeeds', async () => {
+test('upload failures keep an accessible reason without a visible notice', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const source = /function renderUploadResult\(snapshot\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
+  const source = /const successfulUploadCodes[^\n]*\n[\s\S]*?(?=\n      function renderTransferStatus)/.exec(html)?.[0];
   assert.ok(source);
-  const elements = { 'sync-result': {}, 'sync-error': {} };
-  const render = new Function('element', 'renderToolbarTime', 'shortClock', 'messageFor', 't',
-    `${source}\nreturn renderUploadResult;`)(
-    id => elements[id], (target, time) => { target.lastSyncAt = time; }, String, code => code,
-    (key, ...values) => [key, ...values].join(' ')
+  assert.doesNotMatch(html, /ladder-sync-error|boardProblem/);
+  const failure = new Function('shortClock', 'messageFor', 't', `${source}\nreturn uploadFailure;`)(
+    String, code => code, (key, ...values) => [key, ...values].join(' ')
   );
-
-  render({ lastSyncAt: 50, lastUpload: { at: 100, code: 'accepted', rollingCode: 'unavailable' }, rollingProblem: 'unavailable' });
-  assert.deepEqual(elements['sync-error'], { textContent: 'daily-upload-succeeded-rolling-failed unavailable', hidden: false });
-  assert.equal(elements['sync-result'].lastSyncAt, 50);
-
-  render({ lastSyncAt: 50, lastUpload: { at: 110, code: 'invalid', rollingCode: 'accepted' } });
-  assert.equal(elements['sync-error'].textContent, 'rolling-upload-succeeded-daily-failed invalid');
-
-  render({ lastSyncAt: 50, lastUpload: { at: 115, code: 'unavailable', rollingOnly: true }, rollingProblem: 'unavailable' });
-  assert.equal(elements['sync-error'].textContent, 'rolling-upload-failed unavailable');
-
-  render({ lastSyncAt: 120, lastUpload: { at: 120, code: 'accepted', rollingCode: 'accepted' }, rollingProblem: null });
-  assert.deepEqual(elements['sync-error'], { textContent: '', hidden: true });
-  assert.equal(elements['sync-result'].lastSyncAt, 120);
+  assert.equal(failure({ lastUpload: { at: 100, code: 'accepted', rollingCode: 'unavailable' }, rollingProblem: 'unavailable' }),
+    'daily-upload-succeeded-rolling-failed unavailable');
+  assert.equal(failure({ lastUpload: { at: 110, code: 'invalid', rollingCode: 'accepted' } }),
+    'rolling-upload-succeeded-daily-failed invalid');
+  assert.equal(failure({ lastUpload: { at: 115, code: 'unavailable', rollingOnly: true }, rollingProblem: 'unavailable' }),
+    'rolling-upload-failed unavailable');
+  assert.equal(failure({ lastUpload: { at: 118, code: 'unavailable' } }), 'last-sync-failed 118 unavailable');
+  assert.equal(failure({ lastUpload: { at: 120, code: 'accepted', rollingCode: 'accepted' }, rollingProblem: null }), '');
 });
 
 test('per-request output uses Tokens and aggregate usage uses millions without rounding small counts to zero', async () => {
@@ -293,69 +285,138 @@ test('the speed ranking uses S medals for the first three places', async () => {
   assert.equal(css.get('.ladder-rows .ladder-speed-row:not(:has(.ladder-medal))')['--ladder-row-size'], '32px');
 });
 
-test('leaderboard transfer controls occupy the columns beside the last-transfer times', async () => {
+test('non-interactive transfer indicators sit beside the last successful times', async () => {
   const html = await readFile(panelPath, 'utf8');
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
   assert.equal(css.get('.ladder-toolbar')['grid-template-areas'], '"title . action last"');
   assert.equal(css.get('.ladder-rank-toolbar')['grid-template-areas'], '"title toggle action last"');
-  assert.equal(css.get('.ladder-refresh').background, 'transparent');
-  assert.equal(css.get('.ladder-refresh')['justify-content'], 'flex-end');
+  assert.equal(css.get('.ladder-transfer').background, 'transparent');
+  assert.equal(css.get('.ladder-transfer')['justify-content'], 'flex-end');
   assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-action-width'], '40px');
   assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-icon-size'], '16px');
   assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-label-size'], '13px');
   assert.equal(css.get('.ladder-toolbar-field')['font-size'], css.get('.ladder-toolbar .section-title')['font-size']);
-  assert.deepEqual(css.get('.ladder-refresh svg'), css.get('.ladder-toolbar-field svg'));
+  assert.deepEqual(css.get('.ladder-transfer svg'), css.get('.ladder-toolbar-field svg'));
   assert.equal(css.get('.ladder-toolbar-field')['grid-template-columns'], 'var(--ladder-toolbar-icon-size) minmax(0, 1fr)');
   assert.equal(css.get('.ladder-personal-data')['scrollbar-gutter'], 'stable');
   assert.equal(css.get('.ladder-personal-data')['max-block-size'], '208px');
   assert.equal(css.get('.ladder-personal-data')['padding-block-end'], '8px');
   assert.equal(css.get('.ladder-rank-card')['scrollbar-gutter'], 'stable');
-  assert.equal(css.get('.ladder-refresh[aria-busy="true"] .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
+  assert.equal(css.get('.ladder-transfer[aria-busy="true"] .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
+  assert.equal(css.get('.ladder-transfer.is-failed .ladder-transfer-error').color, 'var(--error)');
   assert.doesNotMatch(html, /ladder-(?:sync|refresh)-countdown/);
-  for (const id of ['sync-now', 'update']) {
-    const button = new RegExp(`<button[^>]*id="ladder-${id}"[\\s\\S]*?<\\/button>`).exec(html)?.[0];
-    assert.ok(button);
-    assert.match(button, /aria-busy="false"/);
-    assert.match(button, /class="ladder-transfer-icon"/);
-    assert.match(button, /class="ladder-transfer-spinner"/);
+  assert.doesNotMatch(html, /id="ladder-(?:sync-now|update)"|request\('sync'\)/);
+  for (const id of ['upload-state', 'download-state']) {
+    const indicator = new RegExp(`<span[^>]*id="ladder-${id}"[\\s\\S]*?<\\/span>`).exec(html)?.[0];
+    assert.ok(indicator);
+    assert.match(indicator, /role="img" aria-busy="false"/);
+    assert.doesNotMatch(indicator, /tabindex|onclick/);
+    assert.doesNotMatch(html, new RegExp(`element\\('${id}'\\)\\.addEventListener`));
+    assert.match(indicator, /class="ladder-transfer-icon"/);
+    assert.match(indicator, /class="ladder-transfer-spinner"/);
+    assert.match(indicator, /class="ladder-transfer-error"/);
   }
 });
 
 test('leaderboard upload and download indicate active transfers independently', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const source = /function renderTransferButton\([\s\S]*?(?=\n      function renderToolbarTime)/.exec(html)?.[0];
+  const source = /const successfulUploadCodes[\s\S]*?(?=\n      function scheduleUploadUnlock)/.exec(html)?.[0];
   assert.ok(source);
-  const buttons = Object.fromEntries(['sync-now', 'update'].map(id => {
-    const attrs = new Map();
+  const indicators = Object.fromEntries(['upload-state', 'download-state'].map(id => {
+    const attrs = new Map(), classes = new Set();
     return [id, {
-      attrs, classList: { toggle() {} },
+      attrs, classes, classList: { toggle(name, active) { if (active) classes.add(name); else classes.delete(name); } },
       setAttribute: (name, value) => attrs.set(name, value),
       getAttribute: name => attrs.get(name)
     }];
   }));
   const show = new Function('element', 'state', `
-    const { manualSyncPending, rankingPending, rankingAccess = true } = state;
-    const busy = false;
-    const t = key => key;
+    const { rankingPending, rankingProblem } = state;
+    const t = (key, ...args) => [key, ...args].join(' ');
+    const messageFor = t;
+    const shortClock = String;
     ${source}
-    renderUploadButton(state.snapshot, state.signedIn !== false, 1000);
-    renderDownloadButton();
+    renderUploadStatus(state.snapshot, state.signedIn !== false, state.time ?? 1000);
+    renderDownloadStatus();
   `);
-  const state = id => [buttons[id].attrs.get('aria-busy'), buttons[id].disabled, buttons[id].title];
-  show(id => buttons[id], { snapshot: { uploading: true } });
-  assert.deepEqual(state('sync-now'), ['true', true, 'uploading']);
-  assert.deepEqual(state('update'), ['false', false, 'refresh-leaderboard']);
-  show(id => buttons[id], { rankingPending: true });
-  assert.deepEqual(state('sync-now'), ['false', false, 'upload-now']);
-  assert.deepEqual(state('update'), ['true', true, 'sync-in-progress']);
-  show(id => buttons[id], { manualSyncPending: true, rankingAccess: false });
-  assert.deepEqual(state('sync-now'), ['true', true, 'uploading']);
-  assert.deepEqual(state('update'), ['false', true, 'refresh-leaderboard']);
-  show(id => buttons[id], { snapshot: { manualQueued: true } });
-  assert.deepEqual(state('sync-now'), ['false', true, 'sync-queued']);
-  show(id => buttons[id], { signedIn: false, snapshot: { uploading: true } });
-  assert.deepEqual(state('sync-now'), ['false', true, 'upload-now']);
-  assert.deepEqual(state('update'), ['false', false, 'refresh-leaderboard']);
+  const upload = indicators['upload-state'], download = indicators['download-state'];
+  const state = indicator => [indicator.attrs.get('aria-busy'), indicator.title];
+  const isFailed = indicator => indicator.classes.has('is-failed');
+  const render = current => show(id => indicators[id], current);
+  render({ snapshot: { uploading: true } });
+  assert.deepEqual(state(upload), ['true', 'uploading']);
+  assert.deepEqual(state(download), ['false', 'period-rankings']);
+  render({ rankingPending: true });
+  assert.deepEqual(state(upload), ['false', 'data-upload']);
+  assert.deepEqual(state(download), ['true', 'sync-in-progress']);
+  const locked = { board: { lockedUntil: 1500 } };
+  render({ snapshot: locked });
+  assert.equal(isFailed(upload), true);
+  render({ snapshot: locked, time: 1500 });
+  assert.equal(isFailed(upload), false);
+  render({ signedIn: false, snapshot: { uploading: true } });
+  assert.deepEqual(state(upload), ['false', 'data-upload']);
+  assert.deepEqual(state(download), ['false', 'period-rankings']);
+
+  const lastUpload = { at: 1000, code: 'unavailable' };
+  render({ snapshot: { lastUpload } });
+  assert.equal(isFailed(upload), true);
+  assert.equal(isFailed(download), false);
+  assert.equal(upload.attrs.get('aria-label'), 'data-upload · last-sync-failed 1000 unavailable');
+
+  render({ snapshot: { uploading: true, lastUpload }, rankingProblem: 'unavailable' });
+  assert.equal(isFailed(upload), false);
+  assert.equal(isFailed(download), true);
+  assert.equal(download.attrs.get('aria-label'), 'period-rankings · unavailable');
+
+  render({ snapshot: { lastUpload }, rankingPending: true, rankingProblem: 'unavailable' });
+  assert.equal(isFailed(upload), true);
+  assert.equal(isFailed(download), false);
+  assert.deepEqual(state(download), ['true', 'sync-in-progress']);
+
+  render({ snapshot: { lastUpload: { at: 2000, code: 'accepted' } } });
+  assert.equal(isFailed(upload), false);
+  assert.equal(isFailed(download), false);
+});
+
+test('upload lock expiry uses one timer outside the periodic ranking check', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function scheduleUploadUnlock\([\s\S]*?\n      \}/.exec(html)?.[0];
+  const interval = /const interval = setInterval\(\(\) => \{[\s\S]*?\n      \}, 1000\);/.exec(html)?.[0];
+  assert.ok(source && interval);
+  assert.doesNotMatch(interval, /renderUploadStatus|scheduleUploadUnlock/);
+
+  const timers = new Map();
+  let issued = 0, renders = 0;
+  const schedule = new Function('setTimeout', 'clearTimeout', 'render', `
+    let uploadUnlockAt, uploadUnlockWake;
+    ${source}
+    return scheduleUploadUnlock;
+  `)((callback, delay) => {
+    timers.set(++issued, { callback, delay });
+    return issued;
+  }, id => timers.delete(id), () => { renders++; });
+
+  schedule(undefined, 1000);
+  assert.equal(timers.size, 0);
+  schedule(1500, 1000);
+  schedule(1500, 1200);
+  assert.equal(issued, 1);
+  assert.equal(timers.get(1).delay, 500);
+
+  schedule(1800, 1200);
+  assert.deepEqual([...timers.keys()], [2]);
+  assert.equal(timers.get(2).delay, 600);
+  const wake = timers.get(2).callback;
+  timers.delete(2);
+  wake();
+  schedule(1800, 1800);
+  assert.equal(renders, 1);
+  assert.equal(timers.size, 0);
+
+  schedule(1990, 1800);
+  schedule(undefined, 1850);
+  assert.equal(timers.size, 0);
 });
 
 test('daily usage fills missing dates with zero across the entire selected window', async () => {

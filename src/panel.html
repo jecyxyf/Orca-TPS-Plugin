@@ -176,14 +176,14 @@
       --ladder-toolbar-title-width: clamp(62px, 26vw, 106px);
       --ladder-toolbar-action-width: 40px;
       --ladder-toolbar-toggle-width: 28px;
-      --ladder-toolbar-last-width: 84px;
       --ladder-toolbar-icon-size: 16px;
       --ladder-toolbar-label-size: 13px;
+      --ladder-toolbar-gap: 3px;
       display: grid;
       grid-template-columns: minmax(0, var(--ladder-toolbar-title-width)) minmax(0, 1fr)
-        var(--ladder-toolbar-action-width) var(--ladder-toolbar-last-width);
+        var(--ladder-toolbar-action-width) max-content;
       grid-template-areas: "title . action last";
-      align-items: center; column-gap: 6px;
+      align-items: center; column-gap: var(--ladder-toolbar-gap);
       font-variant-numeric: tabular-nums;
     }
     html:lang(zh-CN) .ladder-toolbar { --ladder-toolbar-title-width: 4em; }
@@ -195,9 +195,9 @@
       grid-template-columns: minmax(0, var(--ladder-toolbar-title-width)) var(--ladder-toolbar-toggle-width);
       grid-template-areas: "title toggle";
     }
-    .ladder-rank-toolbar.is-off :is(.ladder-refresh, .ladder-toolbar-field) { display: none; }
+    .ladder-rank-toolbar.is-off :is(.ladder-transfer, .ladder-toolbar-field) { display: none; }
     .ladder-toolbar .section-title { grid-area: title; font-size: var(--ladder-toolbar-label-size); }
-    .ladder-toolbar .ladder-refresh { grid-area: action; }
+    .ladder-toolbar .ladder-transfer { grid-area: action; }
     .ladder-rank-toggle {
       grid-area: toggle; justify-self: start; display: grid; place-items: center;
       width: var(--ladder-toolbar-toggle-width); height: 28px; padding: 0;
@@ -221,15 +221,12 @@
     }
     .ladder-toolbar-field {
       display: grid; grid-template-columns: var(--ladder-toolbar-icon-size) minmax(0, 1fr);
-      align-items: center; gap: 4px; min-width: 0; font-size: var(--ladder-toolbar-label-size);
+      align-items: center; gap: var(--ladder-toolbar-gap); min-width: 0; font-size: var(--ladder-toolbar-label-size);
     }
-    .ladder-toolbar-field time { text-align: end; }
-    .ladder-toolbar-field svg, .ladder-refresh svg {
+    .ladder-toolbar-field svg, .ladder-transfer svg {
       width: var(--ladder-toolbar-icon-size); height: var(--ladder-toolbar-icon-size); flex: none; color: var(--muted);
     }
     .ladder-toolbar-last { grid-area: last; }
-    .ladder-sync-error { color: var(--error); overflow-wrap: anywhere; }
-    .ladder-toolbar .is-queued { color: var(--blue); }
     .ladder-actions .ladder-note { margin: 0; }
     .ladder-status { margin: 8px 0 0; font-size: 12px; overflow-wrap: anywhere; }
     .ladder-status:empty, .ladder-mine:empty { display: none; }
@@ -348,11 +345,11 @@
       0%, 37%, 66%, 100% { opacity: 0; transform: scale(.35); }
       50% { opacity: 1; transform: scale(1); }
     }
-    .ladder-refresh {
-      width: var(--ladder-toolbar-action-width); min-height: var(--ladder-toolbar-action-width); padding: 0;
-      padding-inline-end: 2px; justify-content: flex-end; border-radius: 9px; background: transparent;
+    .ladder-transfer {
+      display: inline-flex; align-items: center; justify-content: flex-end;
+      width: var(--ladder-toolbar-action-width); min-height: var(--ladder-toolbar-action-width);
+      background: transparent;
     }
-    .ladder-refresh[aria-busy="true"]:disabled { opacity: 1; }
     .ladder-preview { padding: 9px 11px; border-radius: 13px; background: var(--button-bg); }
     .ladder-preview p { margin: 0 0 6px; }
     .ladder-preview .ladder-note { margin-bottom: 8px; }
@@ -404,9 +401,12 @@
     .ladder-recent-tools { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .ladder-recent-speed { flex: none; color: var(--blue); white-space: nowrap; }
     .refresh.is-busy svg { animation: spin 1s linear infinite; }
-    .ladder-refresh .ladder-transfer-spinner,
-    .ladder-refresh[aria-busy="true"] .ladder-transfer-icon { display: none; }
-    .ladder-refresh[aria-busy="true"] .ladder-transfer-spinner {
+    .ladder-transfer .ladder-transfer-spinner,
+    .ladder-transfer .ladder-transfer-error,
+    .ladder-transfer[aria-busy="true"] .ladder-transfer-icon,
+    .ladder-transfer.is-failed .ladder-transfer-icon { display: none; }
+    .ladder-transfer.is-failed .ladder-transfer-error { display: block; color: var(--error); }
+    .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner {
       display: block; animation: spin 1s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -531,9 +531,7 @@
       .ladder-toolbar {
         --ladder-toolbar-action-width: 36px;
         --ladder-toolbar-toggle-width: 24px;
-        column-gap: 3px;
       }
-      .ladder-toolbar-field { gap: 3px; }
       .ladder-rows li { --ladder-row-gap: 6px; }
       .ladder-rows .ladder-speed-row { --ladder-row-gap: 4px; }
       .ladder-speed-row .ladder-rank { min-width: 2ch; font-size: 16px; }
@@ -547,7 +545,7 @@
       .war-period-tabs .war-tab { padding-inline: 1px; font-size: 10px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .refresh.is-busy svg, .ladder-refresh[aria-busy="true"] .ladder-transfer-spinner { animation: none; }
+      .refresh.is-busy svg, .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner { animation: none; }
       .refresh:active:not(:disabled) { transform: none; }
       .ladder-medal::before, .ladder-medal::after, .ladder-medal-emblem::before { animation: none; opacity: 0; }
     }
@@ -648,16 +646,16 @@
         </dl>
         <div class="ladder-toolbar ladder-upload-toolbar">
           <h2 class="section-title" data-i18n="data-upload" data-i18n-title="data-upload"></h2>
-          <button class="refresh ladder-refresh" id="ladder-sync-now" type="button" aria-busy="false" data-i18n-aria-label="upload-now" data-i18n-title="upload-now" disabled>
+          <span class="ladder-transfer" id="ladder-upload-state" role="img" aria-busy="false" data-i18n-aria-label="data-upload" data-i18n-title="data-upload">
             <svg class="ladder-transfer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-.4-8 6 6 0 0 1 11.5-1.7A4.8 4.8 0 0 1 18 18h-1M12 19v-8m-3 3 3-3 3 3"/></svg>
             <svg class="ladder-transfer-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
-          </button>
+            <svg class="ladder-transfer-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v8m0 6h.01"/></svg>
+          </span>
           <div class="ladder-toolbar-field ladder-toolbar-last" data-i18n-title="last-upload-time">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="last-upload-time"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
             <time class="ladder-toolbar-value" id="ladder-sync-result" data-localized-text>—</time>
           </div>
         </div>
-        <p class="ladder-note ladder-sync-error" id="ladder-sync-error" role="status" data-localized-text hidden></p>
       </div>
       <section class="ladder-card ladder-rank-card" aria-labelledby="ladder-rank-title">
         <div class="ladder-toolbar ladder-rank-toolbar is-off" id="ladder-rank-toolbar">
@@ -665,10 +663,11 @@
           <button class="ladder-rank-toggle" id="ladder-rank-toggle" type="button" role="switch" aria-checked="false"
             aria-controls="ladder-ranking-content ladder-personal-ranks" data-i18n-aria-label="ranking-toggle"
             data-i18n-title="ranking-toggle" disabled><span aria-hidden="true"></span></button>
-          <button class="refresh ladder-refresh" id="ladder-update" type="button" aria-busy="false" data-i18n-aria-label="refresh-leaderboard" data-i18n-title="refresh-leaderboard" disabled>
+          <span class="ladder-transfer" id="ladder-download-state" role="img" aria-busy="false" data-i18n-aria-label="period-rankings" data-i18n-title="period-rankings">
             <svg class="ladder-transfer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-.4-8 6 6 0 0 1 11.5-1.7A4.8 4.8 0 0 1 18 18h-1M12 11v8m-3-3 3 3 3-3"/></svg>
             <svg class="ladder-transfer-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
-          </button>
+            <svg class="ladder-transfer-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v8m0 6h.01"/></svg>
+          </span>
           <div class="ladder-toolbar-field ladder-toolbar-last" data-i18n-title="last-sync-time">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="last-sync-time"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
             <time class="ladder-toolbar-value" id="ladder-refresh-time" data-localized-text>—</time>
@@ -1605,8 +1604,9 @@
       const cachedRankings = new Map();
       const RANK_REFRESH_MS = 10_000, RECENT_STATS_MS = 5 * 60_000, DAY_MS = 86_400_000;
       let rankingPending, rankWake, nextRankRefresh, rankingProblem, sessionPushVersion = 0, rankingSubscription;
+      let uploadUnlockAt, uploadUnlockWake;
       let rankingAccess, rankingPreferenceSubscription, rankingPreferenceVersion = 0, rankingPreferenceFailed = false;
-      let busy = false, restoringSession = false, manualSyncPending = false;
+      let busy = false, restoringSession = false;
       let revision = 0, drawnRows = '', renderedDay = '', loginProblem = '', messageCode = '';
       let rankingNodes = new Map(), leaderboardFrame, nextRecentExpiry = Infinity;
       let animateToday = false, pulseDay = '', latestPulses = new Map();
@@ -2066,27 +2066,55 @@
         }
       }
 
-      function renderTransferButton(button, active, disabled, label) {
-        button.disabled = active || disabled;
-        button.setAttribute('aria-busy', String(active));
+      const successfulUploadCodes = new Set(['accepted', 'initialized', 'duplicate']);
+
+      function uploadFailure(snapshot) {
+        const record = snapshot?.lastUpload;
+        if (Number.isFinite(record?.at) && !record.rollingOnly && !successfulUploadCodes.has(record.code)) {
+          const reason = messageFor(record.code) ?? t('sync-failure-unknown');
+          return successfulUploadCodes.has(record.rollingCode) ? t('rolling-upload-succeeded-daily-failed', reason)
+            : t('last-sync-failed', shortClock(record.at), reason);
+        }
+        if (snapshot?.rollingProblem) {
+          const reason = messageFor(snapshot.rollingProblem) ?? t('sync-failure-unknown');
+          return t(record?.rollingOnly ? 'rolling-upload-failed' : 'daily-upload-succeeded-rolling-failed', reason);
+        }
+        return '';
+      }
+
+      function renderTransferStatus(indicator, active, label, problem) {
+        indicator.setAttribute('aria-busy', String(active));
+        const failed = !active && Boolean(problem);
+        indicator.classList.toggle('is-failed', failed);
         const text = t(label);
-        if (button.title !== text) button.title = text;
-        if (button.getAttribute('aria-label') !== text) button.setAttribute('aria-label', text);
+        if (indicator.title !== text) indicator.title = text;
+        const accessible = failed ? `${text} · ${problem}` : text;
+        if (indicator.getAttribute('aria-label') !== accessible) indicator.setAttribute('aria-label', accessible);
       }
 
-      function renderUploadButton(snapshot, signedIn, time) {
-        const button = element('sync-now');
-        const uploading = Boolean(signedIn && (manualSyncPending || snapshot?.uploading));
-        const queued = Boolean(snapshot?.manualQueued);
-        const disabled = !signedIn || busy || queued || Boolean(snapshot?.board?.banned) || snapshot?.board?.lockedUntil > time;
-        button.classList.toggle('is-queued', queued);
-        renderTransferButton(button, uploading, disabled, uploading ? 'uploading' : queued ? 'sync-queued' : 'upload-now');
+      function renderUploadStatus(snapshot, signedIn, time) {
+        const uploading = Boolean(signedIn && snapshot?.uploading);
+        const locked = snapshot?.board?.lockedUntil > time;
+        const problem = signedIn && (uploadFailure(snapshot) || (locked ? messageFor('locked') : ''));
+        renderTransferStatus(element('upload-state'), uploading, uploading ? 'uploading' : 'data-upload', problem);
       }
 
-      function renderDownloadButton() {
+      function renderDownloadStatus() {
         const downloading = Boolean(rankingPending);
-        renderTransferButton(element('update'), downloading, !rankingAccess,
-          downloading ? 'sync-in-progress' : 'refresh-leaderboard');
+        const problem = rankingProblem && (messageFor(rankingProblem) ?? t('leaderboard-unavailable'));
+        renderTransferStatus(element('download-state'), downloading, downloading ? 'sync-in-progress' : 'period-rankings', problem);
+      }
+
+      function scheduleUploadUnlock(lockedUntil, time) {
+        const deadline = Number(lockedUntil);
+        const next = Number.isFinite(deadline) && deadline > time ? deadline : undefined;
+        if (next === uploadUnlockAt) return;
+        clearTimeout(uploadUnlockWake);
+        uploadUnlockAt = next;
+        uploadUnlockWake = next === undefined ? undefined : setTimeout(() => {
+          uploadUnlockAt = uploadUnlockWake = undefined;
+          render();
+        }, Math.min(next - time, 2_147_483_647));
       }
 
       function renderToolbarTime(note, lastAt) {
@@ -2096,25 +2124,6 @@
         if (note.textContent !== text) note.textContent = text;
         if (validTime) note.dateTime = new Date(lastAt).toISOString();
         else note.removeAttribute('datetime');
-      }
-
-      function renderUploadResult(snapshot) {
-        renderToolbarTime(element('sync-result'), snapshot?.lastSyncAt);
-        const failure = element('sync-error'), record = snapshot?.lastUpload;
-        const successes = ['accepted', 'initialized', 'duplicate'];
-        const dailyFailed = Number.isFinite(record?.at) && !record.rollingOnly && !successes.includes(record.code);
-        const problem = snapshot?.rollingProblem;
-        let error = '';
-        if (dailyFailed) {
-          const reason = messageFor(record.code) ?? t('sync-failure-unknown');
-          error = successes.includes(record.rollingCode) ? t('rolling-upload-succeeded-daily-failed', reason)
-            : t('last-sync-failed', shortClock(record.at), reason);
-        } else if (problem) {
-          const reason = messageFor(problem) ?? t('sync-failure-unknown');
-          error = t(record?.rollingOnly ? 'rolling-upload-failed' : 'daily-upload-succeeded-rolling-failed', reason);
-        }
-        if (failure.textContent !== error) failure.textContent = error;
-        failure.hidden = !error;
       }
 
       function renderRangeLabels() {
@@ -2151,15 +2160,14 @@
           : snapshot.logoutPending ? t('logout-pending') : '';
         if (logoutNote.textContent !== logoutText) logoutNote.textContent = logoutText;
         logoutNote.hidden = !logoutText;
-        const boardProblem = rankingAccess ? messageFor(rankingProblem) : undefined;
         const sessionStatus = checkingLogin ? t('checking-login') : '';
-        const locked = account.lockedUntil > time;
+        scheduleUploadUnlock(account.lockedUntil, time);
         const authProblem = pendingLogin ? undefined : messageFor(sessionProblem);
         const actionMessage = messageFor(code);
         const preferenceProblem = rankingPreferenceFailed ? t('ranking-preference-failed') : undefined;
         element('status').textContent = authProblem ?? actionMessage ?? messageFor(loginProblem) ?? preferenceProblem ??
-          (account.banned ? messageFor('banned') : boardProblem) ??
-          (locked ? messageFor('locked') : messageFor(historyProblem) ?? (initializing ? messageFor('history_pending') : sessionStatus));
+          (account.banned ? messageFor('banned') : messageFor(historyProblem)) ??
+          (initializing ? messageFor('history_pending') : sessionStatus);
         const speedBoard = rankDays === 0;
         element('rows').setAttribute('aria-label', t(speedBoard ? 'leaderboard-speed-tab' : 'period-rankings'));
         element('empty').textContent = t('empty-rankings');
@@ -2167,9 +2175,9 @@
         renderRows(ranking?.rows ?? [], username, ranking);
         element('empty').hidden = !ranking || rankingNodes.size > 0;
         if (signedIn) renderAccount(username);
-        renderUploadButton(snapshot, signedIn, time);
-        renderUploadResult(signedIn ? snapshot : null);
-        renderDownloadButton();
+        renderUploadStatus(snapshot, signedIn, time);
+        renderToolbarTime(element('sync-result'), signedIn ? snapshot.lastSyncAt : null);
+        renderDownloadStatus();
       }
 
       function scheduleRender() {
@@ -2217,7 +2225,7 @@
           const result = await request('window-state', { days, mode, force }, signal);
           if (signal.aborted || rankingPending !== pending) return;
           const updated = cacheRankings(result.boards, result.updatedAt);
-          rankingProblem = updated ? undefined : result.code;
+          rankingProblem = updated ? undefined : result.code ?? 'unavailable';
           const next = result.nextAt - (result.boards?.[0]?.clockOffset ?? 0);
           nextRankRefresh = updated && Number.isFinite(result.refreshAt) ? result.refreshAt
             : updated && result.nextAt - result.cutoffAt === 3_600_000 && next > result.updatedAt
@@ -2229,13 +2237,13 @@
           rankingPending = undefined;
           if (!group.hidden && !lifetime.signal.aborted) {
             const now = Date.now();
-            renderDownloadButton();
+            renderDownloadStatus();
             clearTimeout(rankWake);
             if (rankingAccess && Number.isFinite(nextRankRefresh)) rankWake = setTimeout(() => void refresh(), Math.max(0, nextRankRefresh - now));
           }
         });
         rankingPending = pending;
-        renderDownloadButton();
+        renderDownloadStatus();
         return pending;
       }
 
@@ -2355,9 +2363,6 @@
         for (const { days } of periods) delete element('user-badge-' + days).dataset.place;
         render();
       }, { signal: lifetime.signal });
-      element('update').addEventListener('click', () => {
-        if (rankingAccess) void refresh(rankDays, true);
-      });
       const rankToggle = element('rank-toggle');
       rankToggle.addEventListener('click', async () => {
         const enabled = !rankingAccess;
@@ -2373,19 +2378,6 @@
         }
         rankToggle.disabled = false;
         render();
-      });
-      element('sync-now').addEventListener('click', async () => {
-        if (element('sync-now').disabled) return;
-        const requestedAt = revision;
-        const requestedVersion = sessionPushVersion;
-        manualSyncPending = true;
-        render('');
-        const result = await request('sync');
-        manualSyncPending = false;
-        if (lifetime.signal.aborted) return;
-        if (revision !== requestedAt) { scheduleRender(); return; }
-        if (requestedVersion === sessionPushVersion && typeof result.signedIn === 'boolean') session = result;
-        render(['locked', 'banned', 'removed'].includes(result.code) || typeof result.signedIn !== 'boolean' ? result.code : '');
       });
       element('login').addEventListener('click', async () => {
         if (busy || pendingLogin) return;
@@ -2453,10 +2445,7 @@
       void refreshSession();
       const interval = setInterval(() => {
         if (group.hidden) return;
-        const time = Date.now();
-        if (time >= nextRecentExpiry) render();
-        const snapshot = session;
-        renderUploadButton(snapshot, snapshot?.signedIn ?? snapshot?.board?.authenticated, time);
+        if (Date.now() >= nextRecentExpiry) render();
         if (rankingAccess) void refresh();
       }, 1000);
       window.addEventListener('pagehide', () => {
@@ -2470,6 +2459,7 @@
         cancelAnimationFrame(leaderboardFrame);
         clearTimeout(retryLogin);
         clearTimeout(rankWake);
+        clearTimeout(uploadUnlockWake);
         clearInterval(interval);
       }, { once: true });
     })();
