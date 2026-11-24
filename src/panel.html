@@ -82,6 +82,7 @@
     .title-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 32px; }
     .panel-title { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
     .panel-logo { flex: none; width: 32px; height: 32px; border-radius: 6px; object-fit: contain; }
+    .panel-version { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0; }
     .language-picker { position: relative; flex: 0 1 156px; min-width: 0; }
     .language-toggle, .language-option {
       display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 32px;
@@ -541,6 +542,11 @@
       .ladder-speed-row .ladder-total { padding-inline: 4px; font-size: 11px; }
     }
     @media (max-width: 280px) {
+      .title-bar { gap: 6px; }
+      .panel-title { gap: 4px; font-size: 15px; }
+      .panel-logo { width: 24px; height: 24px; }
+      .panel-version { font-size: 11px; }
+      .language-toggle { column-gap: 3px; padding-inline: 4px; }
       .war-period-tabs { grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.15fr); gap: 2px; }
       .war-period-tabs .war-tab { padding-inline: 1px; font-size: 10px; }
     }
@@ -554,7 +560,10 @@
 <body>
   <main id="panel" aria-labelledby="panel-title">
     <div class="title-bar" dir="ltr">
-      <h1 class="panel-title" id="panel-title"><img class="panel-logo" src="panel-logo.png" alt="">TPS Plugin</h1>
+      <h1 class="panel-title" id="panel-title">
+        <img class="panel-logo" src="panel-logo.png" alt="">TPS Plugin
+        <span id="panel-version" class="panel-version" hidden></span>
+      </h1>
       <div class="language-picker" id="language-picker" hidden>
         <button class="language-toggle" id="language-toggle" type="button" aria-expanded="false" aria-controls="language-menu">
           <img class="language-flag" id="language-flag" alt="">
@@ -873,7 +882,12 @@
         messageText(matches.length ? '' : 'no-matching-languages');
       }
 
-      function apply({ code: selected, strings: dictionary, options: choices }) {
+      function apply({ code: selected, strings: dictionary, options: choices, pluginVersion }) {
+        if (typeof pluginVersion === 'string' && pluginVersion) {
+          const version = byId('panel-version');
+          version.textContent = `v${pluginVersion}`;
+          version.hidden = false;
+        }
         code = selected;
         strings = dictionary;
         if (choices) options = choices;

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { parseEnv } from 'node:util';
+import manifest from '../orca-plugin.json' with { type: 'json' };
 import { createLocalePreferences } from './locales.mjs';
 import { createComputation } from './computation.mjs';
 import { createTpsController } from './controller.mjs';
@@ -24,7 +25,7 @@ export default async function activate(orca) {
   const deviceGuid = validInstallationId(migrationGuid) ? migrationGuid : await orca.storage.get(INSTALLATION_KEY);
   const language = locales = await createLocalePreferences(orca.storage);
   registrations.push(orca.panels.handle('tps.locale', payload => payload?.code === undefined
-    ? language.response(true)
+    ? { ...language.response(true), pluginVersion: manifest.version }
     : language.select(payload.code, () => { void controller?.refreshLocale(); })));
   stopPanelView = registerPanelView(orca, language.t);
   const localEnv = await readFile(new URL('../.env.leaderboard.local', import.meta.url), 'utf8').catch(() => '');
