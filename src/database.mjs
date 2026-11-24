@@ -1,5 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { HOUR_MS, usageCount, validInstallationId } from './leaderboard_stats.mjs';
@@ -303,5 +304,116 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
       ...dimensions, counters: JSON.parse(counters)
     })),
     close() { main.close(); }
+  };
+}
+
+const json = async file => JSON.parse(await readFile(file, 'utf8'));
+const remoteDeviceDirectory = root => path.join(root, 'remote_device');
+const cacheFilename = (root, deviceGuid, name) => path.join(remoteDeviceDirectory(root), deviceGuid, name + '.json');
+
+async function savePacket(filename, packet) {
+  await mkdir(path.dirname(filename), { recursive: true, mode: 0o700 });
+  const next = filename + '.' + randomBytes(6).toString('hex') + '.next';
+  try {
+    await writeFile(next, JSON.stringify(packet), { flag: 'wx', mode: 0o600 });
+    await rename(next, filename);
+  } finally {
+    await unlink(next).catch(() => {});
+  }
+}
+
+export const validPersonal = packet => packet && validInstallationId(packet.deviceGuid) &&
+  typeof packet.timeZone === 'string' && Number.isSafeInteger(packet.publishedAt) && packet.publishedAt >= 0 &&
+  [packet.days, packet.hours, packet.maxima].every(Array.isArray);
+const validRelay = packet => packet && validInstallationId(packet.deviceGuid) &&
+  Number.isSafeInteger(packet.accountId) && packet.accountId > 0 &&
+  Number.isSafeInteger(packet.publishedAt) && packet.publishedAt >= 0;
+
+export function keepLatest(packets, key, packet) {
+  if ((packets.get(key)?.publishedAt ?? -1) >= packet.publishedAt) return false;
+  packets.set(key, packet);
+  return true;
+}
+
+function rememberRelay(relays, packet) {
+  let accounts = relays.get(packet.deviceGuid);
+  if (!accounts) relays.set(packet.deviceGuid, accounts = new Map());
+  return keepLatest(accounts, packet.accountId, packet);
+}
+
+export async function readRemoteDeviceCache(root) {
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  const personal = new Map(), relays = new Map();
+  const devices = await readdir(remoteDeviceDirectory(root), { withFileTypes: true }).catch(() => []);
+  for (const device of devices) {
+    if (!device.isDirectory() || !validInstallationId(device.name)) continue;
+    const [statistics, leaderboard] = await Promise.all([
+      json(cacheFilename(root, device.name, 'personal')).catch(() => null),
+      json(cacheFilename(root, device.name, 'leaderboard')).catch(() => null)
+    ]);
+    if (validPersonal(statistics) && statistics.deviceGuid === device.name) {
+      keepLatest(personal, device.name, statistics);
+    }
+    for (const [account, packet] of Object.entries(leaderboard ?? {})) {
+      if (validRelay(packet) && packet.deviceGuid === device.name && String(packet.accountId) === account) {
+        rememberRelay(relays, packet);
+      }
+    }
+  }
+
+  for (const file of await readdir(root, { withFileTypes: true })) {
+    const legacy = /^(?:personal|leaderboard-(\d+))-([a-f0-9-]+)\.json$/.exec(file.name);
+    if (!file.isFile() || !legacy || !validInstallationId(legacy[2])) continue;
+    const [, account, deviceGuid] = legacy;
+    const filename = path.join(root, file.name);
+    const packet = await json(filename).catch(() => null);
+    if (packet?.deviceGuid !== deviceGuid) continue;
+    let name, data;
+    if (account === undefined && validPersonal(packet)) {
+      keepLatest(personal, deviceGuid, packet);
+      name = 'personal';
+      data = personal.get(deviceGuid);
+    } else if (validRelay(packet) && account === String(packet.accountId)) {
+      rememberRelay(relays, packet);
+      name = 'leaderboard';
+      data = Object.fromEntries(relays.get(deviceGuid));
+    } else continue;
+
+    try {
+      await savePacket(cacheFilename(root, deviceGuid, name), data);
+      await unlink(filename);
+    } catch { /* A failed migration leaves the old cache available for the next startup. */ }
+  }
+  return { personal, relays };
+}
+
+export async function openRemoteDeviceCache(root) {
+  const { personal, relays } = await readRemoteDeviceCache(root);
+  const writes = new Map();
+
+  function persist(deviceGuid, name, packet) {
+    const filename = cacheFilename(root, deviceGuid, name);
+    const pending = (writes.get(filename) ?? Promise.resolve())
+      .then(() => savePacket(filename, packet))
+      .catch(() => {})
+      .finally(() => { if (writes.get(filename) === pending) writes.delete(filename); });
+    writes.set(filename, pending);
+  }
+
+  return {
+    personal, relays,
+    acceptPersonal(packet, ownDevice) {
+      if (!validPersonal(packet) || packet.deviceGuid === ownDevice ||
+          !keepLatest(personal, packet.deviceGuid, packet)) return false;
+      persist(packet.deviceGuid, 'personal', packet);
+      return true;
+    },
+    acceptLeaderboard(packet, ownDevice) {
+      if (!validRelay(packet) || packet.deviceGuid === ownDevice ||
+          !rememberRelay(relays, packet)) return false;
+      persist(packet.deviceGuid, 'leaderboard', Object.fromEntries(relays.get(packet.deviceGuid)));
+      return true;
+    },
+    flush: () => Promise.all(writes.values())
   };
 }

@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -150,39 +150,4 @@ export function createRuntimeLookup(orca, lookupSsh = readSshTargets) {
   };
 }
 
-const shellQuote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
-
-export function launchSsh(destination, token, bootstrap) {
-  const { host, port, username, alias, directory } = destination;
-  if (typeof host !== 'string' || !/^[a-z\d:][a-z\d.:-]*$/i.test(host) ||
-    typeof username !== 'string' || !/^[a-z\d_][a-z\d_.-]*$/i.test(username) ||
-    !Number.isInteger(port) || port < 1 || port > 65535) throw new RemoteReadError('ssh');
-  const configHost = typeof alias === 'string' && /^[\p{L}\p{N}_][\p{L}\p{N}_.-]*$/u.test(alias) ? alias : host;
-  const prefix = '@TPS:' + token + ':';
-  const checkNode = "const [major,minor]=process.versions.node.split('.').map(Number);" +
-    "if(major<22||(major===22&&minor<13))process.exit(1);require('node:sqlite')";
-  // Non-interactive SSH may skip the shell profile that normally adds Node to PATH.
-  const script = [
-    'cd ' + (directory ? shellQuote(directory) : '"$HOME"') + ' || { echo ' + prefix + 'workspace; exit 1; }',
-    'for node in node "$HOME"/.orca-remote/runtimes/node-*/bin/node "$HOME"/.local/share/nodejs/node-*/bin/node "$HOME"/.nvm/versions/node/*/bin/node; do',
-    '  if "$node" --input-type=commonjs -e ' + shellQuote(checkNode) + ' >/dev/null 2>&1; then',
-    '    exec "$node" ' + '--input-type=module -e ' + shellQuote(bootstrap),
-    '  fi',
-    'done',
-    'echo ' + prefix + 'node'
-  ].join('\n');
-  const options = ['BatchMode=yes', 'StrictHostKeyChecking=yes', 'UpdateHostKeys=no',
-    'ClearAllForwardings=yes', 'ForwardAgent=no', 'ForwardX11=no', 'PermitLocalCommand=no',
-    'ControlMaster=no', 'ControlPath=none', 'RemoteCommand=none', 'ConnectTimeout=5', 'ServerAliveInterval=15'];
-  let binary = 'ssh', env;
-  if (process.platform === 'win32') {
-    const SystemRoot = process.env.SystemRoot || 'C:\\Windows';
-    binary = path.join(SystemRoot, 'System32', 'OpenSSH', 'ssh.exe');
-    // The plugin worker can omit Windows variables OpenSSH needs even with an absolute executable path.
-    env = { ...process.env, SystemRoot, USERPROFILE: homedir(),
-      ProgramData: process.env.ProgramData || path.join(path.parse(SystemRoot).root, 'ProgramData') };
-  }
-  return spawn(binary, ['-T', ...options.flatMap(option => ['-o', option]),
-    '-o', 'HostName=' + host, '-p', String(port), '-l', username, configHost, 'sh -c ' + shellQuote(script)
-  ], { env, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
-}
+export { launchSsh } from './orca_connection.mjs';

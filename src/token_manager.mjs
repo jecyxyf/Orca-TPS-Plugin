@@ -1,20 +1,23 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bridgeOrca, createOrcaConnection, TOKENS_LEASE_MS, TOKENS_ROOT } from './orca_connection.mjs';
-import { openTokensManagerDb } from './database.mjs';
+import { bridgeOrca, createManagerLinks, createOrcaConnection, createSnapshotSender, TOKENS_LEASE_MS, TOKENS_ROOT } from './orca_connection.mjs';
+import { openRemoteDeviceCache, openTokensManagerDb } from './database.mjs';
 import { HarnessParser, normalizeComparePath, readTargetSession } from './harness_parser.mjs';
 import { calendarFor, makePersonalPacket, RETENTION_DAYS } from './personal_stats.mjs';
-import { HOUR_MS, makeLeaderboardPacket, TOKENS_LEADERBOARD, tokensIntervals } from './leaderboard_stats.mjs';
+import { HOUR_MS, makeLeaderboardPacket, TOKENS_LEADERBOARD, tokensIntervals, validInstallationId } from './leaderboard_stats.mjs';
 
 const entry = fileURLToPath(import.meta.url);
 const DAY_MS = 24 * HOUR_MS;
 const tokenPattern = /^[\w-]{43}$/;
 
-export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, scan = scanTokens, fetcher = fetch } = {}) {
-  let startupTimer, tickTimer, finished, stopped = false;
-  const connection = createOrcaConnection(root, { clock, onHello, onMessage, onUnsubscribe });
+export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, scan = scanTokens, fetcher = fetch, openSyncPeer } = {}) {
+  let startupTimer, tickTimer, finished, stopped = false, syncDue = false;
+  const remoteDevices = await openRemoteDeviceCache(root);
+  const connection = createOrcaConnection(root, { clock, onHello, onSyncHello, onMessage, onUnsubscribe });
+  const sendSnapshot = createSnapshotSender(devicePackets);
+  const links = createManagerLinks({ clock, onPacket: receiveDevicePacket, sendSnapshot, openPeer: openSyncPeer });
   let personalPacket, nextPersonalAt = 0;
-  const leaderboard = createLeaderboardReporter({ clock, fetcher, connection });
+  const leaderboard = createLeaderboardReporter({ clock, fetcher, connection, remoteDevices });
   const collection = createTokenCollection(root, {
     clock, scan, scanInterval: () => leaderboard.intervals.scanMs,
     onProgress: progress => connection.broadcast({ type: 'progress', ...progress }),
@@ -25,6 +28,7 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
     onComplete(db, publishedAt) {
       personalPacket = makePersonalPacket(db, publishedAt);
       leaderboard.update(db, publishedAt);
+      syncDue = true;
       connection.markChannelsDirty();
       if (nextPersonalAt === 0) publishPersonal();
     }
@@ -32,17 +36,67 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
   if (!await connection.listen()) return;
 
   function onHello(peer, message) {
+    peer.localClient = message.local === true;
+    peer.syncTargets = [];
     const timeZone = collection.initialize(message);
     const db = collection.db;
     leaderboard.initialize(db, message.endpoint);
     connection.reply(peer, { type: 'ready', deviceGuid: db.deviceGuid, timeZone, intervals: leaderboard.intervals });
     if (collection.ready && personalPacket) connection.reply(peer, { type: 'personal', packet: personalPacket });
     else connection.reply(peer, { type: 'progress', ...collection.progress });
+    if (peer.localClient) {
+      for (const packet of remoteDevices.personal.values()) {
+        if (packet.deviceGuid !== db.deviceGuid) connection.reply(peer, { type: 'device-personal', packet });
+      }
+    }
+  }
+
+  function onSyncHello(peer, message) {
+    if (!validInstallationId(message.deviceGuid)) return false;
+    if (!collection.db) {
+      collection.initialize({ timeZone: message.timeZone });
+      leaderboard.initialize(collection.db);
+    }
+    const { deviceGuid } = collection.db;
+    if (message.deviceGuid === deviceGuid) return false;
+    connection.reply(peer, { type: 'sync-ready', deviceGuid });
+    void sendSnapshot(peer.socket);
+    return true;
+  }
+
+  function* devicePackets() {
+    const ownDevice = collection.db.deviceGuid;
+    if (personalPacket) yield { type: 'device-personal', packet: personalPacket };
+    if (leaderboard.packet) yield { type: 'device-leaderboard', packet: leaderboard.packet };
+    for (const [device, packet] of remoteDevices.personal) {
+      if (device !== ownDevice) yield { type: 'device-personal', packet };
+    }
+    for (const [device, accounts] of remoteDevices.relays) {
+      if (device === ownDevice) continue;
+      for (const packet of accounts.values()) yield { type: 'device-leaderboard', packet };
+    }
+  }
+
+  function receiveDevicePacket(message) {
+    const ownDevice = collection.db.deviceGuid;
+    const { packet } = message;
+    if (message.type === 'device-personal' && remoteDevices.acceptPersonal(packet, ownDevice)) {
+      for (const client of connection.localClients()) connection.reply(client, message);
+      syncDue = true;
+    } else if (message.type === 'device-leaderboard' && remoteDevices.acceptLeaderboard(packet, ownDevice)) {
+      syncDue = true;
+    }
   }
 
   function onMessage(peer, message) {
-    if (message.type === 'timezone') collection.changeTimeZone(message.timeZone);
-    else leaderboard.receive(peer, message, collection.db, collection.ready);
+    if (peer.sync) receiveDevicePacket(message);
+    else if (message.type === 'sync-targets' && peer.localClient && Array.isArray(message.targets)) {
+      peer.syncTargets = message.targets.slice(0, 100);
+    } else if (message.type === 'timezone') collection.changeTimeZone(message.timeZone);
+    else {
+      leaderboard.receive(peer, message, collection.db, collection.ready, collection.publishedAt);
+      if (message.type === 'credential') syncDue = true;
+    }
   }
 
   function onUnsubscribe() {
@@ -65,6 +119,12 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
     if (!connection.hasPeers) return void stop();
     leaderboard.configure(db);
     collection.refresh();
+    links.tick(connection.localClients().flatMap(peer => peer.syncTargets), { deviceGuid: db.deviceGuid, timeZone: db.calendar.timeZone });
+    if (syncDue) {
+      syncDue = false;
+      links.publish();
+      for (const stream of connection.syncStreams()) void sendSnapshot(stream);
+    }
     if (!collection.ready) return;
     publishPersonal();
     connection.publishChannels(db.deviceGuid, collection.readChannel, () => collection.ready);
@@ -77,8 +137,9 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
     clearTimeout(startupTimer);
     clearInterval(tickTimer);
     leaderboard.close();
+    links.close();
     connection.disconnect();
-    try { await collection.close(); }
+    try { await Promise.all([collection.close(), remoteDevices.flush()]); }
     finally {
       await connection.close();
       finished();
@@ -215,8 +276,7 @@ function safeOrigin(value) {
   return null;
 }
 
-function createLeaderboardReporter({ clock, fetcher, connection }) {
-  const relays = new Map();
+function createLeaderboardReporter({ clock, fetcher, connection, remoteDevices }) {
   const abort = new AbortController();
   let credential, endpoint, packet, uploadState;
   let intervals = tokensIntervals();
@@ -231,21 +291,20 @@ function createLeaderboardReporter({ clock, fetcher, connection }) {
 
   function clearCredential() {
     credential = packet = uploadState = undefined;
-    relays.clear();
   }
 
-  function setCredential(peer, message, db, ready) {
+  function setCredential(peer, message, db, ready, publishedAt) {
     const origin = safeOrigin(message.endpoint);
     const id = message.accountId;
     if (origin && Number.isSafeInteger(id) && id > 0 && tokenPattern.test(message.token ?? '')) {
       peer.accountId = id;
       if (credential?.token !== message.token) {
-        if (db.setting('githubAccountId') !== id) relays.clear();
         db.saveSetting('githubAccountId', id);
         credential = { accountId: id, token: message.token, origin };
         if (endpoint !== origin) nextConfig = 0;
         endpoint = origin;
-        packet = uploadState = undefined;
+        packet = ready ? makeLeaderboardPacket(db, id, publishedAt) : undefined;
+        uploadState = undefined;
         nextUpload = 0;
       }
       if (ready && packet?.accountId === id) connection.reply(peer, { type: 'leaderboard', packet });
@@ -257,15 +316,9 @@ function createLeaderboardReporter({ clock, fetcher, connection }) {
     }
   }
 
-  function receive(peer, message, db, ready) {
+  function receive(peer, message, db, ready, publishedAt) {
     if (message.type === 'credential') {
-      setCredential(peer, message, db, ready);
-    } else if (message.type === 'relay' && credential && message.packet?.accountId === credential.accountId) {
-      const relayed = message.packet;
-      if (relayed.deviceGuid !== db.deviceGuid && typeof relayed.deviceGuid === 'string' &&
-          Number.isSafeInteger(relayed.publishedAt) && (relays.get(relayed.deviceGuid)?.publishedAt ?? -1) < relayed.publishedAt) {
-        relays.set(relayed.deviceGuid, relayed);
-      }
+      setCredential(peer, message, db, ready, publishedAt);
     } else if (message.type === 'upload') {
       nextUpload = 0;
     }
@@ -296,7 +349,11 @@ function createLeaderboardReporter({ clock, fetcher, connection }) {
     uploading = true;
     uploadState = { type: 'upload-state', accountId: active.accountId, nextAt: nextUpload, pending: true };
     connection.broadcast(uploadState, active.accountId);
-    const packets = [packet, ...[...relays.values()].filter(relayed => relayed.accountId === active.accountId)];
+    const packets = [packet];
+    for (const [device, accounts] of remoteDevices.relays) {
+      const other = accounts.get(active.accountId);
+      if (device !== db.deviceGuid && other) packets.push(other);
+    }
     void Promise.all(packets.map(item => fetcher(active.origin + TOKENS_LEADERBOARD + '/packets', {
       method: 'POST', redirect: 'error', signal: requestSignal(),
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + active.token }, body: JSON.stringify(item)
@@ -312,6 +369,7 @@ function createLeaderboardReporter({ clock, fetcher, connection }) {
   return {
     initialize, receive, configure, upload,
     get intervals() { return intervals; },
+    get packet() { return packet; },
     update(db, publishedAt) { packet = credential ? makeLeaderboardPacket(db, credential.accountId, publishedAt) : null; },
     clearPacket() { packet = undefined; },
     clearUnusedCredential() {

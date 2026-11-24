@@ -11,7 +11,7 @@ import { setTimeout } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { calendarFor } from '../src/personal_stats.mjs';
-import { openTokensManagerDb } from '../src/database.mjs';
+import { openTokensManagerDb, readRemoteDeviceCache } from '../src/database.mjs';
 import { makePersonalPacket, mergePersonalPackets } from '../src/personal_stats.mjs';
 import { TOKENS_DEFAULT_INTERVALS } from '../src/leaderboard_stats.mjs';
 import { createPacketReceiver, createTokensRankings, validatePacket } from '../server/tokens-manager-rankings.mjs';
@@ -56,6 +56,33 @@ test('the manager installation keeps exactly six modules and preserves data in t
   await writeFile(path.join(bin, 'old-copy.mjs'), 'stale');
   await installTokensManagerBundle(root, bundle);
   assert.deepEqual((await readdir(bin)).sort(), expected);
+});
+
+test('moves remote statistics into a device directory and restores the latest packet for each account', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tps-remote-cache-'));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const deviceGuid = randomUUID();
+  const directory = path.join(root, 'remote_device', deviceGuid);
+  await mkdir(directory, { recursive: true });
+  const personal = { deviceGuid, publishedAt: at, timeZone: 'UTC', days: [], hours: [], maxima: [] };
+  const first = { deviceGuid, accountId: 11, publishedAt: at };
+  const second = { deviceGuid, accountId: 22, publishedAt: at + hour };
+  const write = (file, data) => writeFile(file, JSON.stringify(data));
+  const legacyNames = [`personal-${deviceGuid}.json`, `leaderboard-11-${deviceGuid}.json`, `leaderboard-22-${deviceGuid}.json`];
+  await Promise.all([
+    write(path.join(directory, 'personal.json'), personal),
+    write(path.join(directory, 'leaderboard.json'), { 11: first }),
+    write(path.join(root, legacyNames[0]), { ...personal, publishedAt: at - hour }),
+    write(path.join(root, legacyNames[1]), { ...first, publishedAt: at - hour }),
+    write(path.join(root, legacyNames[2]), second)
+  ]);
+
+  const loaded = await readRemoteDeviceCache(root);
+  assert.deepEqual(loaded.personal.get(deviceGuid), personal);
+  assert.deepEqual(Object.fromEntries(loaded.relays.get(deviceGuid)), { 11: first, 22: second });
+  assert.deepEqual((await readdir(directory)).sort(), ['leaderboard.json', 'personal.json']);
+  for (const name of legacyNames) await assert.rejects(access(path.join(root, name)), { code: 'ENOENT' });
+  assert.deepEqual(await readRemoteDeviceCache(root), loaded);
 });
 
 test('commits details, rollups and scan progress together, and retains each for its configured period', async t => {
@@ -398,6 +425,131 @@ test('uses one process, waits for the first scan and keeps its lease across a sh
   allowClosingScan();
   await processJob;
   assert.equal(stopped, true);
+});
+
+test('three managers exchange device statistics across two links and restore them after the hub leaves', { timeout: 25_000 }, async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'tps-sync-'));
+  const devices = await Promise.all(['hub', 'a', 'b'].map(async name => {
+    const root = path.join(directory, name);
+    const id = randomUUID();
+    await mkdir(root);
+    await writeFile(path.join(root, 'device-guid'), id);
+    return { name, root, id, uploads: [] };
+  }));
+  const [hub, a, b] = devices;
+  const bridges = new Set(), jobs = new Set(), dials = [];
+  let clock = at;
+  t.after(async () => {
+    for (const child of bridges) {
+      if (child.stdin.writable) child.stdin.end(JSON.stringify({ type: 'unsubscribe' }) + '\n');
+    }
+    clock += 60_000;
+    await Promise.all(jobs);
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  function bridge(device) {
+    const child = spawn(process.execPath, ['src/token_manager.mjs', '--connect'], {
+      stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, ORCA_TPS_TOKENS_ROOT: device.root }
+    });
+    bridges.add(child);
+    child.stdin.on('error', () => {});
+    child.once('exit', () => bridges.delete(child));
+    return child;
+  }
+
+  function start(device) {
+    const job = runTokensManager(device.root, {
+      clock: () => clock,
+      openSyncPeer(target) {
+        assert.equal(device, hub);
+        dials.push(target.deviceGuid);
+        return bridge(devices.find(candidate => candidate.id === target.deviceGuid));
+      },
+      async scan(_root, db, { at: scannedAt }) {
+        db.commitSource(device.name, 'first', [entry(device.name, 0)], scannedAt);
+        db.finishScan(scannedAt);
+      },
+      async fetcher(url, options) {
+        if (!url.endsWith('/config')) device.uploads.push(JSON.parse(options.body));
+        return Response.json({});
+      }
+    });
+    jobs.add(job);
+    return job;
+  }
+
+  function client(device) {
+    const child = bridge(device);
+    const events = [];
+    createInterface({ input: child.stdout }).on('line', line => events.push(JSON.parse(line)));
+    return {
+      send: value => child.stdin.write(JSON.stringify(value) + '\n'),
+      close: () => child.stdin.end(JSON.stringify({ type: 'unsubscribe' }) + '\n'),
+      async event(type, check = () => true) {
+        for (let i = 0; i < 300; i++) {
+          const message = events.find(event => event.type === type && check(event));
+          if (message) return message;
+          await setTimeout(20);
+        }
+        assert.fail('No ' + type + ' event on ' + device.name);
+      }
+    };
+  }
+
+  const endpoint = 'http://localhost';
+  const credential = { type: 'credential', endpoint, accountId: 11, token: randomBytes(32).toString('base64url') };
+  const [hubJob, aJob] = devices.map(start);
+  const [local, left, right] = devices.map(client);
+  for (const ui of [local, left, right]) ui.send({ type: 'hello', timeZone: 'UTC', local: true, endpoint });
+  await Promise.all([local, left, right].map(ui => ui.event('ready')));
+  for (const ui of [local, left, right]) ui.send(credential);
+  local.send({ type: 'sync-targets', targets: [a, b].map(device => ({ deviceGuid: device.id, host: device.name })) });
+
+  const uses = id => event => event.packet.deviceGuid === id;
+  const { packet: fromB } = await left.event('device-personal', uses(b.id));
+  const { packet: fromA } = await right.event('device-personal', uses(a.id));
+  await local.event('device-personal', uses(a.id));
+  await local.event('device-personal', uses(b.id));
+  assert.deepEqual(new Set(dials), new Set([a.id, b.id]));
+  assert.equal(fromA.publishedAt, (await left.event('personal')).packet.publishedAt);
+  assert.equal(fromB.publishedAt, (await right.event('personal')).packet.publishedAt);
+
+  const cacheFile = path.join(a.root, 'remote_device', b.id, 'leaderboard.json');
+  let saved;
+  for (let i = 0; i < 200 && !saved; i++) {
+    saved = await readFile(cacheFile, 'utf8').then(JSON.parse, () => null);
+    if (!saved) await setTimeout(20);
+  }
+  assert.equal(saved?.[11]?.deviceGuid, b.id);
+  assert.equal(saved[11].publishedAt, fromB.publishedAt);
+  const injected = client(a);
+  injected.send({ type: 'sync-hello', deviceGuid: b.id, timeZone: 'UTC' });
+  await injected.event('sync-ready');
+  injected.send({ type: 'device-personal', packet: { ...fromB, publishedAt: fromB.publishedAt - 1 } });
+  injected.send({ type: 'device-personal', packet: { ...fromA, publishedAt: fromA.publishedAt + 1 } });
+  injected.send({ type: 'heartbeat' });
+  await injected.event('heartbeat');
+  injected.close();
+
+  local.close();
+  await hubJob;
+  left.close();
+  await aJob;
+  const cache = await readRemoteDeviceCache(a.root);
+  assert.deepEqual(new Set(cache.personal.keys()), new Set([hub.id, b.id]));
+  assert.equal(cache.personal.get(b.id).publishedAt, fromB.publishedAt);
+  assert.deepEqual(new Set(cache.relays.keys()), new Set([hub.id, b.id]));
+
+  start(a);
+  const home = client(a);
+  home.send({ type: 'hello', timeZone: 'UTC', local: true, endpoint });
+  assert.equal((await home.event('device-personal', uses(b.id))).packet.publishedAt, fromB.publishedAt);
+  home.send(credential);
+  await home.event('uploaded');
+  assert.ok(a.uploads.some(packet => packet.deviceGuid === b.id && packet.publishedAt === fromB.publishedAt));
+  home.close();
+  right.close();
 });
 
 test('scans real Copilot, WorkBuddy and Hermes fixtures and ignores a broken log entry', async t => {

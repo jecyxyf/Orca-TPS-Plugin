@@ -43,7 +43,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - Review usage and requests for today, the last 7 or 30 days, this calendar year, or the past 365 days. Today's summary also shows the highest generation speed for a single request.
 - Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
 - The Tokens Manager fills in up to 370 days from the available logs, keeping 32 days of request details and 370 days of daily and hourly totals. The heatmap covers 365 days.
-- Personal Stats combines local and SSH hosts without signing in. It keeps the last statistics for an offline host. Set the statistics time zone in the TPS Plugin settings in Orca.
+- Personal Stats combines local and SSH hosts without signing in. Connected Tokens Managers exchange statistics over SSH, so a shared remote host can carry the last statistics between computers. Set the statistics time zone in the TPS Plugin settings in Orca.
 
 <p align="center">
   <a href="./assets/readme/en/personal-stats.png" title="View full-size screenshot">

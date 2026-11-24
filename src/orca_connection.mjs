@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { once } from 'node:events';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as delay } from 'node:timers/promises';
+import { validInstallationId } from './leaderboard_stats.mjs';
 
 export const TOKEN_MANAGER_ENTRY = 'token_manager.mjs';
 export const TOKENS_ROOT = process.env.ORCA_TPS_TOKENS_ROOT || path.join(homedir(), '.orca', 'tpsplugin');
@@ -31,7 +33,7 @@ function localSecret(root) {
   return secret;
 }
 
-export function createOrcaConnection(root, { clock, onHello, onMessage, onUnsubscribe }) {
+export function createOrcaConnection(root, { clock, onHello, onSyncHello, onMessage, onUnsubscribe }) {
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const secret = localSecret(root);
   const peers = new Map();
@@ -46,7 +48,7 @@ export function createOrcaConnection(root, { clock, onHello, onMessage, onUnsubs
     const reader = createInterface({ input: socket });
     reader.on('line', line => {
       if (closing) return;
-      if (line.length > 4 * 1024 * 1024) return socket.destroy();
+      if (line.length > (peer.sync ? 32 : 4) * 1024 * 1024) return socket.destroy();
       try {
         const message = JSON.parse(line);
         if (!peer.authenticated) {
@@ -72,6 +74,16 @@ export function createOrcaConnection(root, { clock, onHello, onMessage, onUnsubs
       return;
     }
     peer.expires = clock() + TOKENS_LEASE_MS;
+    if (type === 'sync-hello' && !peer.subscribed) {
+      if (!onSyncHello?.(peer, message)) return peer.socket.destroy();
+      peer.subscribed = peer.sync = true;
+      return;
+    }
+    if (peer.sync) {
+      if (type === 'heartbeat') return reply(peer, { type: 'heartbeat' });
+      if (type === 'device-personal' || type === 'device-leaderboard') onMessage(peer, message);
+      return;
+    }
     if (type === 'hello') {
       onHello(peer, message);
       peer.subscribed = true;
@@ -99,7 +111,7 @@ export function createOrcaConnection(root, { clock, onHello, onMessage, onUnsubs
 
   function broadcast(message, accountId) {
     for (const peer of peers.values()) {
-      if (peer.subscribed && (accountId === undefined || peer.accountId === accountId)) reply(peer, message);
+      if (peer.subscribed && !peer.sync && (accountId === undefined || peer.accountId === accountId)) reply(peer, message);
     }
   }
 
@@ -131,6 +143,12 @@ export function createOrcaConnection(root, { clock, onHello, onMessage, onUnsubs
       return server.listening;
     },
     reply, broadcast, publishChannels,
+    localClients() {
+      return [...peers.values()].filter(peer => peer.socket && peer.subscribed && peer.localClient);
+    },
+    syncStreams() {
+      return [...peers.values()].filter(peer => peer.sync && peer.socket).map(peer => peer.socket);
+    },
     get hasPeers() { return peers.size > 0; },
     hasAccount(accountId) {
       for (const peer of peers.values()) if (peer.accountId === accountId) return true;
@@ -186,4 +204,160 @@ export async function bridgeOrca(root, entry) {
   process.stdin.pipe(socket);
   await new Promise(resolve => socket.once('close', resolve));
   process.stdin.destroy();
+}
+
+const shellQuote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+
+export function launchSsh(destination, token, bootstrap) {
+  const { host, port, username, alias, directory } = destination;
+  if (typeof host !== 'string' || !/^[a-z\d:][a-z\d.:-]*$/i.test(host) ||
+    typeof username !== 'string' || !/^[a-z\d_][a-z\d_.-]*$/i.test(username) ||
+    !Number.isInteger(port) || port < 1 || port > 65535) throw new Error('ssh');
+  const configHost = typeof alias === 'string' && /^[\p{L}\p{N}_][\p{L}\p{N}_.-]*$/u.test(alias) ? alias : host;
+  const prefix = '@TPS:' + token + ':';
+  const checkNode = "const [major,minor]=process.versions.node.split('.').map(Number);" +
+    "if(major<22||(major===22&&minor<13))process.exit(1);require('node:sqlite')";
+  // Non-interactive SSH may skip the shell profile that normally adds Node to PATH.
+  const script = [
+    'cd ' + (directory ? shellQuote(directory) : '"$HOME"') + ' || { echo ' + prefix + 'workspace; exit 1; }',
+    'for node in node "$HOME"/.orca-remote/runtimes/node-*/bin/node "$HOME"/.local/share/nodejs/node-*/bin/node "$HOME"/.nvm/versions/node/*/bin/node; do',
+    '  if "$node" --input-type=commonjs -e ' + shellQuote(checkNode) + ' >/dev/null 2>&1; then',
+    '    exec "$node" ' + '--input-type=module -e ' + shellQuote(bootstrap),
+    '  fi',
+    'done',
+    'echo ' + prefix + 'node'
+  ].join('\n');
+  const options = ['BatchMode=yes', 'StrictHostKeyChecking=yes', 'UpdateHostKeys=no',
+    'ClearAllForwardings=yes', 'ForwardAgent=no', 'ForwardX11=no', 'PermitLocalCommand=no',
+    'ControlMaster=no', 'ControlPath=none', 'RemoteCommand=none', 'ConnectTimeout=5', 'ServerAliveInterval=15'];
+  let binary = 'ssh', env;
+  if (process.platform === 'win32') {
+    const SystemRoot = process.env.SystemRoot || 'C:\\Windows';
+    binary = path.join(SystemRoot, 'System32', 'OpenSSH', 'ssh.exe');
+    // The plugin worker can omit Windows variables OpenSSH needs even with an absolute executable path.
+    env = { ...process.env, SystemRoot, USERPROFILE: homedir(),
+      ProgramData: process.env.ProgramData || path.join(path.parse(SystemRoot).root, 'ProgramData') };
+  }
+  return spawn(binary, ['-T', ...options.flatMap(option => ['-o', option]),
+    '-o', 'HostName=' + host, '-p', String(port), '-l', username, configHost, 'sh -c ' + shellQuote(script)
+  ], { env, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+}
+
+async function runInstalledBridge() {
+  const { homedir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
+  const root = join(homedir(), '.orca', 'tpsplugin');
+  const { bridgeOrca, TOKEN_MANAGER_ENTRY } = await import(pathToFileURL(join(root, 'bin', 'orca_connection.mjs')).href);
+  await bridgeOrca(root, join(root, 'bin', TOKEN_MANAGER_ENTRY));
+}
+
+function openSyncPeer(destination) {
+  return launchSsh(destination, randomBytes(8).toString('hex'), `await (${runInstalledBridge})();`);
+}
+
+// A slow link can finish its current snapshot before the next round sends another.
+export function createSnapshotSender(packets) {
+  const sending = new WeakMap();
+  return async function sendSnapshot(stream) {
+    if (!stream?.writable) return;
+    const active = sending.get(stream);
+    if (active) {
+      active.again = true;
+      return;
+    }
+    const state = { again: false };
+    sending.set(stream, state);
+    try {
+      do {
+        state.again = false;
+        for (const message of packets()) {
+          if (!stream.writable) return;
+          if (!stream.write(tokensMessage(message))) {
+            await once(stream, 'drain', { signal: AbortSignal.timeout(TOKENS_LEASE_MS) });
+          }
+        }
+      } while (state.again);
+    } catch {}
+    finally { sending.delete(stream); }
+  };
+}
+
+export function createManagerLinks({ clock, onPacket, sendSnapshot, openPeer = openSyncPeer }) {
+  const links = new Map();
+  const retries = new Map();
+
+  function closeLink(link, graceful = false) {
+    if (links.get(link.key) !== link) return;
+    links.delete(link.key);
+    if (link.child.exitCode !== null) return;
+    if (graceful && link.child.stdin.writable) link.child.stdin.end(tokensMessage({ type: 'unsubscribe' }));
+    else link.child.kill();
+  }
+
+  function connectPeer(key, target, hello) {
+    let child;
+    try { child = openPeer(target); }
+    catch { retries.set(key, clock() + TOKENS_RETRY_MS); return; }
+    const at = clock();
+    const link = { key, child, ready: false, lastSeen: at, nextHeartbeat: at + TOKENS_HEARTBEAT_MS };
+    links.set(key, link);
+    const disconnect = () => {
+      if (links.get(key) !== link) return;
+      closeLink(link);
+      retries.set(key, clock() + TOKENS_RETRY_MS);
+    };
+    child.stdin.on('error', disconnect);
+    child.once('error', disconnect);
+    child.once('exit', disconnect);
+    const lines = createInterface({ input: child.stdout });
+    lines.on('line', line => {
+      if (links.get(key) !== link || line.length > 32 * 1024 * 1024) return;
+      try {
+        const message = JSON.parse(line);
+        if (!link.ready) {
+          if (message.type !== 'sync-ready') return;
+          if (message.deviceGuid !== target.deviceGuid) return disconnect();
+          link.ready = true;
+          void sendSnapshot(child.stdin);
+        } else if (message.type === 'device-personal' || message.type === 'device-leaderboard') onPacket(message);
+        link.lastSeen = clock();
+      } catch {}
+    });
+    child.stdin.write(tokensMessage({ type: 'sync-hello', ...hello }));
+  }
+
+  return {
+    tick(targets, hello) {
+      const desired = new Map();
+      const devices = new Set();
+      for (const target of targets) {
+        if (!validInstallationId(target?.deviceGuid) || target.deviceGuid === hello.deviceGuid ||
+            devices.has(target.deviceGuid)) continue;
+        devices.add(target.deviceGuid);
+        desired.set(JSON.stringify([target.deviceGuid, target.host, target.port, target.username, target.alias]), target);
+      }
+      for (const [key, link] of links) if (!desired.has(key)) closeLink(link, true);
+      for (const key of retries.keys()) if (!desired.has(key)) retries.delete(key);
+      const now = clock();
+      for (const [key, target] of desired) {
+        const link = links.get(key);
+        if (!link) {
+          if ((retries.get(key) ?? 0) <= now) connectPeer(key, target, hello);
+        } else if (now - link.lastSeen >= TOKENS_LEASE_MS) {
+          closeLink(link);
+          retries.set(key, now + TOKENS_RETRY_MS);
+        } else if (now >= link.nextHeartbeat && link.child.stdin.writable) {
+          link.nextHeartbeat = now + TOKENS_HEARTBEAT_MS;
+          link.child.stdin.write(tokensMessage({ type: 'heartbeat' }));
+        }
+      }
+    },
+    publish() {
+      for (const link of links.values()) if (link.ready) void sendSnapshot(link.child.stdin);
+    },
+    close() {
+      for (const link of links.values()) closeLink(link, true);
+    }
+  };
 }

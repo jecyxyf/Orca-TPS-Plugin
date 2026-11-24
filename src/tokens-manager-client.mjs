@@ -1,10 +1,11 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { publicChannelId } from './controller.mjs';
+import { keepLatest, validPersonal } from './database.mjs';
 import { tokensIntervals, validInstallationId } from './leaderboard_stats.mjs';
 import { createRuntimeLookup, launchSsh } from './remote-channel.mjs';
 import { TOKEN_MANAGER_ENTRY, TOKENS_HEARTBEAT_MS, TOKENS_LEASE_MS, TOKENS_RETRY_MS, TOKENS_ROOT, tokensMessage } from './orca_connection.mjs';
@@ -15,7 +16,6 @@ const timezoneKey = 'tokens-manager:timezone';
 const managerFiles = [
   'database.mjs', 'harness_parser.mjs', 'leaderboard_stats.mjs', 'orca_connection.mjs', 'personal_stats.mjs', TOKEN_MANAGER_ENTRY
 ];
-const json = async file => JSON.parse(await readFile(file, 'utf8'));
 
 async function installedManagerVersion(root, names) {
   const { lstat, readFile, readdir } = await import('node:fs/promises');
@@ -113,21 +113,11 @@ function localBridge(root) {
   });
 }
 
-function savePacket(root, name, packet) {
-  const next = path.join(root, name + '.' + randomBytes(6).toString('hex') + '.next');
-  return writeFile(next, JSON.stringify(packet), { mode: 0o600 }).then(() => rename(next, path.join(root, name)));
-}
-
-const validPersonal = packet => packet && validInstallationId(packet.deviceGuid) &&
-  typeof packet.timeZone === 'string' && Number.isSafeInteger(packet.publishedAt) &&
-  [packet.days, packet.hours, packet.maxima].every(Array.isArray);
-
 export async function createTokensManagerClient(orca, {
   endpoint, deviceGuid, initialZone, root = TOKENS_ROOT, resolveRuntime = createRuntimeLookup(orca), onChange = () => {}, onUploaded = () => {}
 } = {}) {
   const controller = new AbortController();
-  const personal = new Map(), relays = new Map(), connections = new Map();
-  const writes = new Map(), hostTargets = new Map([[localHost, []]]);
+  const personal = new Map(), connections = new Map(), hostTargets = new Map([[localHost, []]]);
   const storedZone = await orca.storage.get(timezoneKey).catch(() => undefined);
   let timeZone = calendarFor(storedZone || undefined).timeZone, credentials, stopped = false;
   if (initialZone !== undefined) {
@@ -135,24 +125,9 @@ export async function createTokensManagerClient(orca, {
   }
   let intervals = tokensIntervals(), progress = null, lastUploadedAt = null, uploadStatus;
   const bundle = readTokensManagerBundle();
-  await mkdir(root, { recursive: true, mode: 0o700 });
-  for (const name of await readdir(root)) {
-    if (!/^personal-[a-f0-9-]+\.json$|^leaderboard-\d+-[a-f0-9-]+\.json$/.test(name)) continue;
-    const saved = await json(path.join(root, name)).catch(() => null);
-    if (name.startsWith('personal-') && validPersonal(saved)) personal.set(saved.deviceGuid, saved);
-    if (name.startsWith('leaderboard-') && validInstallationId(saved?.deviceGuid)) {
-      relays.set(`${saved.accountId}/${saved.deviceGuid}`, saved);
-    }
-  }
 
   const summary = () => mergePersonalPackets(personal.values(), timeZone) ?? (progress
     ? { updatedAt: null, timeZone, progress } : null);
-
-  function persist(name, packet) {
-    const pending = (writes.get(name) ?? Promise.resolve()).then(() => savePacket(root, name, packet))
-      .catch(() => {}).finally(() => { if (writes.get(name) === pending) writes.delete(name); });
-    writes.set(name, pending);
-  }
 
   function send(connection, message) {
     if (!connection.child?.stdin.destroyed && connection.child?.stdin.writable) {
@@ -174,11 +149,16 @@ export async function createTokensManagerClient(orca, {
     if (connection.ready && credentials) send(connection, { type: 'credential', endpoint, ...credentials });
   }
 
-  function sendRelays(connection) {
-    if (!connection.ready || connection.host !== localHost || !credentials?.accountId) return;
-    for (const packet of relays.values()) {
-      if (packet.accountId === credentials.accountId) send(connection, { type: 'relay', packet });
-    }
+  function sendSyncTargets() {
+    const local = connections.get(localHost);
+    if (!local?.ready) return;
+    const targets = [...connections.values()].flatMap(connection =>
+      connection.host !== localHost && connection.ready && connection.destination
+        ? [{ ...connection.destination, deviceGuid: connection.deviceGuid }] : []);
+    const signature = JSON.stringify(targets);
+    if (signature === local.syncSignature) return;
+    local.syncSignature = signature;
+    send(local, { type: 'sync-targets', targets });
   }
 
   function handle(connection, event, payload) {
@@ -198,7 +178,7 @@ export async function createTokensManagerClient(orca, {
         intervals = tokensIntervals(event.intervals, intervals);
         sendChannels(connection);
         sendCredential(connection);
-        sendRelays(connection);
+        sendSyncTargets();
         break;
       case 'intervals':
         intervals = tokensIntervals(event.intervals, intervals);
@@ -207,12 +187,12 @@ export async function createTokensManagerClient(orca, {
         progress = { done: event.done, total: event.total };
         if (!summary()?.updatedAt) onChange(summary());
         break;
-      case 'personal': {
+      case 'personal':
+      case 'device-personal': {
         const packet = event.packet;
-        if (!validPersonal(packet) || packet.deviceGuid !== connection.deviceGuid || packet.timeZone !== timeZone ||
-            (personal.get(packet.deviceGuid)?.publishedAt ?? -1) >= packet.publishedAt) return;
-        personal.set(packet.deviceGuid, packet);
-        if (connection.host !== localHost) persist(`personal-${packet.deviceGuid}.json`, packet);
+        if (connection.host !== localHost || !validPersonal(packet) ||
+            (event.type === 'personal') !== (packet.deviceGuid === connection.deviceGuid) ||
+            !keepLatest(personal, packet.deviceGuid, packet)) return;
         onChange(summary());
         break;
       }
@@ -221,18 +201,6 @@ export async function createTokensManagerClient(orca, {
           connection.channels.set(event.channelId, event.result);
         }
         break;
-      case 'leaderboard': {
-        const packet = event.packet;
-        if (connection.host === localHost || !packet || !credentials?.accountId || packet.accountId !== credentials.accountId ||
-            packet.deviceGuid !== connection.deviceGuid || !Number.isSafeInteger(packet.publishedAt)) return;
-        const key = `${packet.accountId}/${packet.deviceGuid}`;
-        if ((relays.get(key)?.publishedAt ?? -1) >= packet.publishedAt) return;
-        relays.set(key, packet);
-        persist(`leaderboard-${packet.accountId}-${packet.deviceGuid}.json`, packet);
-        const local = connections.get(localHost);
-        if (local?.ready) send(local, { type: 'relay', packet });
-        break;
-      }
       case 'uploaded':
         if (connection.host === localHost && event.accountId === credentials?.accountId) {
           lastUploadedAt = event.at;
@@ -257,7 +225,9 @@ export async function createTokensManagerClient(orca, {
       if (!target || !orca.grantedCapabilities?.includes('workspace:read')) throw new Error('Remote project unavailable');
       const destination = await resolveRuntime(target, AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]));
       if (stopped || connections.get(connection.host) !== connection) return;
-      child = launchSsh({ ...destination, directory: undefined }, randomBytes(8).toString('hex'), tokensManagerBootstrap);
+      const { host, port, username, alias } = destination;
+      connection.destination = { host, port, username, alias };
+      child = launchSsh(connection.destination, randomBytes(8).toString('hex'), tokensManagerBootstrap);
     }
     connection.child = child;
     connection.lastSeen = Date.now();
@@ -268,12 +238,13 @@ export async function createTokensManagerClient(orca, {
     reader.on('line', line => {
       try { handle(connection, JSON.parse(line), payload); } catch {}
     });
-    if (connection.host === localHost) send(connection, { type: 'hello', endpoint, timeZone, deviceGuid });
+    if (connection.host === localHost) send(connection, { type: 'hello', endpoint, timeZone, deviceGuid, local: true });
   }
 
   function disconnect(connection) {
     if (connections.get(connection.host) !== connection) return;
     connections.delete(connection.host);
+    sendSyncTargets();
     if (connection.child?.exitCode === null) connection.child.kill();
     if (!stopped && hostTargets.has(connection.host)) {
       const retry = { host: connection.host, retryAt: Date.now() + TOKENS_RETRY_MS };
@@ -306,6 +277,7 @@ export async function createTokensManagerClient(orca, {
     if (connection.ready) send(connection, { type: 'unsubscribe' });
     connection.child?.stdin.end();
     connections.delete(connection.host);
+    if (!stopped) sendSyncTargets();
   }
 
   function setTargets(targets) {
@@ -338,8 +310,6 @@ export async function createTokensManagerClient(orca, {
       }
       credentials = value;
       for (const connection of connections.values()) sendCredential(connection);
-      const local = connections.get(localHost);
-      if (local) sendRelays(local);
     },
     upload() {
       const local = connections.get(localHost);
@@ -360,7 +330,6 @@ export async function createTokensManagerClient(orca, {
       clearInterval(timer);
       controller.abort();
       for (const connection of connections.values()) remove(connection);
-      await Promise.all(writes.values());
     }
   };
 }
