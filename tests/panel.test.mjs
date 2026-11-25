@@ -649,6 +649,10 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(html, /root\.setProperty\('--ink', value\)[\s\S]*?root\.setProperty\('--purple', value\)[\s\S]*?root\.setProperty\('--muted',[\s\S]*?root\.setProperty\('--tab-unselected', value\)/);
   assert.match(html, /root\.setProperty\('--blue', value\)[\s\S]*?root\.setProperty\('--tab-selected', value\)/);
   assert.match(html, /setProperty\('--icon-color', value\)/);
+  assert.equal(css.get('#current-scroll')['scrollbar-gutter'], 'stable');
+  assert.equal(css.get('#current-scroll')['padding-inline-end'], '6px');
+  assert.equal(css.get('.records')['justify-items'], 'center');
+  assert.equal(css.get('.record-card').width, '95%');
   assert.match(css.get('.record-card').background, /--record-card-bg/);
   assert.match(css.get('.record-card').background, /--record-card-opacity/);
   assert.equal(css.get('.settings-color-row')['justify-content'], 'flex-start');
