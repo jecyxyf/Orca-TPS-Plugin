@@ -820,15 +820,12 @@
     .war-meta-item { display: inline-flex; align-items: center; gap: 3px; min-width: 0; white-space: nowrap; }
     .war-meta-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .war-meta-item svg { width: 12px; height: 12px; flex: none; color: var(--icon-color, currentColor); }
-    .war-meta-harness {
-      display: inline-grid; place-items: center; flex: none;
-      width: 15px; height: 15px; color: var(--icon-color, var(--ink));
-    }
-    .war-meta-harness svg { width: 14px; height: 14px; display: block; }
     .war-empty { margin: 10px 2px 2px; color: var(--muted); font-size: 12px; text-align: center; }
     .war-empty[hidden] { display: none; }
     .rank-index { flex-shrink: 0; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .rank-tps { flex-shrink: 0; padding: 3px 7px; border-radius: 10px; color: var(--speed); background: color-mix(in srgb, var(--speed-bg) var(--record-card-opacity, 100%), transparent); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rank-tps { flex-shrink: 0; color: var(--speed); background: transparent; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rank-tps small { margin-inline-start: 2px; color: var(--muted); font-size: 10px; font-weight: 600; }
+    #speed-rows .war-meta-item:first-child { min-width: 5.2em; }
     #speed .war-fill { background: var(--speed); }
     .heat { position: relative; grid-template-rows: minmax(0, 1fr); }
     .heat-scroll { direction: ltr; margin-top: 8px; padding-bottom: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
@@ -880,6 +877,7 @@
       .war-stat { gap: 4px; }
       .war-value { font-size: 14px; }
       #war-rows .war-meta { grid-template-columns: 4.6em 5.6em 5.6em minmax(0, 1fr); gap: 2px 6px; }
+      #speed-rows .war-meta-item:first-child { min-width: 4.6em; }
       .ladder-total { padding-inline: 6px; font-size: 12px; }
       .ladder-speed-row .ladder-total { padding-inline: 4px; font-size: 11px; }
       .settings-sheet { padding: 12px; }
@@ -2079,7 +2077,7 @@
       function harnessBadge(provider, size = 18) {
         const label = AGENT_LABELS[provider] ?? String(provider || 'agent').slice(0, 40);
         const badge = document.createElement('span');
-        badge.className = size >= 18 ? 'war-agent-icon' : 'war-meta-harness';
+        badge.className = 'war-agent-icon';
         badge.title = label;
         badge.setAttribute('role', 'img');
         badge.setAttribute('aria-label', label);
@@ -2199,8 +2197,18 @@
         model.title = entry.model;
         const value = document.createElement('span');
         value.className = 'rank-tps';
-        value.textContent = `${speedText(entry.tokensPerSecond)} tokens/s`;
-        head.append(rank, model, value);
+        const unit = document.createElement('small');
+        unit.textContent = 'tokens/s';
+        value.append(speedText(entry.tokensPerSecond), unit);
+        head.append(rank);
+        const seenIcons = new Set();
+        for (const provider of entry.providers ?? []) {
+          const iconId = harnessIconId(provider);
+          if (seenIcons.has(iconId)) continue;
+          seenIcons.add(iconId);
+          head.append(harnessBadge(provider, 18));
+        }
+        head.append(model, value);
         const track = document.createElement('div');
         track.className = 'war-track';
         const fill = document.createElement('div');
@@ -2210,13 +2218,6 @@
         const meta = document.createElement('div');
         meta.className = 'war-meta';
         meta.append(warMetaMetric('requests', formatCount(entry.samples), t('requests-counted', formatCount(entry.samples))));
-        const seenIcons = new Set();
-        for (const provider of entry.providers ?? []) {
-          const iconId = harnessIconId(provider);
-          if (seenIcons.has(iconId)) continue;
-          seenIcons.add(iconId);
-          meta.append(harnessBadge(provider, 14));
-        }
         item.append(head, track, meta);
         return item;
       }

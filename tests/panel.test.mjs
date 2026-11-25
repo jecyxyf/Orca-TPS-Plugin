@@ -165,6 +165,7 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.doesNotMatch(html, /speed-note|model-speed-description|model-speed-insufficient-samples|model-list-truncated|class="war-agent"/);
   assert.match(html, /#war-rows \.war-meta\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*5\.2em 6\.2em 6\.2em minmax\(0, 1fr\)/);
   assert.match(html, /function harnessBadge\(provider/);
+  assert.match(html, /head\.append\(rank\);[\s\S]*?head\.append\(harnessBadge\(provider, 18\)\)[\s\S]*?head\.append\(model, value\)/);
   assert.match(html, /function warMetaMetric\(kind/);
   assert.match(html, /output:\s*\['M12 15V3m-4 4 4-4 4 4'/);
   assert.match(html, /cache:\s*\['M3 5a9 3 0 1 0 18 0a9 3 0 1 0-18 0'/);
@@ -676,6 +677,8 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(css.get('.empty').background, /--record-card-bg/);
   assert.equal(css.get('.usage-breakdown .section-title')['font-size'], '14px');
   assert.equal(css.get('.usage-ranking .section-title')['border-bottom'], '1px solid var(--line)');
+  assert.equal(css.get('.rank-tps').background, 'transparent');
+  assert.equal(css.get('#speed-rows .war-meta-item:first-child')['min-width'], '5.2em');
 
   assert.equal(css.get('.metrics')['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)');
   const cardCode = /function formatTps\(record\) \{[\s\S]*?(?=\n      \/\/ 用量战况)/.exec(html)?.[0] ?? '';
