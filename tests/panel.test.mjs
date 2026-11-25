@@ -661,7 +661,21 @@ test('top-right header places language picker beside settings gear and modal off
   assert.ok(cardCode);
   assert.doesNotMatch(cardCode, /≈/);
   const template = /<template id="record-template">([\s\S]*?)<\/template>/.exec(html)?.[1] ?? '';
-  assert.match(template, /class="model-icon"[\s\S]*?<svg\b/);
+  assert.doesNotMatch(template, /data-testid="agent"|class="agent"/);
+  assert.match(template, /class="model-icon"[^>]*data-testid="harness-icon"[\s\S]*?<use[^>]*href="#harness-default"/);
+  for (const id of ['claude', 'claude-desktop', 'codex', 'gemini', 'grokbuild', 'opencode', 'openclaw', 'hermes', 'pi', 'mcode', 'kimi', 'omp', 'antigravity', 'copilot', 'workbuddy', 'dsh', 'default']) {
+    assert.match(html, new RegExp(`<symbol id="harness-${id}"`));
+  }
+  const sprite = /<svg id="harness-sprite"[\s\S]*?<\/svg>/.exec(html)?.[0] ?? '';
+  assert.doesNotMatch(sprite, /#f7f8fa|color="#202938"/);
+  const codex = /<symbol id="harness-codex"[\s\S]*?<\/symbol>/.exec(sprite)?.[0] ?? '';
+  assert.doesNotMatch(codex, /fill="#fff"/);
+  assert.match(html, /harnessIconId\(record\.provider\)/);
+  assert.equal(css.get('.model-icon svg').width, '28px');
+  assert.equal(css.get('.model')['font-size'], '15px');
+  assert.equal(css.get('.speed').background, 'transparent');
+  assert.match(template, /<div class="identity">[\s\S]*?<div class="model-line">[\s\S]*?<\/div>\s*<time class="timestamp" data-testid="timestamp"><\/time>\s*<\/div>\s*<div class="speed">/);
+  assert.doesNotMatch(template, /class="meta-line"|class="card-right"/);
   assert.match(template, /data-testid="subagent-badge"[\s\S]*?<svg\b/);
   assert.match(template, /data-testid="proxy-badge"[\s\S]*?<svg\b/);
   assert.match(template, /<dl class="metrics">[\s\S]*?data-testid="output-value"[\s\S]*?class="metric ttft" data-testid="ttft"[\s\S]*?data-testid="ttft-value"[\s\S]*?data-testid="duration-value"[\s\S]*?data-testid="cache-value"/);
