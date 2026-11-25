@@ -92,7 +92,7 @@
       outline: 2px solid var(--blue); outline-offset: 2px;
     }
     .panel-logo { flex: none; width: 32px; height: 32px; border-radius: 6px; object-fit: contain; }
-    .panel-version { flex: none; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0; }
+    .panel-version { flex: none; color: var(--tab-unselected, var(--muted)); font-size: 12px; font-weight: 600; letter-spacing: 0; }
     .panel-star-link {
       display: inline-grid; place-items: center; flex: none;
       width: 24px; height: 24px; border-radius: 999px;
@@ -127,15 +127,16 @@
     .settings-toggle, .settings-close {
       display: inline-grid; place-items: center; flex: none;
       width: 32px; height: 32px; padding: 0;
-      border: 1px solid var(--line); border-radius: 8px;
-      background: var(--surface); color: var(--muted); cursor: pointer;
-      transition: color .15s ease, background-color .15s ease, border-color .15s ease;
+      border: 0; border-radius: 8px;
+      background: transparent; color: var(--muted); cursor: pointer;
+      transition: color .15s ease, background-color .15s ease;
     }
+    .settings-toggle { color: var(--tab-unselected, var(--muted)); }
     .settings-toggle svg, .settings-close svg { width: 16px; height: 16px; transition: transform .22s ease; }
     .settings-toggle:hover, .settings-toggle[aria-expanded="true"], .settings-close:hover {
-      background: var(--button-bg); color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, var(--line));
+      background: rgb(128 128 128 / 14%); color: var(--ink);
     }
-    .settings-toggle[aria-expanded="true"] svg { transform: rotate(45deg); }
+    .settings-toggle[aria-expanded="true"] svg { transform: scale(1.06); }
     .settings-toggle:focus-visible, .settings-close:focus-visible {
       outline: 2px solid var(--blue); outline-offset: 2px;
     }
@@ -161,43 +162,103 @@
     .settings-title { margin: 0; font-size: 15px; line-height: 1.4; font-weight: 750; color: var(--ink); }
     .settings-close { width: 28px; height: 28px; border-color: transparent; background: transparent; }
     .settings-body { display: grid; gap: 14px; margin-top: 12px; }
-    .settings-section { display: grid; gap: 8px; min-width: 0; }
-    .settings-label { margin: 0; color: var(--ink); font-size: 12px; font-weight: 700; }
+    .settings-section { display: grid; gap: 6px; min-width: 0; }
+    .settings-label { margin: 0; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .02em; }
     .panel-bg-layer {
-      position: fixed; inset: 0; z-index: 0; pointer-events: none;
-      background-position: center; background-size: cover; background-repeat: no-repeat;
+      position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+    }
+    .panel-bg-img {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; pointer-events: none; user-select: none;
+      transform-origin: center center;
+      transform: translate(var(--bg-x, 0%), var(--bg-y, 0%)) scale(var(--bg-scale, 1));
     }
     .panel-bg-layer::after {
       content: ""; position: absolute; inset: 0;
       background: rgb(242 242 247 / 42%);
+      transition: opacity .15s ease;
     }
     html.dark .panel-bg-layer::after { background: rgb(22 22 24 / 52%); }
+    body.is-bg-editing .panel-bg-layer::after { opacity: 0; }
     main#panel { position: relative; z-index: 1; }
     .settings-bg-card {
-      display: grid; gap: 8px; padding: 10px;
+      display: grid; gap: 6px; padding: 11px 12px;
       border: 1px solid var(--line); border-radius: 14px; background: var(--speed-bg);
     }
-    .settings-bg-preview {
-      display: grid; place-items: center; height: 92px; padding: 8px;
-      border: 1px dashed var(--line); border-radius: 10px;
-      background: var(--surface); background-position: center; background-size: cover; background-repeat: no-repeat;
-      color: var(--muted); font-size: 11px; text-align: center; overflow: hidden;
+    .settings-bg-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0;
     }
-    .settings-bg-preview.has-image { border-style: solid; }
-    .settings-bg-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-    .settings-bg-btn {
+    .settings-bg-title {
+      min-width: 0; margin: 0; color: var(--ink);
+      font-size: 13px; font-weight: 700; overflow-wrap: anywhere;
+    }
+    .bg-editor {
+      position: fixed; inset: 0; z-index: 30;
+      display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+      padding: 16px; cursor: grab; touch-action: none; user-select: none;
+    }
+    .bg-editor.is-dragging { cursor: grabbing; }
+    .bg-editor-bar {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+      max-width: 100%; padding: 8px 10px;
+      border: 1px solid rgb(255 255 255 / 22%); border-radius: 16px;
+      background: rgb(24 24 28 / 78%); color: #f5f5f7;
+      box-shadow: 0 8px 28px rgb(0 0 0 / 32%);
+      backdrop-filter: blur(10px);
+      cursor: default;
+    }
+    .bg-editor-hint {
+      flex-basis: 100%; margin: 0; text-align: center;
+      font-size: 11px; color: rgb(245 245 247 / 82%);
+    }
+    .bg-editor-zoom {
+      min-width: 4.2ch; text-align: center;
+      font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+    }
+    .bg-editor-btn {
       display: inline-flex; align-items: center; justify-content: center;
-      min-height: 32px; padding: 6px 12px; border: 0; border-radius: 10px;
-      background: var(--button-bg); color: var(--blue); font-size: 12px; font-weight: 650; cursor: pointer;
+      min-height: 30px; padding: 5px 10px; border: 0; border-radius: 9px;
+      background: rgb(255 255 255 / 15%); color: #f5f5f7;
+      font-size: 12px; font-weight: 650; cursor: pointer;
     }
-    .settings-bg-btn:hover { filter: brightness(.96); }
-    .settings-bg-btn-secondary {
-      border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+    .bg-editor-btn:hover:not(:disabled) { background: rgb(255 255 255 / 25%); }
+    .bg-editor-btn:disabled { opacity: .45; cursor: default; }
+    .bg-editor-btn-primary { background: #0066e6; color: #fff; }
+    .bg-editor-btn-primary:hover:not(:disabled) { background: #0066e6; filter: brightness(1.08); }
+    .bg-editor-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+    .settings-bg-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+    .settings-bg-btn {
+      display: inline-grid; place-items: center; flex: none;
+      width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+      background: transparent; color: var(--muted); cursor: pointer;
+      transition: color .15s ease, background-color .15s ease;
     }
+    .settings-bg-btn svg { width: 16px; height: 16px; }
+    .settings-bg-btn:hover:not(:disabled) { background: rgb(128 128 128 / 14%); color: var(--ink); }
+    .settings-bg-btn:disabled { opacity: .5; cursor: default; }
     .settings-bg-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     .settings-bg-hint, .settings-bg-error { margin: 0; font-size: 11px; overflow-wrap: anywhere; }
     .settings-bg-hint { color: var(--muted); }
     .settings-bg-error { color: var(--error); }
+    .settings-color-row {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px 18px;
+    }
+    .settings-color-item {
+      display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+    }
+    .settings-color-label {
+      min-width: 0; margin: 0; color: var(--muted);
+      font-size: 12px; font-weight: 600; overflow-wrap: anywhere;
+    }
+    .settings-color-input {
+      width: 32px; height: 32px; padding: 3px;
+      border: 1px solid var(--line); border-radius: 8px;
+      background: transparent; cursor: pointer;
+    }
+    .settings-color-input::-webkit-color-swatch-wrapper { padding: 0; }
+    .settings-color-input::-webkit-color-swatch { border: 0; border-radius: 5px; }
+    .settings-color-input::-moz-color-swatch { border: 0; border-radius: 5px; }
+    .settings-color-input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     .language-picker { position: relative; flex: 0 1 140px; min-width: 0; }
     .language-toggle, .language-option {
       display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 32px;
@@ -227,22 +288,20 @@
     .language-option { width: 100%; border-color: transparent; text-align: start; }
     .language-option:hover, .language-option[aria-pressed="true"] { background: var(--button-bg); color: var(--blue); }
     .language-message { margin: 4px 6px; color: var(--muted); overflow-wrap: anywhere; }
-    .current-updated { margin: 0; color: var(--muted); font-size: 11px; }
+    .current-updated { margin: 0; color: var(--tab-unselected, var(--muted)); font-size: 11px; }
     .refresh {
       display: inline-flex; align-items: center; justify-content: center; gap: 5px;
       flex-shrink: 0; min-height: 34px; padding: 7px 11px; border: 0; border-radius: 13px;
       background: var(--button-bg); color: var(--blue); font-size: 12px; font-weight: 650; cursor: pointer;
     }
     .refresh svg { width: 14px; height: 14px; flex-shrink: 0; }
-    .current-refresh { width: 34px; padding: 0; }
-    .current-refresh svg { width: 16px; height: 16px; }
     .refresh:hover:not(:disabled) { filter: brightness(.96); }
     .refresh:active:not(:disabled) { transform: translateY(1px); }
     .refresh:disabled { cursor: default; opacity: .6; }
     .refresh:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
     .panel-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px; border-bottom: 1px solid var(--line); }
-    .panel-tab { min-width: 0; padding: 8px 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-weight: 650; cursor: pointer; }
-    .panel-tab[aria-selected="true"] { border-bottom-color: var(--blue); color: var(--blue); }
+    .panel-tab { min-width: 0; padding: 8px 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--tab-unselected, var(--muted)); font-weight: 650; cursor: pointer; }
+    .panel-tab[aria-selected="true"] { border-bottom-color: var(--tab-selected, var(--blue)); color: var(--tab-selected, var(--blue)); }
     .panel-tab:focus-visible, .panel-view:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     .panel-view { margin-top: 12px; }
     #usage { display: grid; gap: 8px; }
@@ -511,7 +570,6 @@
     .ladder-recent-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 4px; font-size: 11px; }
     .ladder-recent-tools { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .ladder-recent-speed { flex: none; color: var(--blue); white-space: nowrap; }
-    .refresh.is-busy svg { animation: spin 1s linear infinite; }
     .ladder-transfer .ladder-transfer-spinner,
     .ladder-transfer .ladder-transfer-error,
     .ladder-transfer[aria-busy="true"] .ladder-transfer-icon,
@@ -565,8 +623,8 @@
     .war, .heat { padding: 10px 16px; }
     .war-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 13px; background: var(--speed-bg); }
     .war-period-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .war-tab { min-width: 0; padding: 5px 4px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 650; cursor: pointer; }
-    .war-tab[aria-selected="true"], .war-tab[aria-pressed="true"] { background: var(--button-bg); color: var(--blue); }
+    .war-tab { min-width: 0; padding: 5px 4px; border: 0; border-radius: 10px; background: transparent; color: var(--tab-unselected, var(--muted)); font-size: 11px; font-weight: 650; cursor: pointer; }
+    .war-tab[aria-selected="true"], .war-tab[aria-pressed="true"] { background: var(--button-bg); color: var(--tab-selected, var(--blue)); }
     .war-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     .war-mode { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .war-mode-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
@@ -667,7 +725,7 @@
       .war-period-tabs .war-tab { padding-inline: 1px; font-size: 10px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .refresh.is-busy svg, .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner { animation: none; }
+      .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner { animation: none; }
       .refresh:active:not(:disabled) { transform: none; }
       .panel-title-link, .panel-star-link, .settings-toggle, .settings-toggle svg, .settings-close { transition: none; }
       .panel-star-link:hover { transform: none; }
@@ -677,7 +735,7 @@
   </style>
 </head>
 <body>
-  <div class="panel-bg-layer" id="panel-bg-layer" aria-hidden="true" hidden></div>
+  <div class="panel-bg-layer" id="panel-bg-layer" aria-hidden="true" hidden><img class="panel-bg-img" id="panel-bg-img" alt=""></div>
   <main id="panel" aria-labelledby="panel-title">
     <div class="title-bar" dir="ltr">
       <div class="panel-brand">
@@ -713,10 +771,13 @@
           </div>
         </div>
         <button class="settings-toggle" id="settings-toggle" data-testid="settings-toggle" type="button"
-                aria-expanded="false" aria-controls="settings-dialog" data-i18n-title="settings-title" data-i18n-aria-label="settings-title">
+                aria-expanded="false" aria-controls="settings-dialog" data-i18n-title="theme-title" data-i18n-aria-label="theme-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.74 0-1.25.4-1.51 1Z"/>
+            <path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/>
+            <circle cx="13.5" cy="6.5" r=".75" fill="currentColor"/>
+            <circle cx="17.5" cy="10.5" r=".75" fill="currentColor"/>
+            <circle cx="6.5" cy="12.5" r=".75" fill="currentColor"/>
+            <circle cx="8.5" cy="7.5" r=".75" fill="currentColor"/>
           </svg>
         </button>
       </div>
@@ -901,9 +962,6 @@
     <section class="panel-view" id="current-data" role="tabpanel" aria-labelledby="tab-current" tabindex="0" hidden>
       <div class="panel-header">
         <p class="current-updated" id="updated" data-localized-text>—</p>
-        <button class="refresh current-refresh" id="refresh" data-testid="refresh" type="button" data-i18n-title="refresh" data-i18n-aria-label="refresh-current">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17"/></svg>
-        </button>
       </div>
       <div id="current-scroll" role="region" tabindex="0" data-i18n-aria-label="per-request-speeds">
         <div class="message message-error" id="error" data-testid="error" role="alert" data-localized-text hidden></div>
@@ -921,31 +979,87 @@
   <div class="settings-backdrop" id="settings-dialog" data-testid="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-heading" hidden>
     <div class="settings-sheet">
       <div class="settings-head">
-        <h2 class="settings-title" id="settings-heading" data-i18n="settings-title"></h2>
+        <h2 class="settings-title" id="settings-heading" data-i18n="theme-title"></h2>
         <button class="settings-close" id="settings-close" data-testid="settings-close" type="button"
-                data-i18n-title="settings-close" data-i18n-aria-label="settings-close">
+                data-i18n-title="close-dialog" data-i18n-aria-label="close-dialog">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
       </div>
       <div class="settings-body">
-        <section class="settings-section" id="settings-style-section" aria-labelledby="settings-style-label">
-          <p class="settings-label" id="settings-style-label" data-i18n="settings-style"></p>
+        <section class="settings-section" id="settings-style-section" aria-labelledby="settings-heading">
           <div class="settings-bg-card">
-            <p class="settings-label" data-i18n="settings-bg-image"></p>
-            <div class="settings-bg-preview" id="settings-bg-preview">
-              <span id="settings-bg-empty" data-i18n="settings-bg-empty"></span>
-            </div>
-            <input id="settings-bg-input" data-testid="settings-bg-input" type="file"
-                   accept=".svg,.jpg,.jpeg,.png,.webp,.gif,image/svg+xml,image/jpeg,image/png,image/webp,image/gif" hidden>
-            <div class="settings-bg-actions">
-              <button class="settings-bg-btn" id="settings-bg-upload" data-testid="settings-bg-upload" type="button" data-i18n="settings-bg-upload"></button>
-              <button class="settings-bg-btn settings-bg-btn-secondary" id="settings-bg-reset" data-testid="settings-bg-reset" type="button" data-i18n="settings-bg-reset" hidden></button>
+            <div class="settings-bg-row">
+              <p class="settings-bg-title" data-i18n="settings-bg-image"></p>
+              <input id="settings-bg-input" data-testid="settings-bg-input" type="file"
+                     accept=".svg,.jpg,.jpeg,.png,.webp,.gif,image/svg+xml,image/jpeg,image/png,image/webp,image/gif" hidden>
+              <div class="settings-bg-actions">
+                <button class="settings-bg-btn" id="settings-bg-upload" data-testid="settings-bg-upload" type="button"
+                        data-i18n-title="settings-bg-upload" data-i18n-aria-label="settings-bg-upload">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 16V4m-4 4 4-4 4 4"/>
+                    <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+                  </svg>
+                </button>
+                <button class="settings-bg-btn" id="settings-bg-edit" data-testid="settings-bg-edit" type="button"
+                        data-i18n-title="settings-bg-edit" data-i18n-aria-label="settings-bg-edit" hidden>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 20h9"/>
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                  </svg>
+                </button>
+                <button class="settings-bg-btn" id="settings-bg-reset" data-testid="settings-bg-reset" type="button"
+                        data-i18n-title="settings-bg-reset" data-i18n-aria-label="settings-bg-reset" hidden>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+                    <path d="M3 3v5h5"/>
+                  </svg>
+                </button>
+              </div>
             </div>
             <p class="settings-bg-hint" data-i18n="settings-bg-image-hint"></p>
             <p class="settings-bg-error" id="settings-bg-error" role="alert" data-localized-text hidden></p>
           </div>
+          <div class="settings-bg-card" id="settings-color-card">
+            <p class="settings-bg-title" data-i18n="settings-font-color"></p>
+            <div class="settings-color-row">
+              <div class="settings-color-item">
+                <label class="settings-color-label" for="settings-color-unselected" data-i18n="settings-color-unselected"></label>
+                <input class="settings-color-input" id="settings-color-unselected" data-testid="settings-color-unselected" type="color" value="#6d6d75">
+                <button class="settings-bg-btn" id="settings-color-unselected-reset" data-testid="settings-color-unselected-reset" type="button"
+                        data-i18n-title="settings-color-reset" data-i18n-aria-label="settings-color-reset" hidden>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+                    <path d="M3 3v5h5"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="settings-color-item">
+                <label class="settings-color-label" for="settings-color-selected" data-i18n="settings-color-selected"></label>
+                <input class="settings-color-input" id="settings-color-selected" data-testid="settings-color-selected" type="color" value="#0066e6">
+                <button class="settings-bg-btn" id="settings-color-selected-reset" data-testid="settings-color-selected-reset" type="button"
+                        data-i18n-title="settings-color-reset" data-i18n-aria-label="settings-color-reset" hidden>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+                    <path d="M3 3v5h5"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
       </div>
+    </div>
+  </div>
+
+  <div class="bg-editor" id="bg-editor" data-testid="bg-editor" role="dialog" aria-modal="true" data-i18n-aria-label="settings-bg-edit" hidden>
+    <div class="bg-editor-bar" id="bg-editor-bar">
+      <p class="bg-editor-hint" data-i18n="settings-bg-drag-hint"></p>
+      <button class="bg-editor-btn" id="bg-editor-zoom-out" type="button" data-i18n-aria-label="settings-bg-zoom">−</button>
+      <span class="bg-editor-zoom" id="bg-editor-zoom-value">100%</span>
+      <button class="bg-editor-btn" id="bg-editor-zoom-in" type="button" data-i18n-aria-label="settings-bg-zoom">+</button>
+      <button class="bg-editor-btn" id="bg-editor-reset-pos" data-testid="bg-editor-reset-pos" type="button" data-i18n="settings-bg-reset-position"></button>
+      <button class="bg-editor-btn" id="bg-editor-cancel" data-testid="bg-editor-cancel" type="button" data-i18n="cancel"></button>
+      <button class="bg-editor-btn bg-editor-btn-primary" id="bg-editor-save" data-testid="bg-editor-save" type="button" data-i18n="settings-bg-save"></button>
     </div>
   </div>
 
@@ -1192,7 +1306,7 @@
     (() => {
       'use strict';
       const byId = id => document.getElementById(id);
-      const ui = Object.fromEntries(['current-data', 'current-scroll', 'updated', 'refresh', 'error', 'warnings', 'loading', 'records', 'empty', 'empty-text', 'record-template'].map(id => [id, byId(id)]));
+      const ui = Object.fromEntries(['current-data', 'current-scroll', 'updated', 'error', 'warnings', 'loading', 'records', 'empty', 'empty-text', 'record-template'].map(id => [id, byId(id)]));
       const views = [...byId('panel-tabs').children];
       const lifetime = new AbortController();
       const bridge = window.orca?.plugin;
@@ -1626,8 +1740,6 @@
         ui['current-data'].setAttribute('aria-busy', String(working));
         const updatedAt = current?.updatedAt;
         ui.updated.textContent = date(updatedAt) ? t('updated-at', timeLabel(updatedAt)) : '—';
-        ui.refresh.disabled = working || !bridge;
-        ui.refresh.classList.toggle('is-busy', working);
         ui.error.hidden = !problem;
         ui.error.textContent = problem ? t(problem) : '';
         ui.loading.hidden = !working;
@@ -1690,18 +1802,15 @@
           if (!disposed) { busy = false; render(); }
         }
       }
-      function refresh() { void request('tps.refresh'); }
       function cleanup() {
         if (disposed) return;
         disposed = true;
         lifetime.abort();
-        ui.refresh.removeEventListener('click', refresh);
         for (const subscription of subscriptions) subscription?.dispose();
         clearInterval(usageTimer);
         cancelAnimationFrame(currentFrame);
         cancelAnimationFrame(usageFrame);
       }
-      ui.refresh.addEventListener('click', refresh);
       document.addEventListener('tps-language-changed', () => {
         drawnRecords = '';
         recordNodes.clear();
@@ -2644,6 +2753,11 @@
       const byId = id => document.getElementById(id);
       const lifetime = new AbortController();
       const BG_IMAGE_KEY = 'tps:panel-bg-image';
+      const BG_TRANSFORM_KEY = 'tps:panel-bg-transform';
+      const COLOR_UNSELECTED_KEY = 'tps:panel-color-unselected';
+      const COLOR_SELECTED_KEY = 'tps:panel-color-selected';
+      const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+      const DEFAULT_BG_TRANSFORM = { scale: 100, x: 0, y: 0 };
       const MAX_BG_BYTES = 2 * 1024 * 1024;
       const MIME_BY_EXT = {
         svg: 'image/svg+xml', jpg: 'image/jpeg', jpeg: 'image/jpeg',
@@ -2651,16 +2765,65 @@
       };
       const ALLOWED_MIMES = new Set(Object.values(MIME_BY_EXT));
       const DATA_IMAGE_RE = /^data:image\/(?:svg\+xml|jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+      const panelMain = byId('panel');
       const toggle = byId('settings-toggle');
       const dialog = byId('settings-dialog');
       const closeButton = byId('settings-close');
       const bgLayer = byId('panel-bg-layer');
-      const bgPreview = byId('settings-bg-preview');
-      const bgEmpty = byId('settings-bg-empty');
+      const bgImg = byId('panel-bg-img');
       const bgInput = byId('settings-bg-input');
       const bgUpload = byId('settings-bg-upload');
+      const bgEdit = byId('settings-bg-edit');
       const bgReset = byId('settings-bg-reset');
       const bgError = byId('settings-bg-error');
+      const bgEditor = byId('bg-editor');
+      const bgEditorBar = byId('bg-editor-bar');
+      const bgEditorZoomOut = byId('bg-editor-zoom-out');
+      const bgEditorZoomValue = byId('bg-editor-zoom-value');
+      const bgEditorZoomIn = byId('bg-editor-zoom-in');
+      const bgEditorResetPos = byId('bg-editor-reset-pos');
+      const bgEditorCancel = byId('bg-editor-cancel');
+      const bgEditorSave = byId('bg-editor-save');
+      const colorInputs = [
+        {
+          key: COLOR_UNSELECTED_KEY,
+          apply: value => {
+            const root = document.documentElement.style;
+            root.setProperty('--ink', value);
+            root.setProperty('--purple', value);
+            root.setProperty('--muted', `color-mix(in srgb, ${value} 82%, transparent)`);
+            root.setProperty('--tab-unselected', value);
+          },
+          clear: () => {
+            const root = document.documentElement.style;
+            root.removeProperty('--ink');
+            root.removeProperty('--purple');
+            root.removeProperty('--muted');
+            root.removeProperty('--tab-unselected');
+          },
+          input: byId('settings-color-unselected'), reset: byId('settings-color-unselected-reset'),
+          fallback: () => document.documentElement.classList.contains('dark') ? '#b4b4be' : '#6d6d75'
+        },
+        {
+          key: COLOR_SELECTED_KEY,
+          apply: value => {
+            const root = document.documentElement.style;
+            root.setProperty('--blue', value);
+            root.setProperty('--tab-selected', value);
+          },
+          clear: () => {
+            const root = document.documentElement.style;
+            root.removeProperty('--blue');
+            root.removeProperty('--tab-selected');
+          },
+          input: byId('settings-color-selected'), reset: byId('settings-color-selected-reset'),
+          fallback: () => document.documentElement.classList.contains('dark') ? '#64b0ff' : '#0066e6'
+        }
+      ];
+      let hasBgImage = false;
+      let bgTransform = { ...DEFAULT_BG_TRANSFORM };
+      let beforeEdit = null;
+      let dragState = null;
 
       function readStore(key) {
         try { return localStorage.getItem(key); } catch { return null; }
@@ -2675,6 +2838,41 @@
         }
       }
 
+      const clampInt = (value, min, max, fallback) => {
+        const num = Number(value);
+        return Number.isFinite(num) ? Math.min(max, Math.max(min, Math.round(num))) : fallback;
+      };
+
+      function loadTransform() {
+        try {
+          const parsed = JSON.parse(readStore(BG_TRANSFORM_KEY) || 'null');
+          return {
+            scale: clampInt(parsed?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale),
+            x: clampInt(parsed?.x, -100, 100, DEFAULT_BG_TRANSFORM.x),
+            y: clampInt(parsed?.y, -100, 100, DEFAULT_BG_TRANSFORM.y)
+          };
+        } catch {
+          return { ...DEFAULT_BG_TRANSFORM };
+        }
+      }
+
+      function applyBackgroundTransform(next, persist = false) {
+        bgTransform = {
+          scale: clampInt(next?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale),
+          x: clampInt(next?.x, -100, 100, DEFAULT_BG_TRANSFORM.x),
+          y: clampInt(next?.y, -100, 100, DEFAULT_BG_TRANSFORM.y)
+        };
+        document.documentElement.style.setProperty('--bg-scale', String(bgTransform.scale / 100));
+        document.documentElement.style.setProperty('--bg-x', `${bgTransform.x}%`);
+        document.documentElement.style.setProperty('--bg-y', `${bgTransform.y}%`);
+        bgEditorZoomValue.textContent = `${bgTransform.scale}%`;
+        bgEditorZoomOut.disabled = bgTransform.scale <= 50;
+        bgEditorZoomIn.disabled = bgTransform.scale >= 300;
+        bgEditorResetPos.disabled = bgTransform.scale === DEFAULT_BG_TRANSFORM.scale &&
+          bgTransform.x === DEFAULT_BG_TRANSFORM.x && bgTransform.y === DEFAULT_BG_TRANSFORM.y;
+        if (persist) writeStore(BG_TRANSFORM_KEY, JSON.stringify(bgTransform));
+      }
+
       function showBgError(key) {
         bgError.hidden = !key;
         bgError.textContent = key ? t(key) : '';
@@ -2682,11 +2880,10 @@
 
       function applyBackgroundImage(dataUrl) {
         const valid = typeof dataUrl === 'string' && DATA_IMAGE_RE.test(dataUrl);
+        hasBgImage = valid;
         bgLayer.hidden = !valid;
-        bgLayer.style.backgroundImage = valid ? `url("${dataUrl}")` : '';
-        bgPreview.classList.toggle('has-image', valid);
-        bgPreview.style.backgroundImage = valid ? `url("${dataUrl}")` : '';
-        bgEmpty.hidden = valid;
+        bgImg.src = valid ? dataUrl : '';
+        bgEdit.hidden = !valid;
         bgReset.hidden = !valid;
       }
 
@@ -2715,7 +2912,31 @@
         });
       }
 
+      applyBackgroundTransform(loadTransform(), false);
       applyBackgroundImage(readStore(BG_IMAGE_KEY));
+
+      function applyTextColor(entry, value, persist = false) {
+        const valid = typeof value === 'string' && HEX_COLOR_RE.test(value);
+        if (valid) entry.apply(value);
+        else entry.clear();
+        entry.input.value = valid ? value.toLowerCase() : entry.fallback();
+        entry.reset.hidden = !valid;
+        if (persist) writeStore(entry.key, valid ? value.toLowerCase() : null);
+      }
+
+      for (const entry of colorInputs) {
+        applyTextColor(entry, readStore(entry.key), false);
+        entry.input.addEventListener('input', () => applyTextColor(entry, entry.input.value, false));
+        entry.input.addEventListener('change', () => applyTextColor(entry, entry.input.value, true));
+        entry.reset.addEventListener('click', () => applyTextColor(entry, null, true));
+      }
+
+      const themeObserver = new MutationObserver(() => {
+        for (const entry of colorInputs) {
+          if (entry.reset.hidden) entry.input.value = entry.fallback();
+        }
+      });
+      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
       function setOpen(open, restoreFocus = false) {
         dialog.hidden = !open;
@@ -2728,24 +2949,106 @@
         }
       }
 
+      function openEditor() {
+        if (!hasBgImage) return;
+        beforeEdit = { ...bgTransform };
+        setOpen(false, false);
+        panelMain.hidden = true;
+        document.body.classList.add('is-bg-editing');
+        bgEditor.hidden = false;
+        bgEditorSave.focus();
+      }
+
+      function closeEditor(save) {
+        if (bgEditor.hidden) return;
+        dragState = null;
+        bgEditor.classList.remove('is-dragging');
+        if (save) applyBackgroundTransform(bgTransform, true);
+        else if (beforeEdit) applyBackgroundTransform(beforeEdit, false);
+        beforeEdit = null;
+        bgEditor.hidden = true;
+        document.body.classList.remove('is-bg-editing');
+        panelMain.hidden = false;
+        toggle.focus();
+      }
+
       toggle.addEventListener('click', () => setOpen(dialog.hidden, !dialog.hidden));
       closeButton.addEventListener('click', () => setOpen(false, true));
       dialog.addEventListener('click', event => {
         if (event.target === dialog) setOpen(false, true);
       });
       document.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && !dialog.hidden) {
+        if (event.key !== 'Escape') return;
+        if (!bgEditor.hidden) {
+          event.preventDefault();
+          closeEditor(false);
+        } else if (!dialog.hidden) {
           event.preventDefault();
           setOpen(false, true);
         }
       }, { signal: lifetime.signal });
 
       bgUpload.addEventListener('click', () => bgInput.click());
+      bgEdit.addEventListener('click', openEditor);
       bgReset.addEventListener('click', () => {
         showBgError('');
         writeStore(BG_IMAGE_KEY, null);
+        writeStore(BG_TRANSFORM_KEY, null);
+        applyBackgroundTransform(DEFAULT_BG_TRANSFORM, false);
         applyBackgroundImage('');
       });
+
+      bgEditorBar.addEventListener('pointerdown', event => event.stopPropagation());
+      bgEditorZoomOut.addEventListener('click', () => applyBackgroundTransform({ ...bgTransform, scale: bgTransform.scale - 10 }, false));
+      bgEditorZoomIn.addEventListener('click', () => applyBackgroundTransform({ ...bgTransform, scale: bgTransform.scale + 10 }, false));
+      bgEditorResetPos.addEventListener('click', () => applyBackgroundTransform(DEFAULT_BG_TRANSFORM, false));
+      bgEditorCancel.addEventListener('click', () => closeEditor(false));
+      bgEditorSave.addEventListener('click', () => closeEditor(true));
+
+      bgEditor.addEventListener('pointerdown', event => {
+        if (!hasBgImage || bgEditor.hidden || (event.pointerType === 'mouse' && event.button !== 0)) return;
+        if (bgEditorBar.contains(event.target)) return;
+        const rect = bgEditor.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        dragState = {
+          pointerId: event.pointerId,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startX: bgTransform.x,
+          startY: bgTransform.y,
+          width: rect.width,
+          height: rect.height
+        };
+        bgEditor.classList.add('is-dragging');
+        bgEditor.setPointerCapture?.(event.pointerId);
+      });
+      bgEditor.addEventListener('pointermove', event => {
+        if (!dragState || event.pointerId !== dragState.pointerId) return;
+        const dx = ((event.clientX - dragState.startClientX) / dragState.width) * 100;
+        const dy = ((event.clientY - dragState.startClientY) / dragState.height) * 100;
+        applyBackgroundTransform({
+          ...bgTransform,
+          x: dragState.startX + dx,
+          y: dragState.startY + dy
+        }, false);
+      });
+      function stopDrag(event) {
+        if (!dragState || event.pointerId !== dragState.pointerId) return;
+        if (bgEditor.hasPointerCapture?.(event.pointerId)) {
+          bgEditor.releasePointerCapture(event.pointerId);
+        }
+        dragState = null;
+        bgEditor.classList.remove('is-dragging');
+      }
+      bgEditor.addEventListener('pointerup', stopDrag);
+      bgEditor.addEventListener('pointercancel', stopDrag);
+      bgEditor.addEventListener('wheel', event => {
+        if (!hasBgImage || bgEditor.hidden) return;
+        event.preventDefault();
+        const step = event.deltaY < 0 ? 5 : -5;
+        applyBackgroundTransform({ ...bgTransform, scale: bgTransform.scale + step }, false);
+      }, { passive: false });
+
       bgInput.addEventListener('change', async () => {
         const file = bgInput.files?.[0];
         bgInput.value = '';
@@ -2762,6 +3065,7 @@
           if (!writeStore(BG_IMAGE_KEY, dataUrl)) {
             return showBgError('settings-bg-error-save');
           }
+          applyBackgroundTransform(DEFAULT_BG_TRANSFORM, true);
           applyBackgroundImage(dataUrl);
         } catch {
           showBgError('settings-bg-error-type');
@@ -2776,7 +3080,10 @@
         }, { signal: lifetime.signal });
       }
 
-      window.addEventListener('pagehide', () => lifetime.abort(), { once: true });
+      window.addEventListener('pagehide', () => {
+        themeObserver.disconnect();
+        lifetime.abort();
+      }, { once: true });
     })();
   </script>
 </body>

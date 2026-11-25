@@ -134,18 +134,14 @@ test('panel resolves per-record agent label from record.provider', async () => {
   assert.match(html, /function\s+agentLabel\(\s*provider\s*\)/, 'agentLabel must accept per-record provider override');
 });
 
-test('the panel title has a logo and Current Data shows the update time beside an icon-only refresh button', async () => {
+test('the panel title has a logo and Current Data shows the update time without a refresh button', async () => {
   const html = await readFile(panelPath, 'utf8');
   const logo = /<h1\b[^>]*\bid="panel-title"[^>]*>[\s\S]*?<img\b[^>]*\bsrc="([^"]+)"[^>]*\balt=""[^>]*>\s*TPS Plugin/.exec(html);
   assert.ok(logo, 'logo must be left of the title');
   const png = await readFile(path.resolve(path.dirname(panelPath), logo[1]));
   assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
-  assert.match(html, /<div class="panel-header">\s*<p\b[^>]*\bid="updated"[^>]*>—<\/p>\s*<button\b[^>]*\bid="refresh"/);
-  const refresh = /<button\b[^>]*\bid="refresh"[^>]*>[\s\S]*?<\/button>/.exec(html)?.[0];
-  assert.ok(refresh);
-  assert.match(refresh, /data-i18n-title="refresh"/);
-  assert.match(refresh, /data-i18n-aria-label="refresh-current"/);
-  assert.match(refresh, />\s*<svg\b[^>]*\baria-hidden="true"[^>]*>[\s\S]*?<\/svg>\s*<\/button>$/);
+  assert.match(html, /<div class="panel-header">\s*<p\b[^>]*\bid="updated"[^>]*>—<\/p>\s*<\/div>/);
+  assert.doesNotMatch(html, /<button\b[^>]*\bid="refresh"|current-refresh/);
   assert.doesNotMatch(html, /recent-requests|request-speed-note/);
 });
 
@@ -603,28 +599,52 @@ test('panel avatar view loads visible avatars through the observer and retries a
   assert.equal(observed.length, 3);
 });
 
-test('top-right header places language picker beside settings gear and modal offers background image upload', async () => {
+test('top-right header places language picker beside settings gear and modal offers background upload with full-panel editor', async () => {
   const html = await readFile(panelPath, 'utf8');
   const titleBar = /<div class="title-bar"[^>]*>([\s\S]*?)<div class="panel-tabs"/.exec(html)?.[1] ?? '';
   assert.match(titleBar, /id="language-picker"/);
-  assert.match(titleBar, /<button[^>]*id="settings-toggle"[^>]*aria-controls="settings-dialog"/);
+  assert.match(titleBar, /<button[^>]*id="settings-toggle"[^>]*aria-controls="settings-dialog"[^>]*data-i18n-title="theme-title"/);
   assert.ok(titleBar.indexOf('id="language-picker"') < titleBar.indexOf('id="settings-toggle"'));
-  assert.match(html, /<div class="panel-bg-layer" id="panel-bg-layer"/);
+  assert.match(html, /<div class="panel-bg-layer" id="panel-bg-layer"[^>]*><img class="panel-bg-img" id="panel-bg-img"/);
 
-  const dialog = /<div[^>]*id="settings-dialog"[^>]*role="dialog"[^>]*aria-modal="true"[\s\S]*?(?=\n\s*<template id="ladder-avatar-fallback">)/.exec(html)?.[0] ?? '';
+  const dialog = /<div[^>]*id="settings-dialog"[^>]*role="dialog"[^>]*aria-modal="true"[\s\S]*?(?=\n\s*<div[^>]*id="bg-editor")/.exec(html)?.[0] ?? '';
   assert.ok(dialog, 'settings modal dialog must exist');
+  assert.match(dialog, /id="settings-heading"[^>]*data-i18n="theme-title"/);
   assert.match(dialog, /id="settings-close"/);
   assert.match(dialog, /id="settings-style-section"/);
-  assert.match(dialog, /id="settings-bg-preview"/);
-  assert.match(dialog, /id="settings-bg-upload"/);
-  assert.match(dialog, /id="settings-bg-reset"/);
+  assert.doesNotMatch(dialog, /id="settings-style-label"|data-i18n="settings-style"/);
+  assert.match(dialog, /id="settings-bg-upload"[\s\S]*?<svg\b/);
+  assert.match(dialog, /id="settings-bg-edit"[\s\S]*?<svg\b/);
+  assert.match(dialog, /id="settings-bg-reset"[\s\S]*?<svg\b/);
   assert.match(dialog, /id="settings-bg-input"[^>]*accept="[^"]*\.svg[^"]*\.jpg[^"]*\.png/);
-  assert.doesNotMatch(dialog, /id="language-picker"|settings-timezone/);
+  assert.match(dialog, /class="settings-color-row"[\s\S]*?id="settings-color-unselected"[\s\S]*?id="settings-color-selected"/);
+  assert.match(dialog, /id="settings-color-unselected"[^>]*type="color"/);
+  assert.match(dialog, /id="settings-color-selected"[^>]*type="color"/);
+  assert.match(dialog, /id="settings-color-unselected-reset"/);
+  assert.match(dialog, /id="settings-color-selected-reset"/);
+  assert.doesNotMatch(dialog, /id="language-picker"|settings-timezone|settings-bg-zoom|settings-bg-preview/);
+
+  const editor = /<div[^>]*id="bg-editor"[^>]*role="dialog"[\s\S]*?(?=\n\s*<template id="ladder-avatar-fallback">)/.exec(html)?.[0] ?? '';
+  assert.ok(editor, 'full-panel background editor must exist');
+  assert.match(editor, /id="bg-editor-reset-pos"/);
+  assert.match(editor, /id="bg-editor-cancel"/);
+  assert.match(editor, /id="bg-editor-save"/);
 
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
   assert.equal(css.get('.settings-backdrop').position, 'fixed');
+  assert.equal(css.get('.bg-editor').position, 'fixed');
   assert.equal(css.get('.panel-bg-layer').position, 'fixed');
+  assert.equal(css.get('.panel-bg-img')['object-fit'], 'cover');
   assert.equal(css.get('html').background, 'var(--page)');
+  assert.equal(css.get('.settings-toggle').background, 'transparent');
+  assert.equal(css.get('.settings-toggle').color, 'var(--tab-unselected, var(--muted))');
+  assert.equal(css.get('.settings-close').background, 'transparent');
+  assert.equal(css.get('.settings-close').color, 'var(--muted)');
+  assert.equal(css.get('.settings-bg-btn').background, 'transparent');
+  assert.equal(css.get('.settings-bg-btn').color, 'var(--muted)');
+  assert.match(html, /root\.setProperty\('--ink', value\)[\s\S]*?root\.setProperty\('--purple', value\)[\s\S]*?root\.setProperty\('--muted',[\s\S]*?root\.setProperty\('--tab-unselected', value\)/);
+  assert.match(html, /root\.setProperty\('--blue', value\)[\s\S]*?root\.setProperty\('--tab-selected', value\)/);
+  assert.equal(css.get('.settings-color-row')['justify-content'], 'flex-start');
 });
 
 test('panel title links to the repository and shows an animated star badge beside the version', async () => {
