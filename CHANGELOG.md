@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.6] - 2026-11-25
+
+### Changed
+
+- Reduced the unpacked plugin to about 1.85 MiB by removing old previews, using one compact JPEG per README image, and shrinking the plugin icons.
+- Kept the store cover and screenshots at Orca’s required dimensions.
+
 ## [1.6.5] - 2026-11-25
 
 **Upgrading from 1.6.4:** Uninstall the old TPS Plugin in Orca, then install 1.6.5. This release changes how the plugin collects usage and connects to the leaderboard.

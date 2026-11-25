@@ -18,9 +18,7 @@ TPS Plugin 在 Orca 右侧栏显示 AI 请求的 Token 用量和生成速度。�
 在 Orca 右侧栏打开 **TPS Plugin**，即可切换**当前数据**、**个人统计**和**天梯榜**。
 
 <p align="center">
-  <a href="./assets/readme/zh-CN/overview.png" title="查看原图">
-    <img src="./assets/readme/zh-CN/overview.webp" width="640" alt="TPS Plugin 总览图，展示三个中文分页">
-  </a>
+  <img src="./assets/readme/zh-CN/overview.jpg" width="640" alt="TPS Plugin 总览图，展示三个中文分页">
 </p>
 
 *截图使用示例数据。*
@@ -34,9 +32,7 @@ TPS Plugin 在 Orca 右侧栏显示 AI 请求的 Token 用量和生成速度。�
 - Orca 底部状态栏显示最新速度和缓存命中率。估算速度带有 ≈ 标记。
 
 <p align="center">
-  <a href="./assets/readme/zh-CN/current-data.png" title="查看原图">
-    <img src="./assets/readme/zh-CN/current-data.webp" width="272" alt="中文当前数据页，展示 Codex、Claude、Hermes、OpenCode 和 Pi 的请求卡片">
-  </a>
+  <img src="./assets/readme/zh-CN/current-data.jpg" width="272" alt="中文当前数据页，展示 Codex、Claude、Hermes、OpenCode 和 Pi 的请求卡片">
 </p>
 
 ### 3.2 个人统计
@@ -46,9 +42,7 @@ TPS Plugin 在 Orca 右侧栏显示 AI 请求的 Token 用量和生成速度。�
 - 无需登录即可合并本机和 SSH 主机的用量。热力图显示过去 365 天，可在 Orca 的 TPS Plugin 设置中调整统计时区。
 
 <p align="center">
-  <a href="./assets/readme/zh-CN/personal-stats.png" title="查看原图">
-    <img src="./assets/readme/zh-CN/personal-stats.webp" width="250" alt="中文个人统计页，展示用量汇总、模型用量、模型均速和用量热力图">
-  </a>
+  <img src="./assets/readme/zh-CN/personal-stats.jpg" width="250" alt="中文个人统计页，展示用量汇总、模型用量、模型均速和用量热力图">
 </p>
 
 ### 3.3 天梯榜
@@ -58,25 +52,19 @@ TPS Plugin 在 Orca 右侧栏显示 AI 请求的 Token 用量和生成速度。�
 - 开启天梯排名后，榜单会自动更新。登录 GitHub 即可参榜，同一账号的多台设备合并统计。
 
 <p align="center">
-  <a href="./assets/readme/zh-CN/leaderboard.png" title="查看原图">
-    <img src="./assets/readme/zh-CN/leaderboard.webp" width="266" alt="中文天梯榜，展示近 30 天用量曲线和速度榜页签">
-  </a>
+  <img src="./assets/readme/zh-CN/leaderboard.jpg" width="266" alt="中文天梯榜，展示近 30 天用量曲线和速度榜页签">
 </p>
 
 ## 4. 支持的 Harness
 
 <p align="center">
-  <a href="./assets/readme/harnesses/supported-harnesses.svg" title="查看原尺寸图标">
-    <img src="./assets/readme/harnesses/supported-harnesses.svg" width="100%" alt="支持的 Harness · Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes Agent, Pi Agent, MiniMax Code, Kimi Code, Oh My Pi, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, DeepSeek Harness">
-  </a>
+  <img src="./assets/readme/harnesses/supported-harnesses.svg" width="100%" alt="支持的 Harness · Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes Agent, Pi Agent, MiniMax Code, Kimi Code, Oh My Pi, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, DeepSeek Harness">
 </p>
 
 ## 5. 原理描述
 
 <p align="center">
-  <a href="./assets/readme/tokens-manager-architecture.png" title="查看原理图原图">
-    <img src="./assets/readme/tokens-manager-architecture.webp" width="640" alt="本机和远程 Tokens 管家通过 SSH 互传统计，本机展示个人统计并向天梯榜上报汇总">
-  </a>
+  <img src="./assets/readme/tokens-manager-architecture.jpg" width="640" alt="本机和远程 Tokens 管家通过 SSH 互传统计，本机展示个人统计并向天梯榜上报汇总">
 </p>
 
 - 本机和远程设备各自采集并保存 Token 用量。
@@ -87,9 +75,9 @@ TPS Plugin 在 Orca 右侧栏显示 AI 请求的 Token 用量和生成速度。�
 ## 6. 安装指南
 
 > [!IMPORTANT]
-> **从 1.6.4 升级到 1.6.5**
+> **从 1.6.4 升级**
 >
-> 1.6.5 大幅调整了插件结构，天梯榜服务器也已迁移。请先在 Orca 中卸载旧版 TPS Plugin，再安装 **1.6.5**。
+> 1.6.5 大幅调整了插件结构，天梯榜服务器也已迁移。请先在 Orca 中卸载旧版 TPS Plugin，再安装 **1.6.6**。
 
 - **环境要求**　Windows 或 Linux 上使用 Orca 1.4.251 或更新版本。采集 SSH 工作区用量时，远程主机需安装支持 SQLite 的 Node.js 22.13 或更新版本。
 - **插件目录安装**　在 **Orca → 设置 → 插件** 中搜索 **TPS**，选择 **jecyxyf** 发布的插件，安装并确认权限。[查看插件条目](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)

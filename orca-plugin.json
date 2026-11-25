@@ -3,7 +3,7 @@
   "manifestVersion": 2,
   "id": "tps-plugin",
   "name": "TPS Plugin",
-  "version": "1.6.5",
+  "version": "1.6.6",
   "description": "Track request speed in Orca, combine personal token usage from local and SSH workspaces, and join a live cross-device leaderboard with GitHub.",
   "author": {
     "name": "jecyxyf",
@@ -14,24 +14,24 @@
   "homepage": "https://github.com/jecyxyf/Orca-TPS-Plugin#readme",
   "icon": "assets/1.6.3/icon.png",
   "cover": {
-    "path": "assets/1.6.5/cover.png",
+    "path": "assets/1.6.5/cover.jpg",
     "alt": "TPS Plugin overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar"
   },
   "screenshots": [
     {
-      "path": "assets/1.6.5/current-data.png",
+      "path": "assets/1.6.5/current-data.jpg",
       "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
       "caption": "Current Data · Check how each AI request ran",
       "theme": "dark"
     },
     {
-      "path": "assets/1.6.5/personal-stats.png",
+      "path": "assets/1.6.5/personal-stats.jpg",
       "alt": "Personal Stats shows usage by model, average generation speeds, and a usage heatmap",
       "caption": "Personal Stats · Compare model usage and explore daily trends",
       "theme": "dark"
     },
     {
-      "path": "assets/1.6.5/leaderboard.png",
+      "path": "assets/1.6.5/leaderboard.jpg",
       "alt": "Orca sidebar showing 30-day usage trends and the Speed tab with Day and Hour modes",
       "caption": "Leaderboard · Compare usage and speed by day or by hour",
       "theme": "dark"
