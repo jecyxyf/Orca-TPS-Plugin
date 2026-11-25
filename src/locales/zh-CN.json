@@ -262,5 +262,11 @@
   "leaderboard-server-update-required": "更新榜单服务端后即可查看。",
   "ranking-update-mode": "排名更新方式",
   "ranking-update-daily": "按天数更新",
-  "ranking-update-hourly": "按小时更新"
+  "ranking-update-hourly": "按小时更新",
+  "settings-title": "设置",
+  "settings-close": "关闭设置",
+  "settings-style": "样式",
+  "settings-style-empty": "样式选项待补充。",
+  "open-repository": "打开 GitHub 代码仓库",
+  "star-repository": "喜欢的话，去 GitHub 点个 Star 支持一下！"
 }

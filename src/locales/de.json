@@ -262,5 +262,11 @@
   "leaderboard-server-update-required": "Aktualisieren Sie den Bestenlisten-Server, um diese Ranglisten anzuzeigen.",
   "ranking-update-mode": "Art der Ranglistenaktualisierung",
   "ranking-update-daily": "Nach Tagen",
-  "ranking-update-hourly": "Alle 24 Std."
+  "ranking-update-hourly": "Alle 24 Std.",
+  "settings-title": "Einstellungen",
+  "settings-close": "Einstellungen schließen",
+  "settings-style": "Stil",
+  "settings-style-empty": "Stiloptionen werden hier bald ergänzt.",
+  "open-repository": "GitHub-Repository öffnen",
+  "star-repository": "Gefällt dir das Plugin? Gib ihm einen Stern auf GitHub!"
 }

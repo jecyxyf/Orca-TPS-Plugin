@@ -262,5 +262,11 @@
   "leaderboard-server-update-required": "Mettez à jour le serveur du classement pour voir ces résultats.",
   "ranking-update-mode": "Mode de mise à jour du classement",
   "ranking-update-daily": "Par jour",
-  "ranking-update-hourly": "Toutes les 24 h"
+  "ranking-update-hourly": "Toutes les 24 h",
+  "settings-title": "Paramètres",
+  "settings-close": "Fermer les paramètres",
+  "settings-style": "Style",
+  "settings-style-empty": "Les options de style seront ajoutées ici bientôt.",
+  "open-repository": "Ouvrir le dépôt GitHub",
+  "star-repository": "Ce plugin vous plaît ? Mettez-lui une étoile sur GitHub !"
 }

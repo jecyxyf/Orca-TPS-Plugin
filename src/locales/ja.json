@@ -262,5 +262,11 @@
   "leaderboard-server-update-required": "このランキングを表示するにはサーバーを更新してください。",
   "ranking-update-mode": "ランキングの更新方法",
   "ranking-update-daily": "日単位で更新",
-  "ranking-update-hourly": "24時間ごとに更新"
+  "ranking-update-hourly": "24時間ごとに更新",
+  "settings-title": "設定",
+  "settings-close": "設定を閉じる",
+  "settings-style": "スタイル",
+  "settings-style-empty": "スタイル設定は今後ここに追加されます。",
+  "open-repository": "GitHub リポジトリを開く",
+  "star-repository": "気に入ったら GitHub で Star をお願いします！"
 }

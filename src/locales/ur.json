@@ -262,5 +262,11 @@
   "leaderboard-server-update-required": "یہ درجہ بندی دیکھنے کے لیے لیڈر بورڈ سرور اپ ڈیٹ کریں۔",
   "ranking-update-mode": "درجہ بندی اپ ڈیٹ کرنے کا طریقہ",
   "ranking-update-daily": "دن کے مطابق",
-  "ranking-update-hourly": "ہر ۲۴ گھنٹے بعد"
+  "ranking-update-hourly": "ہر ۲۴ گھنٹے بعد",
+  "settings-title": "ترتیبات",
+  "settings-close": "ترتیبات بند کریں",
+  "settings-style": "انداز",
+  "settings-style-empty": "انداز کے اختیارات جلد یہاں شامل کیے جائیں گے۔",
+  "open-repository": "GitHub ریپوزٹری کھولیں",
+  "star-repository": "پسند آیا؟ GitHub پر Star دے کر سپورٹ کریں!"
 }

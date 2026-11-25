@@ -262,5 +262,11 @@
   "leaderboard-server-update-required": "Обновите сервер рейтинга, чтобы увидеть эти результаты.",
   "ranking-update-mode": "Способ обновления рейтинга",
   "ranking-update-daily": "По дням",
-  "ranking-update-hourly": "Каждые 24 ч"
+  "ranking-update-hourly": "Каждые 24 ч",
+  "settings-title": "Настройки",
+  "settings-close": "Закрыть настройки",
+  "settings-style": "Стиль",
+  "settings-style-empty": "Параметры стиля появятся здесь позже.",
+  "open-repository": "Открыть репозиторий GitHub",
+  "star-repository": "Нравится плагин? Поставьте Star на GitHub!"
 }

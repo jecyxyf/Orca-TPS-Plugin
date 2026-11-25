@@ -262,5 +262,11 @@
   "leaderboard-server-update-required": "Aggiorna il server della classifica per vedere questi risultati.",
   "ranking-update-mode": "Metodo di aggiornamento della classifica",
   "ranking-update-daily": "Per giorno",
-  "ranking-update-hourly": "Ogni 24 ore"
+  "ranking-update-hourly": "Ogni 24 ore",
+  "settings-title": "Impostazioni",
+  "settings-close": "Chiudi impostazioni",
+  "settings-style": "Stile",
+  "settings-style-empty": "Le opzioni di stile verranno aggiunte qui presto.",
+  "open-repository": "Apri repository GitHub",
+  "star-repository": "Ti piace? Lascia una stella su GitHub!"
 }

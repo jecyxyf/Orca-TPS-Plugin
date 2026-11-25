@@ -262,5 +262,11 @@
   "leaderboard-server-update-required": "حدّث خادم لوحة الصدارة لعرض هذا الترتيب.",
   "ranking-update-mode": "طريقة تحديث الترتيب",
   "ranking-update-daily": "حسب اليوم",
-  "ranking-update-hourly": "التحديث كل 24 ساعة"
+  "ranking-update-hourly": "التحديث كل 24 ساعة",
+  "settings-title": "الإعدادات",
+  "settings-close": "إغلاق الإعدادات",
+  "settings-style": "المظهر",
+  "settings-style-empty": "ستُضاف خيارات المظهر هنا لاحقاً.",
+  "open-repository": "فتح مستودع GitHub",
+  "star-repository": "هل أعجبك الإضافة؟ ادعمنا بنجمة على GitHub!"
 }

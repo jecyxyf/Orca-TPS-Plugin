@@ -79,11 +79,97 @@
     button { font: inherit; }
     .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     h1 { margin: 0; font-size: 18px; line-height: 1.4; letter-spacing: -.3px; font-weight: 750; }
-    .title-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 32px; }
-    .panel-title { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+    .title-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
+    .panel-brand { display: flex; align-items: center; gap: 4px; min-width: 0; }
+    .panel-title { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+    .panel-title-link {
+      display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+      color: inherit; text-decoration: none; border-radius: 6px;
+      transition: color .15s ease;
+    }
+    .panel-title-link:hover { color: var(--blue); }
+    .panel-title-link:focus-visible, .panel-star-link:focus-visible {
+      outline: 2px solid var(--blue); outline-offset: 2px;
+    }
     .panel-logo { flex: none; width: 32px; height: 32px; border-radius: 6px; object-fit: contain; }
-    .panel-version { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0; }
-    .language-picker { position: relative; flex: 0 1 156px; min-width: 0; }
+    .panel-version { flex: none; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0; }
+    .panel-star-link {
+      display: inline-grid; place-items: center; flex: none;
+      width: 24px; height: 24px; border-radius: 999px;
+      color: #e09100; text-decoration: none;
+      transition: background-color .15s ease, transform .15s ease;
+    }
+    html.dark .panel-star-link { color: #ffd147; }
+    .panel-star-link:hover { background: rgb(245 183 0 / 16%); transform: scale(1.08); }
+    .panel-star-svg { width: 18px; height: 18px; overflow: visible; }
+    .panel-star-svg .star-core {
+      fill: currentColor; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round;
+      transform-box: fill-box; transform-origin: center;
+      animation: star-pulse 2.8s ease-in-out infinite;
+    }
+    .panel-star-svg .star-spark {
+      fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round;
+      transform-box: fill-box; transform-origin: center;
+      animation: star-sparkle 2.8s ease-in-out infinite;
+    }
+    .panel-star-svg .star-spark-b { animation-delay: 1.4s; }
+    @keyframes star-pulse {
+      0%, 60%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); }
+      20% { transform: scale(1.14) rotate(-6deg); filter: drop-shadow(0 0 4px rgb(245 183 0 / 48%)); }
+      38% { transform: scale(.98) rotate(3deg); }
+    }
+    @keyframes star-sparkle {
+      0%, 100% { opacity: .25; transform: scale(.7); }
+      35% { opacity: 1; transform: scale(1.1); }
+      70% { opacity: .35; transform: scale(.8); }
+    }
+    .title-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex: 0 1 auto; min-width: 0; }
+    .settings-toggle, .settings-close {
+      display: inline-grid; place-items: center; flex: none;
+      width: 32px; height: 32px; padding: 0;
+      border: 1px solid var(--line); border-radius: 8px;
+      background: var(--surface); color: var(--muted); cursor: pointer;
+      transition: color .15s ease, background-color .15s ease, border-color .15s ease;
+    }
+    .settings-toggle svg, .settings-close svg { width: 16px; height: 16px; transition: transform .22s ease; }
+    .settings-toggle:hover, .settings-toggle[aria-expanded="true"], .settings-close:hover {
+      background: var(--button-bg); color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, var(--line));
+    }
+    .settings-toggle[aria-expanded="true"] svg { transform: rotate(45deg); }
+    .settings-toggle:focus-visible, .settings-close:focus-visible {
+      outline: 2px solid var(--blue); outline-offset: 2px;
+    }
+    .settings-backdrop {
+      position: fixed; inset: 0; z-index: 20;
+      display: grid; align-items: start; justify-items: center;
+      padding: 16px; overflow-y: auto;
+      background: rgb(18 18 22 / 34%);
+      backdrop-filter: blur(4px);
+    }
+    html.dark .settings-backdrop { background: rgb(0 0 0 / 56%); }
+    .settings-sheet {
+      width: 100%; max-width: 420px; max-height: calc(100dvh - 32px);
+      overflow-y: auto; scrollbar-width: thin;
+      padding: 14px 16px 16px;
+      border: 1px solid var(--line); border-radius: 20px;
+      background: var(--surface); box-shadow: 0 12px 36px rgb(0 0 0 / 18%);
+    }
+    .settings-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding-bottom: 10px; border-bottom: 1px solid var(--line);
+    }
+    .settings-title { margin: 0; font-size: 15px; line-height: 1.4; font-weight: 750; color: var(--ink); }
+    .settings-close { width: 28px; height: 28px; border-color: transparent; background: transparent; }
+    .settings-body { display: grid; gap: 14px; margin-top: 12px; }
+    .settings-section { display: grid; gap: 8px; min-width: 0; }
+    .settings-label { margin: 0; color: var(--ink); font-size: 12px; font-weight: 700; }
+    .settings-empty {
+      margin: 0; padding: 20px 12px;
+      border: 1px dashed var(--line); border-radius: 12px;
+      background: var(--speed-bg); color: var(--muted);
+      font-size: 12px; text-align: center; overflow-wrap: anywhere;
+    }
+    .language-picker { position: relative; flex: 0 1 140px; min-width: 0; }
     .language-toggle, .language-option {
       display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 32px;
       padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px;
@@ -535,19 +621,28 @@
       .war-totals { gap: 6px; }
       .ladder-total { padding-inline: 6px; font-size: 12px; }
       .ladder-speed-row .ladder-total { padding-inline: 4px; font-size: 11px; }
+      .settings-sheet { padding: 12px; }
     }
     @media (max-width: 280px) {
       .title-bar { gap: 6px; }
-      .panel-title { gap: 4px; font-size: 15px; }
+      .panel-brand { gap: 2px; }
+      .panel-title, .panel-title-link { gap: 4px; font-size: 15px; }
       .panel-logo { width: 24px; height: 24px; }
       .panel-version { font-size: 11px; }
-      .language-toggle { column-gap: 3px; padding-inline: 4px; }
+      .panel-star-link { width: 20px; height: 20px; }
+      .panel-star-svg { width: 15px; height: 15px; }
+      .title-actions { gap: 4px; }
+      .settings-toggle { width: 28px; height: 28px; }
+      .language-toggle { column-gap: 3px; min-height: 28px; padding-inline: 4px; }
       .war-period-tabs { grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.15fr); gap: 2px; }
       .war-period-tabs .war-tab { padding-inline: 1px; font-size: 10px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .refresh.is-busy svg, .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner { animation: none; }
       .refresh:active:not(:disabled) { transform: none; }
+      .panel-title-link, .panel-star-link, .settings-toggle, .settings-toggle svg, .settings-close { transition: none; }
+      .panel-star-link:hover { transform: none; }
+      .panel-star-svg .star-core, .panel-star-svg .star-spark { animation: none; }
       .ladder-medal::before, .ladder-medal::after, .ladder-medal-emblem::before { animation: none; opacity: 0; }
     }
   </style>
@@ -555,22 +650,45 @@
 <body>
   <main id="panel" aria-labelledby="panel-title">
     <div class="title-bar" dir="ltr">
-      <h1 class="panel-title" id="panel-title">
-        <img class="panel-logo" src="panel-logo.png" alt="">TPS Plugin
-        <span id="panel-version" class="panel-version" hidden></span>
-      </h1>
-      <div class="language-picker" id="language-picker" hidden>
-        <button class="language-toggle" id="language-toggle" type="button" aria-expanded="false" aria-controls="language-menu">
-          <img class="language-flag" id="language-flag" alt="">
-          <bdi class="language-name" id="language-name"></bdi>
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 6 5 5 5-5"/></svg>
-        </button>
-        <div class="language-menu" id="language-menu" hidden>
-          <input class="language-search" id="language-search" type="search" autocomplete="off" dir="auto"
-                 data-i18n-placeholder="search-languages" data-i18n-aria-label="search-languages">
-          <div class="language-options" id="language-options"></div>
-          <p class="language-message" id="language-message" role="status" data-localized-text hidden></p>
+      <div class="panel-brand">
+        <h1 class="panel-title" id="panel-title">
+          <a class="panel-title-link" id="panel-repo-link" data-testid="panel-repo-link"
+             href="https://github.com/jecyxyf/Orca-TPS-Plugin" target="_blank" rel="noopener noreferrer" data-i18n-title="open-repository">
+            <img class="panel-logo" src="panel-logo.png" alt="">TPS Plugin
+          </a>
+          <span id="panel-version" class="panel-version" hidden></span>
+        </h1>
+        <a class="panel-star-link" id="panel-star-link" data-testid="panel-star-link"
+           href="https://github.com/jecyxyf/Orca-TPS-Plugin" target="_blank" rel="noopener noreferrer"
+           data-i18n-title="star-repository" data-i18n-aria-label="star-repository">
+          <svg class="panel-star-svg" viewBox="0 0 24 24" aria-hidden="true">
+            <path class="star-core" d="M12 3.2 14.6 8.5l5.9.8-4.3 4.1 1 5.8L12 16.4l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8Z"/>
+            <path class="star-spark star-spark-a" d="M19.5 2.5v3M18 4h3"/>
+            <path class="star-spark star-spark-b" d="M4.5 17.5v2.6M3.2 18.8h2.6"/>
+          </svg>
+        </a>
+      </div>
+      <div class="title-actions">
+        <div class="language-picker" id="language-picker" hidden>
+          <button class="language-toggle" id="language-toggle" type="button" aria-expanded="false" aria-controls="language-menu">
+            <img class="language-flag" id="language-flag" alt="">
+            <bdi class="language-name" id="language-name"></bdi>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 6 5 5 5-5"/></svg>
+          </button>
+          <div class="language-menu" id="language-menu" hidden>
+            <input class="language-search" id="language-search" type="search" autocomplete="off" dir="auto"
+                   data-i18n-placeholder="search-languages" data-i18n-aria-label="search-languages">
+            <div class="language-options" id="language-options"></div>
+            <p class="language-message" id="language-message" role="status" data-localized-text hidden></p>
+          </div>
         </div>
+        <button class="settings-toggle" id="settings-toggle" data-testid="settings-toggle" type="button"
+                aria-expanded="false" aria-controls="settings-dialog" data-i18n-title="settings-title" data-i18n-aria-label="settings-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.74 0-1.25.4-1.51 1Z"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div class="panel-tabs" id="panel-tabs" role="tablist" data-i18n-aria-label="panel-tabs">
@@ -769,6 +887,24 @@
       </div>
     </section>
   </main>
+
+  <div class="settings-backdrop" id="settings-dialog" data-testid="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-heading" hidden>
+    <div class="settings-sheet">
+      <div class="settings-head">
+        <h2 class="settings-title" id="settings-heading" data-i18n="settings-title"></h2>
+        <button class="settings-close" id="settings-close" data-testid="settings-close" type="button"
+                data-i18n-title="settings-close" data-i18n-aria-label="settings-close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="settings-body">
+        <section class="settings-section" id="settings-style-section" aria-labelledby="settings-style-label">
+          <p class="settings-label" id="settings-style-label" data-i18n="settings-style"></p>
+          <p class="settings-empty" id="settings-style-empty" data-i18n="settings-style-empty"></p>
+        </section>
+      </div>
+    </div>
+  </div>
 
   <template id="ladder-avatar-fallback">
     <svg viewBox="0 0 24 24" data-icon="black-hat" aria-hidden="true" focusable="false">
@@ -2458,6 +2594,44 @@
         clearTimeout(uploadUnlockWake);
         clearInterval(interval);
       }, { once: true });
+    })();
+  </script>
+  <script>
+    (() => {
+      const byId = id => document.getElementById(id);
+      const lifetime = new AbortController();
+      const toggle = byId('settings-toggle');
+      const dialog = byId('settings-dialog');
+      const closeButton = byId('settings-close');
+
+      function setOpen(open, restoreFocus = false) {
+        dialog.hidden = !open;
+        toggle.setAttribute('aria-expanded', String(open));
+        if (open) closeButton.focus();
+        else if (restoreFocus) toggle.focus();
+      }
+
+      toggle.addEventListener('click', () => setOpen(dialog.hidden, !dialog.hidden));
+      closeButton.addEventListener('click', () => setOpen(false, true));
+      dialog.addEventListener('click', event => {
+        if (event.target === dialog) setOpen(false, true);
+      });
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !dialog.hidden) {
+          event.preventDefault();
+          setOpen(false, true);
+        }
+      }, { signal: lifetime.signal });
+
+      for (const link of [byId('panel-repo-link'), byId('panel-star-link')]) {
+        link?.addEventListener('click', event => {
+          if (typeof window.orca?.shell?.openExternal !== 'function') return;
+          event.preventDefault();
+          void window.orca.shell.openExternal(link.href).catch(() => {});
+        }, { signal: lifetime.signal });
+      }
+
+      window.addEventListener('pagehide', () => lifetime.abort(), { once: true });
     })();
   </script>
 </body>

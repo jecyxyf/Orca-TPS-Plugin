@@ -136,7 +136,7 @@ test('panel resolves per-record agent label from record.provider', async () => {
 
 test('the panel title has a logo and Current Data shows the update time beside an icon-only refresh button', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const logo = /<h1\b[^>]*\bid="panel-title"[^>]*>\s*<img\b[^>]*\bsrc="([^"]+)"[^>]*\balt=""[^>]*>\s*TPS Plugin/.exec(html);
+  const logo = /<h1\b[^>]*\bid="panel-title"[^>]*>[\s\S]*?<img\b[^>]*\bsrc="([^"]+)"[^>]*\balt=""[^>]*>\s*TPS Plugin/.exec(html);
   assert.ok(logo, 'logo must be left of the title');
   const png = await readFile(path.resolve(path.dirname(panelPath), logo[1]));
   assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
@@ -602,3 +602,33 @@ test('panel avatar view loads visible avatars through the observer and retries a
   assert.deepEqual(loads, ['alice', 'alice'], 'a loaded avatar is not observed or requested again');
   assert.equal(observed.length, 3);
 });
+
+test('top-right header places language picker beside settings gear and modal keeps style section only', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const titleBar = /<div class="title-bar"[^>]*>([\s\S]*?)<div class="panel-tabs"/.exec(html)?.[1] ?? '';
+  assert.match(titleBar, /id="language-picker"/);
+  assert.match(titleBar, /<button[^>]*id="settings-toggle"[^>]*aria-controls="settings-dialog"/);
+  assert.ok(titleBar.indexOf('id="language-picker"') < titleBar.indexOf('id="settings-toggle"'));
+
+  const dialog = /<div[^>]*id="settings-dialog"[^>]*role="dialog"[^>]*aria-modal="true"[\s\S]*?(?=\n\s*<template id="ladder-avatar-fallback">)/.exec(html)?.[0] ?? '';
+  assert.ok(dialog, 'settings modal dialog must exist');
+  assert.match(dialog, /id="settings-close"/);
+  assert.match(dialog, /id="settings-style-section"/);
+  assert.doesNotMatch(dialog, /id="language-picker"|settings-timezone|data-bg-preset/);
+
+  const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(css.get('.settings-backdrop').position, 'fixed');
+  assert.equal(css.get('html').background, 'var(--page)');
+});
+
+test('panel title links to the repository and shows an animated star badge beside the version', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const repoUrl = 'https://github.com/jecyxyf/Orca-TPS-Plugin';
+  const brand = /<div class="panel-brand">([\s\S]*?)<div class="title-actions">/.exec(html)?.[1] ?? '';
+  assert.match(brand, new RegExp(`<a[^>]*id="panel-repo-link"[^>]*href="${repoUrl}"[^>]*target="_blank"`));
+  assert.match(brand, new RegExp(`id="panel-version"[\\s\\S]*?<a[^>]*id="panel-star-link"[^>]*href="${repoUrl}"[^>]*target="_blank"`));
+  assert.match(brand, /<svg[^>]*class="panel-star-svg"[\s\S]*?star-core[\s\S]*?star-spark/);
+  assert.match(html, /@keyframes star-pulse/);
+  assert.match(html, /@keyframes star-sparkle/);
+});
+

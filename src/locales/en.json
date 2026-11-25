@@ -262,5 +262,11 @@
   "leaderboard-server-update-required": "Update the leaderboard server to view these rankings.",
   "ranking-update-mode": "Ranking update method",
   "ranking-update-daily": "Update by day",
-  "ranking-update-hourly": "Update every 24 h"
+  "ranking-update-hourly": "Update every 24 h",
+  "settings-title": "Settings",
+  "settings-close": "Close settings",
+  "settings-style": "Style",
+  "settings-style-empty": "Style options will be added here soon.",
+  "open-repository": "Open GitHub repository",
+  "star-repository": "Enjoying TPS Plugin? Give it a Star on GitHub!"
 }
