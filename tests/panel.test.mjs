@@ -688,6 +688,8 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(html, /@keyframes aurora-sweep/);
   assert.match(html, /@keyframes aurora-flash/);
   assert.match(html, /@keyframes star-float/);
+  assert.match(html, /@keyframes dust-float/);
+  assert.match(html, /const CARD_DUST = \[/);
   assert.match(html, /function decorateNewCard\(card\)/);
   assert.match(html, /function recordIdentity\(record\)/);
   assert.equal(css.get('.record-card .output').color, '#0066e6');

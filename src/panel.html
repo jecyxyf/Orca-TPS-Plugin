@@ -689,6 +689,20 @@
       68% { opacity: .88; transform: translate(calc(var(--dx, 0px) * .8), calc(var(--dy, -12px) * .8)) scale(.95) rotate(68deg); }
       100% { opacity: 0; transform: translate(var(--dx, 0px), var(--dy, -12px)) scale(.2) rotate(110deg); }
     }
+    .card-dust {
+      position: absolute; left: var(--x, 50%); top: var(--y, 50%);
+      width: var(--size, 3px); height: var(--size, 3px);
+      border-radius: 50%; background: var(--dust-color, #7dd3fc);
+      box-shadow: 0 0 6px var(--dust-color, #7dd3fc), 0 0 11px color-mix(in srgb, var(--dust-color, #7dd3fc) 55%, transparent);
+      opacity: 0;
+      animation: dust-float var(--dur, 1.5s) ease-out var(--delay, .4s) 1 both;
+    }
+    @keyframes dust-float {
+      0% { opacity: 0; transform: translate(0, 0) scale(.3); }
+      22% { opacity: .95; transform: translate(calc(var(--dx, 0px) * .3), calc(var(--dy, -14px) * .3)) scale(1.2); }
+      65% { opacity: .7; transform: translate(calc(var(--dx, 0px) * .78), calc(var(--dy, -14px) * .78)) scale(.85); }
+      100% { opacity: 0; transform: translate(var(--dx, 0px), var(--dy, -14px)) scale(.15); }
+    }
     .card-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
     .identity {
       display: grid; grid-template-columns: auto minmax(0, 1fr);
@@ -849,7 +863,7 @@
     @media (prefers-reduced-motion: reduce) {
       .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner, .current-updated-icon.is-spinning svg { animation: none; }
       .record-card.is-entering { animation: none; opacity: 1; }
-      .card-aurora, .card-aurora::before, .card-aurora-glow, .card-star { animation: none; opacity: 0; }
+      .card-aurora, .card-aurora::before, .card-aurora-glow, .card-star, .card-dust { animation: none; opacity: 0; }
       .refresh:active:not(:disabled) { transform: none; }
       .panel-title-link, .panel-star-link, .settings-toggle, .settings-toggle svg, .settings-close { transition: none; }
       .panel-star-link:hover { transform: none; }
@@ -1742,13 +1756,39 @@
       let seenRecordKeys = new Set();
       let suppressInsertAnimation = false;
       const CARD_STARS = [
-        { x: '8%', y: '10%', dx: '-10px', dy: '-14px', delay: '.36s', dur: '1.35s', size: '12px', color: '#7dd3fc' },
-        { x: '28%', y: '2%', dx: '-4px', dy: '-16px', delay: '.48s', dur: '1.45s', size: '10px', color: '#fde68a' },
-        { x: '68%', y: '0%', dx: '6px', dy: '-16px', delay: '.42s', dur: '1.4s', size: '13px', color: '#c4b5fd' },
-        { x: '94%', y: '14%', dx: '12px', dy: '-12px', delay: '.54s', dur: '1.5s', size: '11px', color: '#f0abfc' },
-        { x: '96%', y: '74%', dx: '12px', dy: '10px', delay: '.62s', dur: '1.35s', size: '10px', color: '#6ee7b7' },
-        { x: '52%', y: '96%', dx: '4px', dy: '14px', delay: '.56s', dur: '1.45s', size: '11px', color: '#7dd3fc' },
-        { x: '4%', y: '78%', dx: '-12px', dy: '10px', delay: '.44s', dur: '1.4s', size: '12px', color: '#fde68a' }
+        { x: '6%', y: '10%', dx: '-12px', dy: '-15px', delay: '.36s', dur: '1.35s', size: '12px', color: '#ff6b8b' },
+        { x: '22%', y: '1%', dx: '-6px', dy: '-18px', delay: '.46s', dur: '1.45s', size: '10px', color: '#ffa94d' },
+        { x: '44%', y: '-2%', dx: '2px', dy: '-18px', delay: '.4s', dur: '1.4s', size: '11px', color: '#fde047' },
+        { x: '68%', y: '0%', dx: '6px', dy: '-16px', delay: '.52s', dur: '1.45s', size: '13px', color: '#4ade80' },
+        { x: '88%', y: '6%', dx: '12px', dy: '-14px', delay: '.42s', dur: '1.4s', size: '11px', color: '#38bdf8' },
+        { x: '98%', y: '34%', dx: '15px', dy: '-6px', delay: '.58s', dur: '1.5s', size: '10px', color: '#818cf8' },
+        { x: '96%', y: '74%', dx: '14px', dy: '12px', delay: '.64s', dur: '1.4s', size: '11px', color: '#e879f9' },
+        { x: '76%', y: '96%', dx: '8px', dy: '16px', delay: '.5s', dur: '1.45s', size: '10px', color: '#38bdf8' },
+        { x: '48%', y: '98%', dx: '-2px', dy: '16px', delay: '.6s', dur: '1.5s', size: '12px', color: '#fde047' },
+        { x: '18%', y: '94%', dx: '-10px', dy: '14px', delay: '.44s', dur: '1.4s', size: '10px', color: '#4ade80' },
+        { x: '2%', y: '68%', dx: '-14px', dy: '8px', delay: '.54s', dur: '1.45s', size: '12px', color: '#c4b5fd' }
+      ];
+      const CARD_DUST = [
+        { x: '12%', y: '4%', dx: '-8px', dy: '-18px', delay: '.38s', dur: '1.35s', size: '3px', color: '#ff6b8b' },
+        { x: '16%', y: '14%', dx: '-14px', dy: '-10px', delay: '.68s', dur: '1.45s', size: '2.5px', color: '#fde047' },
+        { x: '33%', y: '3%', dx: '-3px', dy: '-20px', delay: '.52s', dur: '1.5s', size: '3.5px', color: '#4ade80' },
+        { x: '39%', y: '8%', dx: '5px', dy: '-14px', delay: '.76s', dur: '1.4s', size: '2.5px', color: '#38bdf8' },
+        { x: '56%', y: '1%', dx: '4px', dy: '-19px', delay: '.44s', dur: '1.45s', size: '3.5px', color: '#e879f9' },
+        { x: '62%', y: '6%', dx: '9px', dy: '-13px', delay: '.72s', dur: '1.5s', size: '2.5px', color: '#ffa94d' },
+        { x: '79%', y: '2%', dx: '10px', dy: '-18px', delay: '.58s', dur: '1.4s', size: '3px', color: '#818cf8' },
+        { x: '92%', y: '20%', dx: '16px', dy: '-10px', delay: '.48s', dur: '1.5s', size: '3.5px', color: '#fde047' },
+        { x: '99%', y: '48%', dx: '18px', dy: '-2px', delay: '.66s', dur: '1.45s', size: '3px', color: '#ff6b8b' },
+        { x: '95%', y: '60%', dx: '15px', dy: '8px', delay: '.82s', dur: '1.4s', size: '2.5px', color: '#38bdf8' },
+        { x: '86%', y: '88%', dx: '12px', dy: '14px', delay: '.56s', dur: '1.5s', size: '3.5px', color: '#4ade80' },
+        { x: '66%', y: '95%', dx: '6px', dy: '16px', delay: '.74s', dur: '1.45s', size: '3px', color: '#ffa94d' },
+        { x: '58%', y: '92%', dx: '-4px', dy: '15px', delay: '.42s', dur: '1.4s', size: '2.5px', color: '#e879f9' },
+        { x: '36%', y: '97%', dx: '-6px', dy: '18px', delay: '.64s', dur: '1.5s', size: '3.5px', color: '#818cf8' },
+        { x: '26%', y: '91%', dx: '-10px', dy: '12px', delay: '.86s', dur: '1.35s', size: '2.5px', color: '#ff6b8b' },
+        { x: '10%', y: '88%', dx: '-14px', dy: '12px', delay: '.6s', dur: '1.45s', size: '3px', color: '#38bdf8' },
+        { x: '1%', y: '52%', dx: '-18px', dy: '2px', delay: '.7s', dur: '1.5s', size: '3.5px', color: '#fde047' },
+        { x: '3%', y: '34%', dx: '-16px', dy: '-6px', delay: '.5s', dur: '1.4s', size: '2.5px', color: '#4ade80' },
+        { x: '4%', y: '20%', dx: '-14px', dy: '-12px', delay: '.8s', dur: '1.45s', size: '3px', color: '#e879f9' },
+        { x: '84%', y: '10%', dx: '12px', dy: '-16px', delay: '.88s', dur: '1.4s', size: '2.5px', color: '#6ee7b7' }
       ];
       function recordIdentity(record) {
         return typeof record?.id === 'string' && record.id
@@ -1786,13 +1826,27 @@
           svg.append(starPath);
           stars.append(svg);
         }
+        for (const spec of CARD_DUST) {
+          const dot = document.createElement('span');
+          dot.className = 'card-dust';
+          dot.setAttribute('aria-hidden', 'true');
+          dot.style.setProperty('--x', spec.x);
+          dot.style.setProperty('--y', spec.y);
+          dot.style.setProperty('--dx', spec.dx);
+          dot.style.setProperty('--dy', spec.dy);
+          dot.style.setProperty('--delay', spec.delay);
+          dot.style.setProperty('--dur', spec.dur);
+          dot.style.setProperty('--size', spec.size);
+          dot.style.setProperty('--dust-color', spec.color);
+          stars.append(dot);
+        }
         card.append(glow, aurora, stars);
         const timer = setTimeout(() => {
           card.classList.remove('is-entering');
           glow.remove();
           aurora.remove();
           stars.remove();
-        }, 2150);
+        }, 2550);
         timer.unref?.();
       }
       ui['updated-icon'].addEventListener('animationend', () => {
