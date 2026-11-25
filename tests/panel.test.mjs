@@ -156,6 +156,11 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
     .map(match => match.slice(1)), expectedModes);
   assert.match(toolbar, /usage-mode-tabs/);
   assert.equal((toolbar.match(/<svg\b/g) ?? []).length, 2);
+  const warTotals = /<div class="war-totals">([\s\S]*?)<\/div>\s*<\/section>/.exec(html)?.[1] ?? '';
+  assert.equal((warTotals.match(/class="war-stat-icon\b/g) ?? []).length, 3);
+  assert.doesNotMatch(warTotals, /class="war-label"/);
+  assert.match(html, /\.war-totals\s*\{[^}]*grid-auto-flow:\s*column/);
+  assert.match(html, /\.war-value\.speed-max\s*\{\s*color:\s*var\(--speed\)/);
   assert.deepEqual([...html.matchAll(/data-ladder-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
     .map(match => match.slice(1)), expectedModes);
   assert.match(html, /usageMode = 'calendar'/);

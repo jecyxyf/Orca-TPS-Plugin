@@ -772,17 +772,32 @@
     .usage-mode-tabs svg { width: 15px; height: 15px; }
     .ladder-update-modes { align-self: start; flex: none; block-size: 44px; max-inline-size: 100%; }
     .ladder-update-modes .war-tab { padding-inline: 9px; line-height: 1.2; }
-    .war-totals { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 10px; }
-    .war-stat {
-      display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 8px;
-      min-width: 0; padding: 7px 9px; border-radius: 13px; background: color-mix(in srgb, var(--speed-bg) var(--record-card-opacity, 100%), transparent);
+    .war-totals {
+      display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+      gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
     }
-    .war-label, .war-value { font-size: 20px; line-height: 1.2; }
-    .war-label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .war-value { font-weight: 750; letter-spacing: -.3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .war-stat {
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      min-width: 0; padding: 3px 2px;
+    }
+    .war-stat + .war-stat:not([hidden]) { border-inline-start: 1px solid var(--line); padding-inline-start: 6px; }
+    .war-stat-icon {
+      display: inline-grid; place-items: center; flex: none;
+      width: 16px; height: 16px; color: var(--icon-color, currentColor);
+    }
+    .war-stat-icon svg { width: 15px; height: 15px; }
+    .war-stat-icon.tokens { color: var(--icon-color, var(--blue)); }
+    .war-stat-icon.requests { color: var(--icon-color, var(--green)); }
+    .war-stat-icon.speed-max { color: var(--icon-color, var(--speed)); }
+    .war-value {
+      min-width: 0; font-size: 16px; line-height: 1.2; font-weight: 750;
+      letter-spacing: -.3px; font-variant-numeric: tabular-nums; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
     .war-value.tokens { color: var(--blue); }
     .war-value.requests { color: var(--green); }
-    .war-value small { margin-inline-start: 3px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0; }
+    .war-value.speed-max { color: var(--speed); }
+    .war-value small { margin-inline-start: 2px; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: 0; }
     .war-note { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
     .war-note:empty, .war-note[hidden] { display: none; }
     .war-rows { margin: 6px 0 0; padding: 0; list-style: none; }
@@ -847,7 +862,9 @@
       .ladder-rows .ladder-speed-row { --ladder-row-gap: 4px; }
       .ladder-speed-row .ladder-rank { min-width: 2ch; font-size: 16px; }
       .ladder-speed-row .ladder-avatar { --ladder-row-avatar-size: 22px; }
-      .war-totals { gap: 6px; }
+      .war-totals { gap: 4px; }
+      .war-stat { gap: 4px; }
+      .war-value { font-size: 14px; }
       .ladder-total { padding-inline: 6px; font-size: 12px; }
       .ladder-speed-row .ladder-total { padding-inline: 4px; font-size: 11px; }
       .settings-sheet { padding: 12px; }
@@ -1244,17 +1261,32 @@
           <button class="war-tab" type="button" role="tab" data-range="year" data-days="365" aria-selected="false" data-testid="range-year"><span data-localized-text></span></button>
         </div>
         <div class="war-totals">
-          <div class="war-stat">
-            <span class="war-label" data-i18n="total-usage" data-i18n-title="total-usage"></span>
+          <div class="war-stat" data-i18n-title="total-usage">
+            <span class="war-stat-icon tokens" role="img" data-i18n-aria-label="total-usage">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+                <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
+              </svg>
+            </span>
             <strong class="war-value tokens" id="war-tokens" data-testid="war-tokens">—</strong>
           </div>
-          <div class="war-stat">
-            <span class="war-label" data-i18n="request-count" data-i18n-title="request-count"></span>
+          <div class="war-stat" data-i18n-title="request-count">
+            <span class="war-stat-icon requests" role="img" data-i18n-aria-label="request-count">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+            </span>
             <strong class="war-value requests" id="war-requests" data-testid="war-requests">—</strong>
           </div>
-          <div class="war-stat" id="war-max-speed-row">
-            <span class="war-label" data-i18n="max-speed" data-i18n-title="max-speed"></span>
-            <strong class="war-value"><span id="war-max-speed" data-testid="war-max-speed">—</span> <small id="war-max-speed-unit" hidden>tokens/s</small></strong>
+          <div class="war-stat" id="war-max-speed-row" data-i18n-title="max-speed">
+            <span class="war-stat-icon speed-max" role="img" data-i18n-aria-label="max-speed">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 15l-3-3c1.3-5 5.2-9 12-9 0 6.8-4 10.7-9 12Z"/>
+                <circle cx="16" cy="8" r="1.5"/>
+                <path d="m9 12-5-1 4-4 4 1m0 7 1 5 4-4-1-4M8 16c-3-1-5 1-5 5 4 0 6-2 5-5Z"/>
+              </svg>
+            </span>
+            <strong class="war-value speed-max"><span id="war-max-speed" data-testid="war-max-speed">—</span> <small id="war-max-speed-unit" hidden>tokens/s</small></strong>
           </div>
         </div>
       </section>
