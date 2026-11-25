@@ -1897,15 +1897,12 @@
 
       function usageCard({ recent, daily }, now, animateAfter, windowStart) {
         const container = document.createElement('div'), chart = document.createElement('canvas');
-        const meta = document.createElement('div'), tools = document.createElement('span');
         container.className = 'ladder-recent';
         chart.className = 'ladder-chart';
         chart.width = 320;
         chart.height = 60;
         chart.setAttribute('role', 'img');
         chart.setAttribute('aria-label', usageChartLabel());
-        meta.className = 'ladder-recent-meta';
-        tools.className = 'ladder-recent-tools';
         const byDay = rankDays > 1;
         const dateLabel = time => locale.date(time, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' });
         const timeOf = point => byDay ? point.at : point.submittedAt;
@@ -1914,16 +1911,6 @@
         const left = byDay ? windowStart : now - span;
         const points = byDay ? dailyUsagePoints(daily, left, rankDays) : recent?.points ?? [];
         const latestPoint = points.at(-1);
-        tools.textContent = toolText(recent?.topModel, recent?.topCli);
-        tools.title = tools.textContent;
-        meta.append(tools);
-        if (!byDay) {
-          const speed = document.createElement('strong');
-          speed.className = 'ladder-recent-speed';
-          speed.textContent = speedText(latestPoint?.avgTps ?? 0);
-          speed.title = t('leaderboard-average-speed');
-          meta.append(speed);
-        }
         const pointTitle = point => byDay ? (point.packetDay
           ? `${dateLabel(Date.parse(point.packetDay + 'T00:00:00+08:00'))} · ${formatMillionTokens(point.tokens)}`
           : `${dateLabel(point.at)} – ${dateLabel(point.at + DAY_MS)} · ${formatMillionTokens(point.tokens)}`) +
@@ -1941,9 +1928,6 @@
             axis.append(label);
           }
           container.append(axis);
-        }
-        container.append(meta);
-        if (byDay) {
           if (!latestPoint) return container;
           const width = chart.width, height = chart.height - chartVerticalPadding * 2;
           const maximum = Math.max(1, ...points.map(tokensOf));
@@ -1970,6 +1954,17 @@
             chart.title = Math.abs(x(nearest) - position) > width * DAY_MS / span / 2 ? usageChartLabel() : pointTitle(nearest);
           });
         } else {
+          const meta = document.createElement('div'), tools = document.createElement('span');
+          const speed = document.createElement('strong');
+          meta.className = 'ladder-recent-meta';
+          tools.className = 'ladder-recent-tools';
+          tools.textContent = toolText(recent?.topModel, recent?.topCli);
+          tools.title = tools.textContent;
+          speed.className = 'ladder-recent-speed';
+          speed.textContent = speedText(latestPoint?.avgTps ?? 0);
+          speed.title = t('leaderboard-average-speed');
+          meta.append(tools, speed);
+          container.append(meta);
           drawSubmissionPulses(chart, points, left, animateAfter);
           if (!latestPoint) return container;
           chart.addEventListener('pointermove', event => {
