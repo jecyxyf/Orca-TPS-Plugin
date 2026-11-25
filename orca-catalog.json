@@ -17,6 +17,78 @@
       ],
       "releases": [
         {
+          "version": "1.6.5",
+          "commit": "b09c2b2f30f068ab5eb322243605b0444520bc1b",
+          "contentHash": "f5ce5aa25906ccfc75720e7527a7882d417f28ff445d7e63ad2aa09c1df2c0cd",
+          "execution": "trusted-worker",
+          "minimumOrca": "1.4.251",
+          "name": "TPS Plugin",
+          "contributes": [
+            {
+              "kind": "panels",
+              "name": "TPS Plugin"
+            },
+            {
+              "kind": "commands",
+              "name": "Refresh TPS Data"
+            },
+            {
+              "kind": "events",
+              "name": "workspace.changed"
+            },
+            {
+              "kind": "statusBarItems",
+              "name": "🚀 — tokens/s · 🍪 Cache hit —"
+            }
+          ],
+          "capabilities": [
+            "storage:own",
+            "workspace:read",
+            "secrets:own",
+            "settings:own"
+          ],
+          "images": {
+            "icon": {
+              "path": "assets/1.6.3/icon.png",
+              "alt": "TPS Plugin",
+              "sha256": "c0690ab9054176277c92eb601125a1a3b3af20d662abaa980c3106295c3d42b9",
+              "width": 256,
+              "height": 256
+            },
+            "cover": {
+              "path": "assets/1.6.5/cover.png",
+              "alt": "TPS Plugin overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar",
+              "sha256": "cfe6953671acd3602b77166fdc9d5d823bcc6748f06d85b48d88b264aaca5e3f",
+              "width": 1600,
+              "height": 1000
+            },
+            "screenshots": [
+              {
+                "path": "assets/1.6.5/current-data.png",
+                "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
+                "sha256": "870913e139c8a97d0e4db74d674cc314b29bb77405120601fe06b256cfa2d55c",
+                "width": 1600,
+                "height": 1000
+              },
+              {
+                "path": "assets/1.6.5/personal-stats.png",
+                "alt": "Personal Stats shows usage by model, average generation speeds, and a usage heatmap",
+                "sha256": "8ae7cf901f0501d9e3c665cc12465a47cd7d7df4867a16ba48e8465ee0ba8406",
+                "width": 1600,
+                "height": 1000
+              },
+              {
+                "path": "assets/1.6.5/leaderboard.png",
+                "alt": "Orca sidebar showing 30-day usage trends and the Speed tab with Day and Hour modes",
+                "sha256": "b11efe80b55fbc6d58799242188a634bde44cf1329a9ef045169fd51f3a1ba51",
+                "width": 1600,
+                "height": 1000
+              }
+            ]
+          },
+          "changelog": "Unifies cross-device usage with Tokens Managers, adds separate usage and speed rankings, and refreshes Personal Stats, the README, and gallery images."
+        },
+        {
           "version": "1.6.4",
           "commit": "1bac1fcd07b919e58f628ccab71a643cac37d6eb",
           "contentHash": "82df350ecea47b33043cb87c6dede31f6fe4a9adbe2f33d5ab69925c9209f3ad",
