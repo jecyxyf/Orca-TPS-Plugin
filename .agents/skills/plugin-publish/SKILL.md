@@ -1,6 +1,6 @@
 ---
 name: plugin-publish
-description: 负责 TPS Plugin 的版本发布和插件发布。核对版本号，同步中英文 README 与 Orca 插件目录资料，并在明确要求发布时创建 GitHub Release 和核验 Orca 插件目录。
+description: 负责 TPS Plugin 的版本发布。核对版本，更新中英文 README 与 Orca 插件目录资料，并在明确要求发布时按需部署天梯榜正式服、创建 GitHub Release 和核验 Orca 插件目录。
 ---
 
 # TPS Plugin 版本发布与插件发布
@@ -29,8 +29,11 @@ description: 负责 TPS Plugin 的版本发布和插件发布。核对版本号�
 
 1. **准备版本**：确认要发布的提交已经合并到 `main`，并按上面的规则核对两处版本号。在 `CHANGELOG.md` 添加 `X.Y.Z` 的版本小节，把 `[Unreleased]` 的内容移到该小节。
 2. **写入目录记录**：用发布提交运行 `orca plugin release-entry . --json`，把 CLI 生成的提交号、内容哈希和配图写入 `orca-catalog.json` 的新版本记录，保留已有版本。运行 `orca plugin validate orca-catalog.json`。
-3. **发布 Release**：在 GitHub 上新建 Release，标签填 `vX.Y.Z`，目标选发布提交（Release 会自动创建这个标签）；标题写 `TPS Plugin X.Y.Z`；说明使用 `CHANGELOG.md` 中该版本的内容。
+3. **部署天梯榜正式服**：发布涉及天梯榜服务端代码或客户端与服务端接口改动时，先用待发布版本在测试服 `https://test.itps8.com` 验证 GitHub 登录、用量上报和榜单读取。
+   - 测试通过后，按 [服务端部署说明](../../../server/README.md) 的「正式版（Docker Compose）」部署正式服 `https://itps8.com`，沿用现有 Compose 项目名和 `leaderboard-data` 数据卷。正式服已运行目标版本时，直接核验。
+   - 确认正式服 `/healthz` 返回 `ok: true` 和 `githubConfigured: true`，再验证 GitHub 登录、用量上报和榜单读取。正式服核验通过后创建 GitHub Release。
+4. **发布 Release**：在 GitHub 上新建 Release，标签填 `vX.Y.Z`，目标选发布提交（Release 会自动创建这个标签）；标题写 `TPS Plugin X.Y.Z`；说明使用 `CHANGELOG.md` 中该版本的内容。
    - 有 `gh` 时运行：`gh release create vX.Y.Z --target <发布提交> --title "TPS Plugin X.Y.Z" --notes-file <说明文件>`。
    - 没有 `gh` 或者没登录时，请用户运行 `! gh auth login` 登录，或者让用户在 GitHub 网页上按以上内容创建 Release。
-4. **标签规则**：Orca 社区目录只收录 `vX.Y.Z` 标签，而且同一个版本以第一次看到的提交为准。不要单独推送、移动或删除已有的版本标签，也不要发布草稿 Release 或者预发布版本来代替正式版本。
-5. **发布后核对**：确认 Release 的标签指向发布提交。对照 [Orca 公开页](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin) 和 [Orca 社区目录](https://github.com/stablyai/orca-community-plugins/blob/main/status.json)，看实际显示的版本。公开页仍显示旧版时，查看 `status.json` 里本仓库的状态和收录程序最近一次提交的时间，向用户报告 GitHub 上的最新 Release 和 Orca 当前显示的版本。
+5. **标签规则**：Orca 社区目录只收录 `vX.Y.Z` 标签，而且同一个版本以第一次看到的提交为准。不要单独推送、移动或删除已有的版本标签，也不要发布草稿 Release 或者预发布版本来代替正式版本。
+6. **发布后核对**：确认 Release 的标签指向发布提交。对照 [Orca 公开页](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin) 和 [Orca 社区目录](https://github.com/stablyai/orca-community-plugins/blob/main/status.json)，看实际显示的版本。公开页仍显示旧版时，查看 `status.json` 里本仓库的状态和收录程序最近一次提交的时间，向用户报告 GitHub 上的最新 Release 和 Orca 当前显示的版本。

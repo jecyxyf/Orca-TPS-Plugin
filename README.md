@@ -5,12 +5,13 @@
 [![Orca 1.4.251+](https://img.shields.io/badge/Orca-%3E%3D1.4.251-blue.svg)](https://github.com/stablyai/orca)
 [![CI](https://github.com/jecyxyf/Orca-TPS-Plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/jecyxyf/Orca-TPS-Plugin/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/jecyxyf/Orca-TPS-Plugin?style=social)](https://github.com/jecyxyf/Orca-TPS-Plugin)
 
 ## 1. Project description
 
-TPS Plugin brings token usage and generation speed to the Orca sidebar. See what the current session is doing, review your usage over time, or join the leaderboard with a GitHub account.
+TPS Plugin shows AI request token usage and generation speed in the Orca sidebar. Inspect the current session, review your usage over time, or join the leaderboard with a GitHub account.
 
-The plugin supports local and SSH workspaces and remembers your choice of 15 interface languages. Conversation logs are read in place. The leaderboard receives usage totals.
+The plugin supports local and remote workspaces, offers 15 interface languages, and remembers your selection.
 
 ## 2. Interface overview
 
@@ -42,8 +43,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 - Review usage and requests for today, the last 7 or 30 days, this calendar year, or the past 365 days. Today's summary also shows the highest generation speed for a single request.
 - Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
-- The Tokens Manager fills in up to 370 days from the available logs, keeping 32 days of request details and 370 days of daily and hourly totals. The heatmap covers 365 days.
-- Personal Stats combines local and SSH hosts without signing in. Tokens Managers scan every two seconds by default and exchange their latest device snapshots over SSH. The local manager updates Personal Stats every three seconds. Set the statistics time zone in the TPS Plugin settings in Orca.
+- Personal Stats combines local and SSH usage without signing in. The heatmap covers the past 365 days. Set the statistics time zone in the TPS Plugin settings in Orca.
 
 <p align="center">
   <a href="./assets/readme/en/personal-stats.png" title="View full-size screenshot">
@@ -53,13 +53,9 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ### 3.3 Leaderboard
 
-- View usage rankings in M. Day mode uses Beijing calendar days for today, the last 7 days, and the last 30 days. Hour mode counts the last 24, 168, and 720 completed hours. The service refreshes all eight boards together every three seconds by default. The top three get gold, silver, and bronze medals.
-- Use the switch next to Rankings to control leaderboard viewing. Turning it off hides the rankings and stops fetching them. The plugin remembers your choice. Guests can view rankings.
-- The 1-day usage board shows a five-minute usage chart, the most-used model and Harness in those five minutes, and the latest average generation speed. Missing or invalid usage and speed values display as zero. The 7-day and 30-day boards show daily usage charts. All three boards show the latest upload time.
-- The Speed tab ranks up to 100 GitHub accounts per mode by their best average generation speed. Day mode starts at midnight Beijing time. Hour mode counts the last 24 completed hours. Each account appears once per board across all its devices. The top three earn gold, silver, and bronze medals marked `S`. A 10-second interval qualifies with more than 500 new tokens and a valid speed. The winning interval supplies the time, most-used model, Harness, and full count of new tokens, such as `1,250,000 tokens`.
-- Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
-- Sign in with GitHub to participate. Each account combines the latest usage totals from all reporting devices. Relayed copies of the same device report count once. If an account misses a round, its score stays on the board until a new report updates it or other scores push it out. Avatars load from GitHub.
-- While signed in, the local Tokens Manager uses the same device snapshots to update Personal Stats and upload the leaderboard reports every three seconds by default. The plugin fetches the leaderboard automatically while rankings are enabled. Each icon spins during its transfer and shows a small red exclamation mark on failure. The times show the last successful upload and download.
+- View token usage rankings and trends by day or hour.
+- Compare each account’s best average generation speed and see the model and Harness used for that result.
+- Turn on Rankings to get automatic updates. Sign in with GitHub to participate. Usage from multiple devices is combined under the same account.
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">
@@ -69,37 +65,43 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ## 4. Supported Harnesses
 
-**Personal Stats and leaderboard usage** read local records from 16 harnesses on both Windows and Linux: Claude Code, Claude Desktop, Codex, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes Agent, Pi, MiniMax Code, Kimi Code, Oh My Pi, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, and DeepSeek Harness. Claude Desktop usage comes from Cowork's local audit logs and usage ledger. DeepSeek Harness can use either plain or Zstd-compressed session logs.
+<p align="center">
+  <a href="./assets/readme/harnesses/supported-harnesses.svg" title="View full-size icon chart">
+    <img src="./assets/readme/harnesses/supported-harnesses.svg" width="100%" alt="Supported Harnesses · Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes Agent, Pi Agent, MiniMax Code, Kimi Code, Oh My Pi, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, DeepSeek Harness">
+  </a>
+</p>
 
-**Orca session collection** supports these harnesses:
+## 5. How it works
 
-- Codex CLI
-- Claude Code (including subagents)
-- OpenCode v1 and v2
-- Pi Agent
-- Antigravity CLI
-- Hermes Agent
+<p align="center">
+  <a href="./assets/readme/tokens-manager-architecture.png" title="View the full-size diagram">
+    <img src="./assets/readme/tokens-manager-architecture.webp" width="640" alt="Local and remote Tokens Managers exchange statistics over SSH. The local manager updates Personal Stats and submits summaries to the leaderboard.">
+  </a>
+</p>
 
-## 5. Installation
+- Each local or remote device collects and stores its own token usage.
+- Tokens Managers sync usage over SSH. Personal Stats and leaderboard submissions use the same totals.
+- The leaderboard server calculates rankings in memory and keeps usage and speed data in memory only. [Server guide](./server/README.md)
+- The leaderboard server runs without a database. Raw session logs stay on your devices, and GitHub account and sign-in data are stored in a file on the server.
 
-Use **Orca 1.4.251 or later** on Windows or Linux. To collect usage from an SSH workspace, the remote host needs **Node.js 22.13 or later with SQLite support**.
+## 6. Installation
 
-Orca starts the Tokens Manager from `~/.orca/tpsplugin/bin/token_manager.mjs` on each connected host. The `bin` directory contains six program files. The SQLite database is at `~/.orca/tpsplugin/database/tpslugin.db`, and the installation fingerprint is in `~/.orca/tpsplugin/`.
+> [!IMPORTANT]
+> **Upgrading from 1.6.4 to 1.6.5**
+>
+> Version 1.6.5 substantially changes the plugin structure and moves the leaderboard to a new server. Uninstall the old TPS Plugin in Orca, then install **1.6.5**.
 
-### Orca plugin directory
+- **Requirements.** Use Orca 1.4.251 or later on Windows or Linux. For SSH workspace usage, the remote host needs Node.js 22.13 or later with SQLite support.
+- **Install from the plugin directory.** In Orca, open **Settings → Plugins**, search for **TPS** by **jecyxyf**, then install it and review the permissions. [View the plugin listing](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
+- **Install locally.** Clone this repository. In **Settings → Plugins → Development folders…**, add the folder containing `orca-plugin.json` and enable the plugin.
+- **Open the plugin.** Select **TPS Plugin** in Orca’s right sidebar.
 
-Open **Settings → Plugins**, search for **TPS**, and select the entry by **jecyxyf**. Click **Install** and review the requested permissions. Orca downloads the plugin for you. [View the plugin listing](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
+## 7. Known issues
 
-### Local installation
+If a device submits to the leaderboard and shuts down before syncing, Personal Stats on other devices can lag behind. Stats catch up once the device reconnects and syncs. Future versions will keep the current sync approach.
 
-Clone this repository.
+## 8. Next version
 
-```sh
-git clone https://github.com/jecyxyf/Orca-TPS-Plugin.git
-```
+Overhaul the plugin’s visual design and layout to make it feel more modern and fun.
 
-In Orca, open **Settings → Plugins → Development folders…** and add the cloned folder containing `orca-plugin.json`. Review the permissions and enable the plugin. Keep the cloned folder in place while using it.
-
-After installation, open **TPS Plugin** in Orca’s right sidebar.
-
-[MIT License](./LICENSE) · [Third-party notices](./THIRD_PARTY_NOTICES.md) · [Leaderboard server guide](./server/README.md)
+[MIT License](./LICENSE) · [Third-party notices](./THIRD_PARTY_NOTICES.md)

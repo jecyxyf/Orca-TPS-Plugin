@@ -5,12 +5,13 @@
 [![Orca 1.4.251+](https://img.shields.io/badge/Orca-%3E%3D1.4.251-blue.svg)](https://github.com/stablyai/orca)
 [![CI](https://github.com/jecyxyf/Orca-TPS-Plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/jecyxyf/Orca-TPS-Plugin/actions/workflows/ci.yml)
 [![MIT 许可](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![GitHub Star 数](https://img.shields.io/github/stars/jecyxyf/Orca-TPS-Plugin?style=social)](https://github.com/jecyxyf/Orca-TPS-Plugin)
 
 ## 1. 项目描述
 
-TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成速度。你可以查看当前会话的请求、回顾个人用量，也可以用 GitHub 账号参加天梯榜。
+TPS Plugin 在 Orca 右侧栏显示 AI 请求的 Token 用量和生成速度。你可以查看当前会话、回顾个人用量，也可以用 GitHub 账号参加天梯榜。
 
-插件支持本地和 SSH 工作区，可切换 15 种界面语言，并记住上次选择。会话日志在原处读取，天梯榜接收的是用量汇总。
+插件支持本机和远程工作区，提供 15 种界面语言，并记住上次选择。
 
 ## 2. 界面预览
 
@@ -42,8 +43,7 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 - 查看今日、近 7 天、近 30 天、今年或过去 365 天的用量与请求数。今日还会显示单次请求的最大生成速度。
 - 按工具和模型查看用量，比较各模型的平均生成速度。用量以百万 Token（M）计，包含新输入、输出和缓存读写。
-- Tokens 管家用现有日志补算最近 370 天。最近 32 天保存逐条请求，最近 370 天保存每日和每小时的汇总。热力图显示过去 365 天。
-- 个人统计无需登录，自动合并本机和 SSH 主机的用量。管家默认每 2 秒扫描一次，并通过 SSH 互传各设备的最新数据。本机管家默认每 3 秒更新个人统计。在 Orca 的 TPS Plugin 设置中可修改统计时区。
+- 无需登录即可合并本机和 SSH 主机的用量。热力图显示过去 365 天，可在 Orca 的 TPS Plugin 设置中调整统计时区。
 
 <p align="center">
   <a href="./assets/readme/zh-CN/personal-stats.png" title="查看原图">
@@ -53,13 +53,9 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 ### 3.3 天梯榜
 
-- 用量排名以 M 显示。按天数更新以北京时间自然日统计今日、近 7 天和近 30 天。按小时更新统计已结束的近 24、168 和 720 个完整小时。八张榜默认每 3 秒一起刷新。前三名分别有金、银、铜奖牌。
-- 天梯排名旁的开关控制榜单的显示和拉取，并记住上次选择。关闭时收起榜单和个人名次。未登录也可以查看榜单。
-- 1 天用量榜显示近 5 分钟的用量波形、这 5 分钟内用量最高的模型和 Harness，以及最近的平均生成速度。缺失或异常的用量和速度按 0 显示。7 天和 30 天用量榜按天显示用量曲线。三个用量榜都显示上次上传时间。
-- 速度榜跟随更新模式。按天数取北京时间当天 00:00 起的成绩，按小时取已结束的近 24 个完整小时。每榜按各账号最高的 10 秒平均生成速度排前 100 名，同一账号在多台设备上传也只占一个名次。前三名分别获得标有 `S` 的金、银、铜奖牌。这 10 秒内新增用量超过 500 Token 且速度有效才参与排名。榜上时间、最常用模型、Harness 和完整的新增 Token 数均来自胜出的时段，例如 `1,250,000 tokens`。
-- 曲线从零线的绿色连续过渡到最高点的红色。曲线与零线之间使用同样的渐变，透明度为 50%。
-- 通过 GitHub 登录后参加排名。同一账号合计所有已上报设备的最新用量，同一设备被多个管家代报也只算一次。漏报时沿用上次成绩，直到新上报更新成绩或掉出榜单。头像由插件向 GitHub 获取。
-- 登录后，本机管家默认每 3 秒用同一批设备数据更新个人统计并上报榜单。开启天梯排名后，插件自动下载榜单。传输时图标转圈，失败时显示小红色感叹号，旁边显示上次成功时间。
+- 按天或按小时查看 Token 用量排名和用量趋势。
+- 比较各账号的最佳平均生成速度，查看上榜时使用的模型和 Harness。
+- 开启天梯排名后，榜单会自动更新。登录 GitHub 即可参榜，同一账号的多台设备合并统计。
 
 <p align="center">
   <a href="./assets/readme/zh-CN/leaderboard.png" title="查看原图">
@@ -69,37 +65,43 @@ TPS Plugin 是一款 Orca 插件，让你在侧栏查看 Token 用量和生成�
 
 ## 4. 支持的 Harness
 
-**个人统计和天梯榜**在 Windows 和 Linux 上都读取 16 种 Harness 的本地记录，包括 Claude Code、Claude Desktop、Codex、Gemini CLI、Grok Build、OpenCode、OpenClaw、Hermes Agent、Pi、MiniMax Code、Kimi Code、Oh My Pi、Antigravity CLI、GitHub Copilot CLI、WorkBuddy 和 DeepSeek Harness。Claude Desktop 读取 Cowork 的本地审计日志和用量流水。DeepSeek Harness 支持普通和 Zstd 压缩会话日志。
+<p align="center">
+  <a href="./assets/readme/harnesses/supported-harnesses.svg" title="查看原尺寸图标">
+    <img src="./assets/readme/harnesses/supported-harnesses.svg" width="100%" alt="支持的 Harness · Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes Agent, Pi Agent, MiniMax Code, Kimi Code, Oh My Pi, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, DeepSeek Harness">
+  </a>
+</p>
 
-**Orca 会话采集**支持以下工具。
+## 5. 原理描述
 
-- Codex CLI
-- Claude Code（含子代理）
-- OpenCode v1 和 v2
-- Pi Agent
-- Antigravity CLI
-- Hermes Agent
+<p align="center">
+  <a href="./assets/readme/tokens-manager-architecture.png" title="查看原理图原图">
+    <img src="./assets/readme/tokens-manager-architecture.webp" width="640" alt="本机和远程 Tokens 管家通过 SSH 互传统计，本机展示个人统计并向天梯榜上报汇总">
+  </a>
+</p>
 
-## 5. 安装指南
+- 本机和远程设备各自采集并保存 Token 用量。
+- Tokens 管家通过 SSH 同步用量，个人统计和天梯榜上报共用一份汇总。
+- 天梯榜服务器在内存里计算排名，用量和速度数据只保存在内存中。 [服务端说明](./server/README.md)
+- 天梯榜服务器无需数据库。原始会话日志留在设备上，GitHub 账号和登录状态保存在服务器文件中。
 
-Windows 和 Linux 需使用 **Orca 1.4.251 或更新版本**。采集 SSH 工作区的用量时，远程主机需要安装**支持 SQLite 的 Node.js 22.13 或更新版本**。
+## 6. 安装指南
 
-Orca 从各连接主机的 `~/.orca/tpsplugin/bin/token_manager.mjs` 启动 Tokens 管家。`bin` 目录有六个程序文件，SQLite 数据库是 `~/.orca/tpsplugin/database/tpslugin.db`，安装指纹保存在 `~/.orca/tpsplugin/`。
+> [!IMPORTANT]
+> **从 1.6.4 升级到 1.6.5**
+>
+> 1.6.5 大幅调整了插件结构，天梯榜服务器也已迁移。请先在 Orca 中卸载旧版 TPS Plugin，再安装 **1.6.5**。
 
-### Orca 插件目录
+- **环境要求**　Windows 或 Linux 上使用 Orca 1.4.251 或更新版本。采集 SSH 工作区用量时，远程主机需安装支持 SQLite 的 Node.js 22.13 或更新版本。
+- **插件目录安装**　在 **Orca → 设置 → 插件** 中搜索 **TPS**，选择 **jecyxyf** 发布的插件，安装并确认权限。[查看插件条目](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
+- **本地安装**　克隆本仓库，在 **设置 → 插件 → 开发目录** 中添加包含 `orca-plugin.json` 的目录，然后启用插件。
+- **打开插件**　在 Orca 右侧栏打开 **TPS Plugin**。
 
-打开 **Orca → 设置 → 插件**，搜索 **TPS**，找到 **jecyxyf** 发布的条目。点击**安装**并确认权限，Orca 会自动下载。[查看插件条目](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
+## 7. 已知问题
 
-### 本地安装
+设备上报榜单后，若在同步前关机，其他设备的个人统计会暂时落后。设备重新上线并同步后会补齐。后续沿用现有同步方式。
 
-克隆这个仓库到本地。
+## 8. 下个版本的优化计划
 
-```sh
-git clone https://github.com/jecyxyf/Orca-TPS-Plugin.git
-```
+大幅优化插件界面的视觉设计和布局，让插件更现代、更有趣。
 
-在 **Orca → 设置 → 插件 → 开发目录（Development folders…）** 中，添加包含 `orca-plugin.json` 的克隆目录。确认权限后启用插件，使用期间保留这个目录。
-
-安装后，在 Orca 右侧栏打开 **TPS Plugin**。
-
-[MIT 许可](./LICENSE) · [第三方许可声明](./THIRD_PARTY_NOTICES.md) · [天梯榜服务端指南](./server/README.md)
+[MIT 许可](./LICENSE) · [第三方许可声明](./THIRD_PARTY_NOTICES.md)
