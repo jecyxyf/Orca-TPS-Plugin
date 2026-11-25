@@ -349,7 +349,7 @@
       block-size: calc(100dvh - 32px);
     }
     #current-data { display: grid; grid-template: auto minmax(96px, 1fr) / minmax(0, 1fr); min-block-size: 0; }
-    #usage { grid-template: auto auto minmax(0, 1fr) / minmax(0, 1fr); min-block-size: 0; }
+    #usage { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr); min-block-size: 0; }
     .usage-breakdown {
       display: grid; grid-template-rows: repeat(2, minmax(112px, 1fr)) 180px; gap: 8px;
       min-inline-size: 0;
@@ -762,14 +762,14 @@
     .empty-text { margin: 10px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
     .war, .heat { padding: 10px 16px; }
     .war-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 13px; background: color-mix(in srgb, var(--speed-bg) var(--record-card-opacity, 100%), transparent); }
-    .war-period-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .war-controls { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+    .war-period-tabs { width: 100%; min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .war-tab { min-width: 0; padding: 5px 4px; border: 0; border-radius: 10px; background: transparent; color: var(--tab-unselected, var(--muted)); font-size: 11px; font-weight: 650; cursor: pointer; }
     .war-tab[aria-selected="true"], .war-tab[aria-pressed="true"] { background: var(--button-bg); color: var(--tab-selected, var(--blue)); }
     .war-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-    .war-mode { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .war-mode-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 112px; }
     .war-mode-tabs .war-tab { padding-inline: 12px; overflow-wrap: anywhere; }
-    .usage-mode-tabs { min-width: 0; }
+    .usage-mode-tabs { flex: none; min-width: 0; }
     .usage-mode-tabs .war-tab { display: inline-grid; place-items: center; width: 30px; height: 26px; padding: 0; }
     .usage-mode-tabs svg { width: 15px; height: 15px; }
     .ladder-update-modes { align-self: start; flex: none; block-size: 44px; max-inline-size: 100%; }
@@ -1248,30 +1248,30 @@
       </section>
     </section>
     <section class="panel-view" id="usage" role="tabpanel" aria-labelledby="tab-usage" tabindex="0" data-testid="usage-group" hidden>
-      <div class="war-mode">
-        <div class="war-tabs war-mode-tabs usage-mode-tabs" role="group" data-i18n-aria-label="usage-update-mode">
-          <button class="war-tab" type="button" data-usage-mode="calendar" aria-pressed="true"
-                  data-i18n-title="usage-update-daily" data-i18n-aria-label="usage-update-daily">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="4" width="18" height="17" rx="2"/>
-              <path d="M8 2v4M16 2v4M3 10h18"/>
-            </svg>
-          </button>
-          <button class="war-tab" type="button" data-usage-mode="hourly" aria-pressed="false"
-                  data-i18n-title="usage-update-hourly" data-i18n-aria-label="usage-update-hourly">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="9"/>
-              <path d="M12 7v5l3.2 2"/>
-            </svg>
-          </button>
-        </div>
-      </div>
       <section class="war" id="war" data-i18n-aria-label="usage-overview">
-        <div class="war-tabs war-period-tabs" role="tablist" data-i18n-aria-label="usage-period">
-          <button class="war-tab" type="button" role="tab" data-range="today" data-days="1" aria-selected="true" data-testid="range-today"><span data-localized-text></span></button>
-          <button class="war-tab" type="button" role="tab" data-range="week" data-days="7" aria-selected="false" data-testid="range-week"><span data-localized-text></span></button>
-          <button class="war-tab" type="button" role="tab" data-range="month" data-days="30" aria-selected="false" data-testid="range-month"><span data-localized-text></span></button>
-          <button class="war-tab" type="button" role="tab" data-range="year" data-days="365" aria-selected="false" data-testid="range-year"><span data-localized-text></span></button>
+        <div class="war-controls">
+          <div class="war-tabs war-mode-tabs usage-mode-tabs" role="group" data-i18n-aria-label="usage-update-mode">
+            <button class="war-tab" type="button" data-usage-mode="calendar" aria-pressed="true"
+                    data-i18n-title="usage-update-daily" data-i18n-aria-label="usage-update-daily">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="17" rx="2"/>
+                <path d="M8 2v4M16 2v4M3 10h18"/>
+              </svg>
+            </button>
+            <button class="war-tab" type="button" data-usage-mode="hourly" aria-pressed="false"
+                    data-i18n-title="usage-update-hourly" data-i18n-aria-label="usage-update-hourly">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 7v5l3.2 2"/>
+              </svg>
+            </button>
+          </div>
+          <div class="war-tabs war-period-tabs" role="tablist" data-i18n-aria-label="usage-period">
+            <button class="war-tab" type="button" role="tab" data-range="today" data-days="1" aria-selected="true" data-testid="range-today"><span data-localized-text></span></button>
+            <button class="war-tab" type="button" role="tab" data-range="week" data-days="7" aria-selected="false" data-testid="range-week"><span data-localized-text></span></button>
+            <button class="war-tab" type="button" role="tab" data-range="month" data-days="30" aria-selected="false" data-testid="range-month"><span data-localized-text></span></button>
+            <button class="war-tab" type="button" role="tab" data-range="year" data-days="365" aria-selected="false" data-testid="range-year"><span data-localized-text></span></button>
+          </div>
         </div>
         <div class="war-totals">
           <div class="war-stat" data-i18n-title="total-usage">

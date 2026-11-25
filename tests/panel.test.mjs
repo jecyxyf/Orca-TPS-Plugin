@@ -150,7 +150,7 @@ test('the panel title has a logo and Current Data shows the countdown icon and u
 
 test('Personal Stats and the Leaderboard show calendar mode first and select it by default', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const toolbar = /<section\b[^>]*\bid="usage"[^>]*>\s*<div class="war-mode">([\s\S]*?)\n      <section class="war"/.exec(html)?.[1];
+  const toolbar = /<section class="war" id="war"[^>]*>\s*<div class="war-controls">([\s\S]*?)<div class="war-tabs war-period-tabs"/.exec(html)?.[1];
   assert.ok(toolbar);
   const expectedModes = [['calendar', 'true'], ['hourly', 'false']];
   assert.deepEqual([...toolbar.matchAll(/data-usage-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
@@ -675,6 +675,8 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(css.get('.heat').background, /--record-card-bg/);
   assert.match(css.get('.ladder-card').background, /--record-card-bg/);
   assert.match(css.get('.empty').background, /--record-card-bg/);
+  assert.equal(css.get('.war-controls').display, 'grid');
+  assert.equal(css.get('.war-period-tabs').width, '100%');
   assert.equal(css.get('.usage-breakdown .section-title')['font-size'], '14px');
   assert.equal(css.get('.usage-ranking .section-title')['border-bottom'], '1px solid var(--line)');
   assert.equal(css.get('.rank-tps').background, 'transparent');
