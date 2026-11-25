@@ -363,7 +363,13 @@ async function savePacket(filename, packet) {
 
 export const validPersonal = packet => packet && validInstallationId(packet.deviceGuid) &&
   typeof packet.timeZone === 'string' && Number.isSafeInteger(packet.publishedAt) && packet.publishedAt >= 0 &&
-  [packet.days, packet.hours, packet.maxima].every(Array.isArray);
+  [packet.days, packet.hours, packet.maxima].every(Array.isArray) &&
+  [packet.days, packet.hours].every(rows => rows.every(row => Array.isArray(row?.counters))) &&
+  packet.maxima.every(row => row && typeof row === 'object') &&
+  (packet.ranking === undefined || (packet.ranking?.deviceGuid === packet.deviceGuid &&
+    packet.ranking.publishedAt === packet.publishedAt && packet.ranking.timeZone === packet.timeZone &&
+    [packet.ranking.hours, packet.ranking.daily, packet.ranking.samples].every(Array.isArray) &&
+    (packet.ranking.accountId === undefined || Number.isSafeInteger(packet.ranking.accountId) && packet.ranking.accountId > 0)));
 const validRelay = packet => packet && validInstallationId(packet.deviceGuid) &&
   Number.isSafeInteger(packet.accountId) && packet.accountId > 0 &&
   Number.isSafeInteger(packet.publishedAt) && packet.publishedAt >= 0;

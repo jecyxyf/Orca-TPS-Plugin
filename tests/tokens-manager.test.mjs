@@ -336,7 +336,7 @@ test('keeps the last successful scores across rounds, with original curve dates'
   assert.equal(validatePacket(JSON.stringify(packet(a, 10)), 12, at, 1e6), null);
 });
 
-test('retains four device summaries and replaces the oldest when a new device reports', () => {
+test('keeps every device for an account and ignores older relays of its accepted reports', () => {
   const rankings = createTokensRankings();
   const account = { id: 11, username: 'player' };
   const devices = Array.from({ length: 6 }, () => randomUUID());
@@ -348,14 +348,15 @@ test('retains four device summaries and replaces the oldest when a new device re
     at + 100, TOKENS_DEFAULT_INTERVALS);
   assert.equal(first.boards[24].rows[0].tokens, 100);
 
-  const replaced = rankings.publish([
-    report(devices[4], 50, 1000), report(devices[0], 900, 0, 1200), report(devices[5], 900, 1500, 0)
+  const expanded = rankings.publish([
+    report(devices[4], 50, 1000), report(devices[0], 900, -1, 1200), report(devices[5], 60, 1500, 0)
   ], at + 2000, TOKENS_DEFAULT_INTERVALS);
-  assert.equal(replaced.boards[24].rows[0].tokens, 140);
-  assert.equal(replaced.boards[24].rows[0].lastUploadAt, at + 1000);
+  assert.equal(expanded.boards[24].rows[0].tokens, 210);
+  assert.equal(expanded.calendar.boards[24].rows[0].tokens, 210);
+  assert.equal(expanded.boards[24].rows[0].lastUploadAt, at + 1000);
 
   const refreshed = rankings.publish([report(devices[1], 25, 3000)], at + 3000, TOKENS_DEFAULT_INTERVALS);
-  assert.equal(refreshed.boards[24].rows[0].tokens, 145);
+  assert.equal(refreshed.boards[24].rows[0].tokens, 215);
 });
 
 test('combines device samples and retains separate speed winners until each window ends', () => {
@@ -528,7 +529,7 @@ test('publishes every three seconds and retains successful uploads through an un
   });
   const base = `http://127.0.0.1:${server.address().port}/api/tokens-manager`;
   const config = await fetch(base + '/config').then(res => res.json());
-  assert.deepEqual(config.intervals, { ...TOKENS_DEFAULT_INTERVALS, uploadMs: 3000, publishMs: 3000, readMs: 3000 });
+  assert.deepEqual(config.intervals, { scanMs: 2000, personalMs: 3000, uploadMs: 3000, publishMs: 3000, readMs: 3000 });
   assert.equal(config.speedSampleWindowMs, 25 * hour);
   const upload = body => fetch(base + '/packets', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
   const guid = randomUUID();
@@ -646,7 +647,7 @@ test('keeps its lease across disconnects and drains before replacing the running
     const exit = new Promise(resolve => child.once('exit', resolve));
     const peer = { events, event, stop, send, exit };
     peers.add(peer);
-    send({ type: 'hello', timeZone: 'UTC', bundleVersion });
+    send({ type: 'hello', timeZone: 'UTC', local: true, bundleVersion });
     return peer;
   }
   const a = subscribe(), b = subscribe();
@@ -655,21 +656,20 @@ test('keeps its lease across disconnects and drains before replacing the running
   assert.equal((await b.event('ready')).deviceGuid, first.deviceGuid);
   await runTokensManager(root, { scan: () => assert.fail('second process acquired the socket') });
   await a.event('progress');
-  assert.equal(a.events.some(event => event.type === 'personal'), false);
+  assert.equal(a.events.some(event => event.type === 'summary'), false);
   a.send({ type: 'channels', channels: [{ channelId: 'test-channel', target: { key: 'project', worktreePath: '/project' } }] });
   allowScan();
-  assert.equal((await a.event('personal')).packet.days[0].counters[0], 1);
+  assert.equal((await a.event('summary')).summary.windows.today.requests, 1);
   const channel = await a.event('channel');
   assert.equal(channel.channelId, 'test-channel');
   assert.equal(channel.result.session.records[0].id, 'today');
-  await b.event('personal');
+  await b.event('summary');
   a.send({ type: 'credential', endpoint: 'http://localhost', accountId: 11, token: randomBytes(32).toString('base64url') });
-  assert.equal((await a.event('leaderboard')).packet.accountId, 11);
   assert.equal((await a.event('uploaded')).accountId, 11);
   assert.equal((await a.event('intervals')).intervals.personalMs, 6000);
   assert.equal(submitted[0].deviceGuid, first.deviceGuid);
   assert.equal(submitted[0].accountId, 11);
-  assert.equal(b.events.some(event => event.type === 'leaderboard'), false);
+  assert.equal(b.events.some(event => event.type === 'uploaded'), false);
   a.send({ type: 'unsubscribe' });
   a.stop();
   b.stop();
@@ -677,7 +677,7 @@ test('keeps its lease across disconnects and drains before replacing the running
   const c = subscribe();
   assert.equal((await c.event('ready')).deviceGuid, first.deviceGuid);
   assert.equal(stopped, false);
-  await c.event('personal');
+  await c.event('summary');
   clock += 12_000;
   c.send({ type: 'heartbeat' });
   await c.event('heartbeat');
@@ -707,7 +707,7 @@ test('keeps its lease across disconnects and drains before replacing the running
   }
 });
 
-test('three managers exchange device statistics across two links and restore them after the hub leaves', { timeout: 25_000 }, async t => {
+test('manager rounds use the same device versions for Personal Stats and every ranking window', { timeout: 25_000 }, async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'tps-sync-'));
   const devices = await Promise.all(['hub', 'a', 'b'].map(async name => {
     const root = path.join(directory, name);
@@ -784,30 +784,26 @@ test('three managers exchange device statistics across two links and restore the
   for (const ui of [local, left, right]) ui.send({ type: 'hello', timeZone: 'UTC', local: true, endpoint });
   await Promise.all([local, left, right].map(ui => ui.event('ready')));
   for (const ui of [local, left, right]) ui.send(credential);
-  local.send({ type: 'sync-targets', targets: [a, b].map(device => ({ deviceGuid: device.id, host: device.name })) });
+  local.send({ type: 'sync-targets', targets: [...Array(100).fill(a), b].map(device => ({ deviceGuid: device.id, host: device.name })) });
 
-  const uses = id => event => event.packet.deviceGuid === id;
-  const { packet: fromB } = await left.event('device-personal', uses(b.id));
-  const { packet: fromA } = await right.event('device-personal', uses(a.id));
-  await local.event('device-personal', uses(a.id));
-  await local.event('device-personal', uses(b.id));
+  const allDevices = event => event.summary.progress.done === devices.length;
+  const summaries = await Promise.all([local, left, right].map(ui => ui.event('summary', allDevices)));
+  for (const { summary } of summaries) assert.equal(summary.windows.today.tokens, devices.length * 300);
   assert.deepEqual(new Set(dials), new Set([a.id, b.id]));
-  assert.equal(fromA.publishedAt, (await left.event('personal')).packet.publishedAt);
-  assert.equal(fromB.publishedAt, (await right.event('personal')).packet.publishedAt);
 
-  const cacheFile = path.join(a.root, 'remote_device', b.id, 'leaderboard.json');
-  let saved;
-  for (let i = 0; i < 200 && !saved; i++) {
-    saved = await readFile(cacheFile, 'utf8').then(JSON.parse, () => null);
-    if (!saved) await setTimeout(20);
+  const cacheFile = path.join(a.root, 'remote_device', b.id, 'personal.json');
+  let fromB;
+  for (let i = 0; i < 200 && !fromB; i++) {
+    fromB = await readFile(cacheFile, 'utf8').then(JSON.parse, () => null);
+    if (!fromB) await setTimeout(20);
   }
-  assert.equal(saved?.[11]?.deviceGuid, b.id);
-  assert.equal(saved[11].publishedAt, fromB.publishedAt);
+  assert.equal(fromB?.ranking.deviceGuid, b.id);
+  assert.equal(fromB.ranking.publishedAt, fromB.publishedAt);
   const injected = client(a);
   injected.send({ type: 'sync-hello', deviceGuid: b.id, timeZone: 'UTC' });
   await injected.event('sync-ready');
-  injected.send({ type: 'device-personal', packet: { ...fromB, publishedAt: fromB.publishedAt - 1 } });
-  injected.send({ type: 'device-personal', packet: { ...fromA, publishedAt: fromA.publishedAt + 1 } });
+  const prior = fromB.publishedAt - 1;
+  injected.send({ type: 'device-personal', packet: { ...fromB, publishedAt: prior, ranking: { ...fromB.ranking, publishedAt: prior } } });
   injected.send({ type: 'heartbeat' });
   await injected.event('heartbeat');
   injected.close();
@@ -818,16 +814,45 @@ test('three managers exchange device statistics across two links and restore the
   await aJob;
   const cache = await readRemoteDeviceCache(a.root);
   assert.deepEqual(new Set(cache.personal.keys()), new Set([hub.id, b.id]));
-  assert.equal(cache.personal.get(b.id).publishedAt, fromB.publishedAt);
-  assert.deepEqual(new Set(cache.relays.keys()), new Set([hub.id, b.id]));
+  assert.ok(cache.personal.get(b.id).publishedAt >= fromB.publishedAt);
 
   start(a);
   const home = client(a);
   home.send({ type: 'hello', timeZone: 'UTC', local: true, endpoint });
-  assert.equal((await home.event('device-personal', uses(b.id))).packet.publishedAt, fromB.publishedAt);
+  const restored = await home.event('summary', allDevices);
+  assert.equal(restored.summary.windows.today.tokens, devices.length * 300);
+  a.uploads.length = 0;
   home.send(credential);
   await home.event('uploaded');
-  assert.ok(a.uploads.some(packet => packet.deviceGuid === b.id && packet.publishedAt === fromB.publishedAt));
+  assert.deepEqual(new Set(a.uploads.map(packet => packet.deviceGuid)), new Set(devices.map(device => device.id)));
+  assert.equal(a.uploads.reduce((sum, packet) => sum + packet.hours.at(-1)[1], 0), restored.summary.windows.today.tokens);
+
+  clock += 1000;
+  const fullHour = Math.floor(at / hour) * hour - hour;
+  const newCounters = [1, 200, 0, 0, 0, 0, 0, 0];
+  const newer = {
+    ...fromB, publishedAt: clock,
+    days: fromB.days.map(row => ({ ...row, counters: row.counters.map((count, index) => count + newCounters[index]) })),
+    hours: [{ ...fromB.hours[0], at: fullHour, counters: newCounters }, ...fromB.hours],
+    ranking: { ...fromB.ranking, publishedAt: clock, hours: [[fullHour, 200], ...fromB.ranking.hours] }
+  };
+  const extra = Array.from({ length: 98 }, () => randomUUID());
+  for (const guid of [b.id, ...extra]) {
+    const ranking = guid === extra.at(-1) ? undefined : { ...newer.ranking, deviceGuid: guid };
+    home.send({ type: 'device-personal', packet: { ...newer, deviceGuid: guid, ranking } });
+  }
+  a.uploads.length = 0;
+  home.send({ type: 'upload' });
+  const { summary } = await home.event('summary', event => event.summary.progress.done === 101);
+  await home.event('uploaded', event => event.at === clock);
+  assert.equal(a.uploads.length, 101);
+  const account = { id: 11, username: 'same-account' };
+  const standings = createTokensRankings().publish(a.uploads.map((packet, sequence) => ({ account, packet, sequence, receivedAt: clock })),
+    clock, TOKENS_DEFAULT_INTERVALS);
+  for (const [hours, name] of [[24, 'today'], [168, 'week'], [720, 'month']]) {
+    assert.equal(standings.calendar.boards[hours].rows[0].tokens, summary.windows[name].tokens);
+    assert.equal(standings.boards[hours].rows[0].tokens, summary.hourly.windows[name].tokens);
+  }
   home.close();
   right.close();
 });

@@ -9,7 +9,7 @@ import { keepLatest, validPersonal } from './database.mjs';
 import { tokensIntervals, validInstallationId } from './leaderboard_stats.mjs';
 import { createRuntimeLookup, launchSsh } from './remote-channel.mjs';
 import { TOKEN_MANAGER_ENTRY, TOKENS_HEARTBEAT_MS, TOKENS_LEASE_MS, TOKENS_RETRY_MS, TOKENS_ROOT, tokensMessage } from './orca_connection.mjs';
-import { calendarFor, mergePersonalPackets } from './personal_stats.mjs';
+import { calendarFor } from './personal_stats.mjs';
 
 const localHost = '';
 const timezoneKey = 'tokens-manager:timezone';
@@ -117,17 +117,17 @@ export async function createTokensManagerClient(orca, {
   endpoint, deviceGuid, initialZone, root = TOKENS_ROOT, resolveRuntime = createRuntimeLookup(orca), onChange = () => {}, onUploaded = () => {}
 } = {}) {
   const controller = new AbortController();
-  const personal = new Map(), connections = new Map(), hostTargets = new Map([[localHost, []]]);
+  const pendingRemote = new Map(), connections = new Map(), hostTargets = new Map([[localHost, []]]);
   const uploadStateListeners = new Set();
   const storedZone = await orca.storage.get(timezoneKey).catch(() => undefined);
   let timeZone = calendarFor(storedZone || undefined).timeZone, credentials, stopped = false;
   if (initialZone !== undefined) {
     try { timeZone = calendarFor(initialZone || undefined).timeZone; } catch {}
   }
-  let intervals = tokensIntervals(), progress = null, lastUploadedAt = null, uploadStatus;
+  let intervals = tokensIntervals(), progress = null, personalSummary, lastUploadedAt = null, uploadStatus;
   const bundle = readTokensManagerBundle();
 
-  const summary = () => mergePersonalPackets(personal.values(), timeZone) ?? (progress
+  const summary = () => personalSummary?.timeZone === timeZone ? personalSummary : (progress
     ? { updatedAt: null, timeZone, progress } : null);
 
   function notifyUploadState() {
@@ -185,6 +185,10 @@ export async function createTokensManagerClient(orca, {
         sendChannels(connection);
         sendCredential(connection);
         sendSyncTargets();
+        if (connection.host === localHost) {
+          for (const packet of pendingRemote.values()) send(connection, { type: 'device-personal', packet });
+          pendingRemote.clear();
+        }
         break;
       case 'intervals':
         intervals = tokensIntervals(event.intervals, intervals);
@@ -193,15 +197,20 @@ export async function createTokensManagerClient(orca, {
         progress = { done: event.done, total: event.total };
         if (!summary()?.updatedAt) onChange(summary());
         break;
-      case 'personal':
-      case 'device-personal': {
+      case 'personal': {
         const packet = event.packet;
-        if (connection.host !== localHost || !validPersonal(packet) ||
-            (event.type === 'personal') !== (packet.deviceGuid === connection.deviceGuid) ||
-            !keepLatest(personal, packet.deviceGuid, packet)) return;
-        onChange(summary());
+        if (connection.host === localHost || !validPersonal(packet) || packet.deviceGuid !== connection.deviceGuid) return;
+        const local = connections.get(localHost);
+        if (local?.ready) send(local, { type: 'device-personal', packet });
+        else keepLatest(pendingRemote, packet.deviceGuid, packet);
         break;
       }
+      case 'summary':
+        if (connection.host === localHost) {
+          personalSummary = event.summary;
+          onChange(summary());
+        }
+        break;
       case 'channel':
         if (event.deviceGuid === connection.deviceGuid && typeof event.channelId === 'string') {
           connection.channels.set(event.channelId, event.result);

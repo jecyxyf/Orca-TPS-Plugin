@@ -13,7 +13,6 @@ export const USAGE_UPLOAD_BYTES = 64 * 1024;
 export const SPEED_WINDOW_MS = 24 * HOUR_MS;
 export const SPEED_SAMPLE_WINDOW_MS = SPEED_WINDOW_MS + HOUR_MS;
 export const SPEED_MIN_DELTA = 500;
-export const LEADERBOARD_DEVICE_LIMIT = 4;
 export const hourStart = time => Math.floor(time / HOUR_MS) * HOUR_MS;
 export const isHourStart = time => Number.isSafeInteger(time) && time >= 0 && time % HOUR_MS === 0;
 export const isUsageTime = time => Number.isSafeInteger(time) && time >= 0 && time < 8_640_000_000_000_000;
@@ -46,7 +45,7 @@ export function validRecentRequest(row) {
 
 // Settings shared by Orca, the Tokens manager, and the leaderboard server.
 export const TOKENS_DEFAULT_INTERVALS = Object.freeze({
-  scanMs: 5000, personalMs: 5000, uploadMs: 5000, publishMs: 5000, readMs: 5000
+  scanMs: 2000, personalMs: 3000, uploadMs: 3000, publishMs: 3000, readMs: 3000
 });
 export const TOKENS_LEADERBOARD = '/api/tokens-manager';
 
@@ -98,4 +97,21 @@ export function makeLeaderboardPacket(db, accountId, publishedAt) {
   }
   const hours = [...hourTotals].sort((a, b) => a[0] - b[0]);
   return { deviceGuid: db.deviceGuid, accountId, publishedAt, timeZone: db.calendar.timeZone, hours, daily: [...daily].sort(), samples };
+}
+
+export function leaderboardPacketFromPersonal(packet, accountId) {
+  const { deviceGuid, timeZone, publishedAt } = packet;
+  const cutoff = hourStart(publishedAt);
+  const firstHour = cutoff - RANKING_HOURS.at(-1) * HOUR_MS;
+  const hours = new Map(), daily = new Map();
+  for (const row of packet.hours) {
+    if (row.at < firstHour || row.at > cutoff) continue;
+    // Older caches can have hour boundaries at a non-integral UTC offset.
+    if (!isHourStart(row.at)) return;
+    const tokens = row.counters.slice(1, 5).reduce((total, count) => total + count, 0);
+    add(hours, row.at, tokens);
+    add(daily, row.day, tokens);
+  }
+  return { deviceGuid, accountId, timeZone, publishedAt, samples: [], daily: [...daily].sort(),
+    hours: [...hours].sort((left, right) => left[0] - right[0]) };
 }

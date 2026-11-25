@@ -1,6 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import {
-  HOUR_MS, LEADERBOARD_DEVICE_LIMIT, MAX_RECENT_REQUESTS, RANKING_HOURS, RECENT_STATS_MS, SPEED_SAMPLE_WINDOW_MS,
+  HOUR_MS, MAX_RECENT_REQUESTS, RANKING_HOURS, RECENT_STATS_MS, SPEED_SAMPLE_WINDOW_MS,
   hourStart, isHourStart, isUsageTime, qualifyingSpeed, validInstallationId, validRecentRequest
 } from '../src/leaderboard_stats.mjs';
 import { calendarFor } from '../src/personal_stats.mjs';
@@ -129,18 +129,9 @@ function summarizeDevice(packet, receivedAt, sequence = 0) {
 function recordDevice(row, packet, receivedAt, sequence) {
   const previous = row.devices.get(packet.deviceGuid);
   if (previous && compareUpload(previous, packet.publishedAt, receivedAt, sequence) < 0) return;
-  let replaced;
-  if (!previous && row.devices.size === LEADERBOARD_DEVICE_LIMIT) {
-    for (const [guid, device] of row.devices) {
-      if (!replaced || compareReceipt(replaced[1], device.receivedAt, device.sequence) < 0) replaced = [guid, device];
-    }
-    // Receiver threads can flush out of order. An earlier receipt or a stale replay cannot displace a newer device.
-    if (compareReceipt(replaced[1], receivedAt, sequence) < 0 || packet.publishedAt < replaced[1].publishedAt) return;
-    row.devices.delete(replaced[0]);
-  }
   const summary = summarizeDevice(packet, receivedAt, sequence);
   row.devices.set(packet.deviceGuid, summary);
-  return { summary, replaced: replaced?.[0] };
+  return summary;
 }
 
 function usageScores(devices, cutoff, midnight) {
@@ -253,15 +244,17 @@ export function createTokensRankings(bans = new Map()) {
       if (!accepted) continue;
       let fresh = touched.get(row);
       if (!fresh) touched.set(row, fresh = new Map());
-      fresh.delete(accepted.replaced);
       fresh.set(packet.deviceGuid, packet.samples);
-      if (!row.latest || compareReceipt(row.latest, receivedAt, accepted.summary.sequence) >= 0) {
+      if (!row.latest || compareReceipt(row.latest, receivedAt, accepted.sequence) >= 0) {
         if (row.username !== account.username) dirty.fill(true);
         row.username = account.username;
-        row.latest = { receivedAt, sequence: accepted.summary.sequence };
+        row.latest = { receivedAt, sequence: accepted.sequence };
       }
     }
     for (const [row, fresh] of touched) {
+      for (const [deviceGuid, device] of row.devices) {
+        if (device.publishedAt < earliest) row.devices.delete(deviceGuid);
+      }
       const scores = usageScores(row.devices, cutoff, midnight);
       for (let i = 0; i < scores.length; i++) if (scores[i] !== row.scores[i]) dirty[i] = true;
       row.scores = scores;

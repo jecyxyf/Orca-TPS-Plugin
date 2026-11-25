@@ -43,7 +43,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - Review usage and requests for today, the last 7 or 30 days, this calendar year, or the past 365 days. Today's summary also shows the highest generation speed for a single request.
 - Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
 - The Tokens Manager fills in up to 370 days from the available logs, keeping 32 days of request details and 370 days of daily and hourly totals. The heatmap covers 365 days.
-- Personal Stats combines local and SSH hosts without signing in. Connected Tokens Managers exchange statistics over SSH, so a shared remote host can carry the last statistics between computers. Set the statistics time zone in the TPS Plugin settings in Orca.
+- Personal Stats combines local and SSH hosts without signing in. Tokens Managers scan every two seconds by default and exchange their latest device snapshots over SSH. The local manager updates Personal Stats every three seconds. Set the statistics time zone in the TPS Plugin settings in Orca.
 
 <p align="center">
   <a href="./assets/readme/en/personal-stats.png" title="View full-size screenshot">
@@ -58,8 +58,8 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - The 1-day usage board shows a five-minute usage chart, the most-used model and Harness in those five minutes, and the latest average generation speed. Missing or invalid usage and speed values display as zero. The 7-day and 30-day boards show daily usage charts. All three boards show the latest upload time.
 - The Speed tab ranks up to 100 GitHub accounts per mode by their best average generation speed. Day mode starts at midnight Beijing time. Hour mode counts the last 24 completed hours. Each account appears once per board across all its devices. The top three earn gold, silver, and bronze medals marked `S`. A 10-second interval qualifies with more than 500 new tokens and a valid speed. The winning interval supplies the time, most-used model, Harness, and full count of new tokens, such as `1,250,000 tokens`.
 - Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
-- Sign in with GitHub to participate. Each account combines the latest usage totals from up to four recently active devices. Relayed copies of the same device report count once. If an account misses a round, its score stays on the board until a new report updates it or other scores push it out. Avatars load from GitHub.
-- While signed in, the Tokens Manager uploads every three seconds by default. The plugin fetches the leaderboard automatically while rankings are enabled. Each icon spins during its transfer and shows a small red exclamation mark on failure. The times show the last successful upload and download.
+- Sign in with GitHub to participate. Each account combines the latest usage totals from all reporting devices. Relayed copies of the same device report count once. If an account misses a round, its score stays on the board until a new report updates it or other scores push it out. Avatars load from GitHub.
+- While signed in, the local Tokens Manager uses the same device snapshots to update Personal Stats and upload the leaderboard reports every three seconds by default. The plugin fetches the leaderboard automatically while rankings are enabled. Each icon spins during its transfer and shows a small red exclamation mark on failure. The times show the last successful upload and download.
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">

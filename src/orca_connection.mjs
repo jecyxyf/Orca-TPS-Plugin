@@ -48,7 +48,7 @@ export function createOrcaConnection(root, { clock, onHello, onSyncHello, onMess
     const reader = createInterface({ input: socket });
     reader.on('line', line => {
       if (closing) return;
-      if (line.length > (peer.sync ? 32 : 4) * 1024 * 1024) return socket.destroy();
+      if (line.length > (peer.sync || peer.localClient ? 32 : 4) * 1024 * 1024) return socket.destroy();
       try {
         const message = JSON.parse(line);
         if (!peer.authenticated) {
@@ -109,9 +109,10 @@ export function createOrcaConnection(root, { clock, onHello, onSyncHello, onMess
     send(peer.socket, message);
   }
 
-  function broadcast(message, accountId) {
+  function broadcast(message, accountId, localClient) {
     for (const peer of peers.values()) {
-      if (peer.subscribed && !peer.sync && (accountId === undefined || peer.accountId === accountId)) reply(peer, message);
+      if (peer.subscribed && !peer.sync && (accountId === undefined || peer.accountId === accountId) &&
+          (localClient === undefined || peer.localClient === localClient)) reply(peer, message);
     }
   }
 
@@ -259,6 +260,7 @@ function openSyncPeer(destination) {
 // A slow link can finish its current snapshot before the next round sends another.
 export function createSnapshotSender(packets) {
   const sending = new WeakMap();
+  const published = new WeakMap();
   return async function sendSnapshot(stream) {
     if (!stream?.writable) return;
     const active = sending.get(stream);
@@ -267,12 +269,17 @@ export function createSnapshotSender(packets) {
       return;
     }
     const state = { again: false };
+    const sent = published.get(stream) ?? new Map();
+    published.set(stream, sent);
     sending.set(stream, state);
     try {
       do {
         state.again = false;
         for (const message of packets()) {
           if (!stream.writable) return;
+          const key = JSON.stringify([message.type, message.packet.deviceGuid, message.packet.accountId]);
+          if (sent.get(key) === message.packet) continue;
+          sent.set(key, message.packet);
           if (!stream.write(tokensMessage(message))) {
             await once(stream, 'drain', { signal: AbortSignal.timeout(TOKENS_LEASE_MS) });
           }

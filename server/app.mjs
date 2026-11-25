@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import { isIP, SocketAddress } from 'node:net';
 import { adminLogin, adminPage, localTimes, pluginLoginResult } from './admin-page.mjs';
-import { LEADERBOARD_DEVICE_LIMIT, SPEED_SAMPLE_WINDOW_MS, TOKENS_LEADERBOARD } from '../src/leaderboard_stats.mjs';
+import { SPEED_SAMPLE_WINDOW_MS, TOKENS_LEADERBOARD } from '../src/leaderboard_stats.mjs';
 import { leaderboardSnapshotForMode } from './tokens-manager-rankings.mjs';
 
 const GITHUB = 'https://github.com';
@@ -83,8 +83,6 @@ export function createLeaderboardServer({
   const browserLogins = new Map();
   const requests = new Map();
   let minute;
-  // Each active device can upload its own report and relay the other devices' reports.
-  const uploadLimit = tokensJobs ? LEADERBOARD_DEVICE_LIMIT ** 2 * (Math.ceil(60_000 / (tokensJobs.intervals.uploadMs ?? 3000)) + 1) : 0;
 
   function allowRequest(key, limit) {
     const count = requests.get(key) ?? 0;
@@ -401,8 +399,6 @@ export function createLeaderboardServer({
       return send(res, 200, { ok: true });
     }
     if (account.banned) return send(res, 403, { code: 'banned', username: account.username });
-    if (!allowRequest('packet/' + account.id, uploadLimit)) return rateLimited(res, time);
-
     const raw = await readBody(req, 1024 * 1024);
     return raw && await tokensJobs.receive(account, raw)
       ? send(res, 202, { code: 'accepted' }) : send(res, 400, { code: 'invalid' });

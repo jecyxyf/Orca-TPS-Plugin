@@ -223,7 +223,7 @@ test('normal clients sharing one exit keep their upload and download allowances'
     assert.equal(await request('packets', token), 202);
   }
   for (let packet = 20; packet < 336; packet++) assert.equal(await request('packets', clients[0].token), 202);
-  assert.equal(await request('packets', clients[0].token), 429);
+  assert.equal(await request('packets', clients[0].token), 202);
   assert.equal(await request('packets', clients[1].token), 202);
   assert.equal(await request('snapshot'), 200);
 });
