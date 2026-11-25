@@ -51,38 +51,38 @@
             "icon": {
               "path": "assets/1.6.3/icon.png",
               "alt": "TPS Plugin",
-              "sha256": "c0690ab9054176277c92eb601125a1a3b3af20d662abaa980c3106295c3d42b9",
-              "width": 256,
-              "height": 256
+              "sha256": "1472b8516e267e29fa651aa50c600eb1f7739610463137237cbd9f147abac353",
+              "width": 128,
+              "height": 128
             },
             "cover": {
-              "path": "assets/1.6.5/cover.png",
+              "path": "assets/1.6.5/cover.jpg",
               "alt": "TPS Plugin overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar",
-              "sha256": "cfe6953671acd3602b77166fdc9d5d823bcc6748f06d85b48d88b264aaca5e3f",
-              "width": 1600,
-              "height": 1000
+              "sha256": "77999dced2f09656195ea5dd9a5dde1b3415688a3bacb9e0e1c9ee2e68673472",
+              "width": 800,
+              "height": 500
             },
             "screenshots": [
               {
-                "path": "assets/1.6.5/current-data.png",
+                "path": "assets/1.6.5/current-data.jpg",
                 "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
-                "sha256": "870913e139c8a97d0e4db74d674cc314b29bb77405120601fe06b256cfa2d55c",
-                "width": 1600,
-                "height": 1000
+                "sha256": "51415592e2341b83d190955dd4761a20edf746b85c9749cae38889fdb424ab9a",
+                "width": 1280,
+                "height": 800
               },
               {
-                "path": "assets/1.6.5/personal-stats.png",
+                "path": "assets/1.6.5/personal-stats.jpg",
                 "alt": "Personal Stats shows usage by model, average generation speeds, and a usage heatmap",
-                "sha256": "8ae7cf901f0501d9e3c665cc12465a47cd7d7df4867a16ba48e8465ee0ba8406",
-                "width": 1600,
-                "height": 1000
+                "sha256": "4c3fe106f93e57c7e4977c8dbf3b75379b50e441dd61a16033b251f6c681922e",
+                "width": 1280,
+                "height": 800
               },
               {
-                "path": "assets/1.6.5/leaderboard.png",
+                "path": "assets/1.6.5/leaderboard.jpg",
                 "alt": "Orca sidebar showing 30-day usage trends and the Speed tab with Day and Hour modes",
-                "sha256": "b11efe80b55fbc6d58799242188a634bde44cf1329a9ef045169fd51f3a1ba51",
-                "width": 1600,
-                "height": 1000
+                "sha256": "85938a558dc9fab5207c0fd5e74e67b490db4412a25c7ca721617553376e6f7e",
+                "width": 1280,
+                "height": 800
               }
             ]
           },
@@ -122,40 +122,10 @@
             "icon": {
               "path": "assets/1.6.3/icon.png",
               "alt": "TPS Plugin",
-              "sha256": "c0690ab9054176277c92eb601125a1a3b3af20d662abaa980c3106295c3d42b9",
-              "width": 256,
-              "height": 256
-            },
-            "cover": {
-              "path": "assets/1.6.3/cover.png",
-              "alt": "TPS Plugin overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar",
-              "sha256": "44b2f07913ecdba02a8ecd85f30893ba78d31bde3989f6c90661342e5fad0ba3",
-              "width": 1600,
-              "height": 1000
-            },
-            "screenshots": [
-              {
-                "path": "assets/1.6.3/current-data.png",
-                "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
-                "sha256": "2d6f3b5e6719312f3c69112dfcb505b99300f4d08b0230bd2db681264cbaa09d",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.3/personal-stats.png",
-                "alt": "Personal Stats shows usage by model, average generation speeds, and an annual heatmap",
-                "sha256": "2dc1043cf8d87a426210d34b9000bb504faff4132db0ff697fb53f6e65f55ebe",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.3/leaderboard.png",
-                "alt": "Leaderboard with GitHub avatars, three ranking periods, medals, and the sync controls",
-                "sha256": "86a742bf6692f9d806ad8beaddd21d80d2f86ca6ba523268c45a0bef1431c0fa",
-                "width": 1600,
-                "height": 1000
-              }
-            ]
+              "sha256": "1472b8516e267e29fa651aa50c600eb1f7739610463137237cbd9f147abac353",
+              "width": 128,
+              "height": 128
+            }
           },
           "license": "MIT",
           "repository": "https://github.com/jecyxyf/Orca-TPS-Plugin",
@@ -197,40 +167,10 @@
             "icon": {
               "path": "assets/1.6.3/icon.png",
               "alt": "TPS Plugin",
-              "sha256": "c0690ab9054176277c92eb601125a1a3b3af20d662abaa980c3106295c3d42b9",
-              "width": 256,
-              "height": 256
-            },
-            "cover": {
-              "path": "assets/1.6.3/cover.png",
-              "alt": "TPS Plugin overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar",
-              "sha256": "44b2f07913ecdba02a8ecd85f30893ba78d31bde3989f6c90661342e5fad0ba3",
-              "width": 1600,
-              "height": 1000
-            },
-            "screenshots": [
-              {
-                "path": "assets/1.6.3/current-data.png",
-                "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
-                "sha256": "2d6f3b5e6719312f3c69112dfcb505b99300f4d08b0230bd2db681264cbaa09d",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.3/personal-stats.png",
-                "alt": "Personal Stats shows usage by model, average generation speeds, and an annual heatmap",
-                "sha256": "2dc1043cf8d87a426210d34b9000bb504faff4132db0ff697fb53f6e65f55ebe",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.3/leaderboard.png",
-                "alt": "Leaderboard with GitHub avatars, three ranking periods, medals, and the sync controls",
-                "sha256": "86a742bf6692f9d806ad8beaddd21d80d2f86ca6ba523268c45a0bef1431c0fa",
-                "width": 1600,
-                "height": 1000
-              }
-            ]
+              "sha256": "1472b8516e267e29fa651aa50c600eb1f7739610463137237cbd9f147abac353",
+              "width": 128,
+              "height": 128
+            }
           },
           "license": "MIT",
           "repository": "https://github.com/jecyxyf/Orca-TPS-Plugin",
@@ -268,45 +208,6 @@
             "workspace:read",
             "secrets:own"
           ],
-          "images": {
-            "icon": {
-              "path": "assets/icon.png",
-              "alt": "TPS Plugion",
-              "sha256": "8e1501049b18c550b66ffcc02843db683d5752d3816cd719893a737f34e27a15",
-              "width": 256,
-              "height": 256
-            },
-            "cover": {
-              "path": "assets/1.6.2/cover.png",
-              "alt": "The three TPS Plugion tabs in the Orca sidebar: Current Data, Personal Stats, and Leaderboard",
-              "sha256": "304a84548dd66d793421ccdd579bda9115244bf9edecc8a4c0152b44e983c85a",
-              "width": 1600,
-              "height": 1000
-            },
-            "screenshots": [
-              {
-                "path": "assets/1.6.2/current-data.png",
-                "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
-                "sha256": "29a964e45f19bd79fa38c68d04ac9d4f3641656a9108f8249d28c964dfce18f8",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.2/personal-stats.png",
-                "alt": "Personal Stats shows usage by model, average generation speeds, and an annual heatmap",
-                "sha256": "6bbd9aef0e6275f3a9ba34a8c571ec7e2bf68c84df442bd7cb715848426460ab",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.2/leaderboard.png",
-                "alt": "Leaderboard with GitHub avatars, three ranking periods, medals, and the sync controls",
-                "sha256": "c01570b5fadf01d12ae7bb544dcf2a61eb6cb0a715d15577f840a1ef340177f6",
-                "width": 1600,
-                "height": 1000
-              }
-            ]
-          },
           "license": "MIT",
           "repository": "https://github.com/jecyxyf/Orca-TPS-Plugin",
           "homepage": "https://github.com/jecyxyf/Orca-TPS-Plugin#readme",
@@ -338,67 +239,7 @@
             "storage:own",
             "workspace:read",
             "secrets:own"
-          ],
-          "images": {
-            "icon": {
-              "path": "assets/icon.png",
-              "alt": "TPS Plugion",
-              "sha256": "8e1501049b18c550b66ffcc02843db683d5752d3816cd719893a737f34e27a15",
-              "width": 256,
-              "height": 256
-            },
-            "cover": {
-              "path": "assets/1.6.1/cover.png",
-              "alt": "TPS Plugion showing the Current Data, Personal Stats, and Leaderboard tabs",
-              "sha256": "11e06e23bd2da5d30cfc8118e886e48f6048f76c68f30fe0642632353c927c31",
-              "width": 1600,
-              "height": 1000
-            },
-            "screenshots": [
-              {
-                "path": "assets/1.6.1/screenshot-dark.png",
-                "alt": "Dark Current Data tab with request speed, first-token time, output, and cache hit rate",
-                "sha256": "3be65fc91c2c4af0de540533027ef66ed25490c3e2eb70c78364fe2133f26fbf",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.1/screenshot-light.png",
-                "alt": "Light request cards with labels for proxy timing and estimates",
-                "sha256": "18413cc66c69fc767be6819e7621907913a88535e8ec8b820940796f57f94a88",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.1/screenshot-usage.png",
-                "alt": "Dark Personal Stats tab with daily totals, request count, and usage by model",
-                "sha256": "89f60c3ad78b2dcc67b61a16db63d4fc16537db650c55a989569898a5097dfc8",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.1/screenshot-activity.png",
-                "alt": "Light model speed chart and yearly usage heatmap",
-                "sha256": "b52be2495173e2b849f78d518f03508254577deaad2ecc2d7210c0ecea96a687",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.1/screenshot-leaderboard.png",
-                "alt": "Dark Leaderboard tab showing three medals and automatic upload controls",
-                "sha256": "23731d0e2875ae10378302e173fe84c6f742aaa3ab470099762b199ca1b764f0",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/1.6.1/screenshot-period-ranking.png",
-                "alt": "Light seven-day rankings with gold, silver, and bronze medals",
-                "sha256": "7e49fe80be413e104436f592a590152669e23b4bb4e507b155a0e88e61436e9e",
-                "width": 1600,
-                "height": 1000
-              }
-            ]
-          }
+          ]
         },
         {
           "version": "1.6.0",
@@ -425,39 +266,7 @@
             "storage:own",
             "workspace:read",
             "secrets:own"
-          ],
-          "images": {
-            "icon": {
-              "path": "assets/icon.png",
-              "alt": "TPS Plugion",
-              "sha256": "8e1501049b18c550b66ffcc02843db683d5752d3816cd719893a737f34e27a15",
-              "width": 256,
-              "height": 256
-            },
-            "cover": {
-              "path": "assets/cover.png",
-              "alt": "Orca Tokens & Per-Request TPS Stats cover showing live status bar speed and per-request sidebar cards with TTFT and cache hit rates",
-              "sha256": "c420ba880a647994da5a8bec03615488ac0425f7d92db924e2578cf6444fe1a5",
-              "width": 1600,
-              "height": 1000
-            },
-            "screenshots": [
-              {
-                "path": "assets/screenshot-dark.png",
-                "alt": "Orca dark workspace with the TPS & Token Statistics sidebar panel showing per-request speed, TTFT, subagent badges, and status bar",
-                "sha256": "e0e82107f568da640c6f3f50477187a475dd2476bb5696fa30a1d0d597cd5137",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/screenshot-light.png",
-                "alt": "Orca light workspace with the TPS & Token Statistics sidebar panel showing per-request speed, TTFT, subagent badges, and status bar",
-                "sha256": "e81aa19b108cbba57aa66a8db5fa895963726533a43b47c09253084ece2b34b8",
-                "width": 1600,
-                "height": 1000
-              }
-            ]
-          }
+          ]
         },
         {
           "version": "1.3.0",
@@ -482,39 +291,7 @@
           ],
           "capabilities": [
             "storage:own"
-          ],
-          "images": {
-            "icon": {
-              "path": "assets/icon.png",
-              "alt": "Orca 软件 Tokens 统计插件",
-              "sha256": "8e1501049b18c550b66ffcc02843db683d5752d3816cd719893a737f34e27a15",
-              "width": 256,
-              "height": 256
-            },
-            "cover": {
-              "path": "assets/cover.png",
-              "alt": "Orca Tokens & Per-Request TPS Stats cover showing live status bar speed and per-request sidebar cards with TTFT and cache hit rates",
-              "sha256": "c420ba880a647994da5a8bec03615488ac0425f7d92db924e2578cf6444fe1a5",
-              "width": 1600,
-              "height": 1000
-            },
-            "screenshots": [
-              {
-                "path": "assets/screenshot-dark.png",
-                "alt": "Orca dark workspace with the TPS & Token Statistics sidebar panel showing per-request speed, TTFT, subagent badges, and status bar",
-                "sha256": "e0e82107f568da640c6f3f50477187a475dd2476bb5696fa30a1d0d597cd5137",
-                "width": 1600,
-                "height": 1000
-              },
-              {
-                "path": "assets/screenshot-light.png",
-                "alt": "Orca light workspace with the TPS & Token Statistics sidebar panel showing per-request speed, TTFT, subagent badges, and status bar",
-                "sha256": "e81aa19b108cbba57aa66a8db5fa895963726533a43b47c09253084ece2b34b8",
-                "width": 1600,
-                "height": 1000
-              }
-            ]
-          }
+          ]
         }
       ]
     }

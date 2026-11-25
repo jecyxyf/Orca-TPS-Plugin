@@ -18,9 +18,7 @@ The plugin supports local and remote workspaces, offers 15 interface languages, 
 Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**, **Personal Stats**, and **Leaderboard**.
 
 <p align="center">
-  <a href="./assets/readme/en/overview.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/overview.webp" width="640" alt="TPS Plugin overview with all three tabs in English">
-  </a>
+  <img src="./assets/readme/en/overview.jpg" width="640" alt="TPS Plugin overview with all three tabs in English">
 </p>
 
 *The screenshots use sample data.*
@@ -34,9 +32,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - Check the latest speed and cache hit rate in the Orca status bar. Estimated speeds are marked with ≈.
 
 <p align="center">
-  <a href="./assets/readme/en/current-data.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/current-data.webp" width="267" alt="English Current Data tab showing request cards for Codex, Claude, Hermes, OpenCode, and Pi">
-  </a>
+  <img src="./assets/readme/en/current-data.jpg" width="267" alt="English Current Data tab showing request cards for Codex, Claude, Hermes, OpenCode, and Pi">
 </p>
 
 ### 3.2 Personal Stats
@@ -46,9 +42,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - Personal Stats combines local and SSH usage without signing in. The heatmap covers the past 365 days. Set the statistics time zone in the TPS Plugin settings in Orca.
 
 <p align="center">
-  <a href="./assets/readme/en/personal-stats.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/personal-stats.webp" width="250" alt="English Personal Stats tab showing totals, model usage, average speed, and a usage heatmap">
-  </a>
+  <img src="./assets/readme/en/personal-stats.jpg" width="250" alt="English Personal Stats tab showing totals, model usage, average speed, and a usage heatmap">
 </p>
 
 ### 3.3 Leaderboard
@@ -58,25 +52,19 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 - Turn on Rankings to get automatic updates. Sign in with GitHub to participate. Usage from multiple devices is combined under the same account.
 
 <p align="center">
-  <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English leaderboard with a 30-day usage curve and the Speed tab">
-  </a>
+  <img src="./assets/readme/en/leaderboard.jpg" width="266" alt="English leaderboard with a 30-day usage curve and the Speed tab">
 </p>
 
 ## 4. Supported Harnesses
 
 <p align="center">
-  <a href="./assets/readme/harnesses/supported-harnesses.svg" title="View full-size icon chart">
-    <img src="./assets/readme/harnesses/supported-harnesses.svg" width="100%" alt="Supported Harnesses · Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes Agent, Pi Agent, MiniMax Code, Kimi Code, Oh My Pi, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, DeepSeek Harness">
-  </a>
+  <img src="./assets/readme/harnesses/supported-harnesses.svg" width="100%" alt="Supported Harnesses · Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes Agent, Pi Agent, MiniMax Code, Kimi Code, Oh My Pi, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, DeepSeek Harness">
 </p>
 
 ## 5. How it works
 
 <p align="center">
-  <a href="./assets/readme/tokens-manager-architecture.png" title="View the full-size diagram">
-    <img src="./assets/readme/tokens-manager-architecture.webp" width="640" alt="Local and remote Tokens Managers exchange statistics over SSH. The local manager updates Personal Stats and submits summaries to the leaderboard.">
-  </a>
+  <img src="./assets/readme/tokens-manager-architecture.jpg" width="640" alt="Local and remote Tokens Managers exchange statistics over SSH. The local manager updates Personal Stats and submits summaries to the leaderboard.">
 </p>
 
 - Each local or remote device collects and stores its own token usage.
@@ -87,9 +75,9 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 ## 6. Installation
 
 > [!IMPORTANT]
-> **Upgrading from 1.6.4 to 1.6.5**
+> **Upgrading from 1.6.4**
 >
-> Version 1.6.5 substantially changes the plugin structure and moves the leaderboard to a new server. Uninstall the old TPS Plugin in Orca, then install **1.6.5**.
+> Version 1.6.5 substantially changes the plugin structure and moves the leaderboard to a new server. Uninstall the old TPS Plugin in Orca, then install **1.6.6**.
 
 - **Requirements.** Use Orca 1.4.251 or later on Windows or Linux. For SSH workspace usage, the remote host needs Node.js 22.13 or later with SQLite support.
 - **Install from the plugin directory.** In Orca, open **Settings → Plugins**, search for **TPS** by **jecyxyf**, then install it and review the permissions. [View the plugin listing](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
