@@ -154,6 +154,8 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   const expectedModes = [['calendar', 'true'], ['hourly', 'false']];
   assert.deepEqual([...toolbar.matchAll(/data-usage-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
     .map(match => match.slice(1)), expectedModes);
+  assert.match(toolbar, /usage-mode-tabs/);
+  assert.equal((toolbar.match(/<svg\b/g) ?? []).length, 2);
   assert.deepEqual([...html.matchAll(/data-ladder-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
     .map(match => match.slice(1)), expectedModes);
   assert.match(html, /usageMode = 'calendar'/);
