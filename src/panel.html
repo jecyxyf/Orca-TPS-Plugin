@@ -1395,7 +1395,7 @@
               <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
             </svg>
           </dt>
-          <dd class="metric-value-line"><span class="metric-value" data-testid="output-value"></span><span class="metric-unit">Tokens</span></dd>
+          <dd class="metric-value-line"><span class="metric-value" data-testid="output-value"></span><span class="metric-unit">tokens</span></dd>
         </div>
         <div class="metric ttft" data-testid="ttft">
           <dt class="metric-icon">
@@ -1792,7 +1792,7 @@
 
         setValue(find('speed-value'), formatTps(record), speedTooltip(record));
         const output = outputCount(record.outputTokens);
-        setValue(find('output-value'), output, numeric(record.outputTokens) ? `${output} Tokens` : t('output-unknown'));
+        setValue(find('output-value'), output, numeric(record.outputTokens) ? `${output} tokens` : t('output-unknown'));
 
         const hasDuration = numeric(record.durationMs) && record.durationMs > 0;
         const seconds = hasDuration ? record.durationMs / 1000 : null;

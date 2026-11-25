@@ -24,11 +24,11 @@ test('upload failures keep an accessible reason without a visible notice', async
   assert.equal(failure({ lastUpload: { at: 120, code: 'accepted', rollingCode: 'accepted' }, rollingProblem: null }), '');
 });
 
-test('per-request output uses Tokens and aggregate usage uses millions without rounding small counts to zero', async () => {
+test('per-request output uses tokens and aggregate usage uses millions without rounding small counts to zero', async () => {
   const html = await readFile(panelPath, 'utf8');
   const source = /const formatMillionTokens = tokens => \{[\s\S]*?\n    \};/.exec(html)?.[0];
   assert.ok(source);
-  assert.match(html, /data-testid="output-value"><\/span><span class="metric-unit">Tokens<\/span>/);
+  assert.match(html, /data-testid="output-value"><\/span><span class="metric-unit">tokens<\/span>/);
   const format = new Function('locale', `${source}\nreturn formatMillionTokens;`)({
     number: (value, options) => new Intl.NumberFormat('en', options).format(value)
   });
