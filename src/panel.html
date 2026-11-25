@@ -196,7 +196,7 @@
       grid-template-columns: minmax(0, var(--ladder-toolbar-title-width)) var(--ladder-toolbar-toggle-width);
       grid-template-areas: "title toggle";
     }
-    .ladder-rank-toolbar.is-off :is(.ladder-transfer, .ladder-toolbar-field) { display: none; }
+    .ladder-rank-toolbar.is-off :is(.ladder-transfer, .ladder-toolbar-value) { display: none; }
     .ladder-toolbar .section-title { grid-area: title; font-size: var(--ladder-toolbar-label-size); }
     .ladder-toolbar .ladder-transfer { grid-area: action; }
     .ladder-rank-toggle {
@@ -220,14 +220,10 @@
     .ladder-toolbar .section-title, .ladder-toolbar-value {
       min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .ladder-toolbar-field {
-      display: grid; grid-template-columns: var(--ladder-toolbar-icon-size) minmax(0, 1fr);
-      align-items: center; gap: var(--ladder-toolbar-gap); min-width: 0; font-size: var(--ladder-toolbar-label-size);
-    }
-    .ladder-toolbar-field svg, .ladder-transfer svg {
+    .ladder-toolbar-value { grid-area: last; font-size: var(--ladder-toolbar-label-size); }
+    .ladder-transfer svg {
       width: var(--ladder-toolbar-icon-size); height: var(--ladder-toolbar-icon-size); flex: none; color: var(--muted);
     }
-    .ladder-toolbar-last { grid-area: last; }
     .ladder-actions .ladder-note { margin: 0; }
     .ladder-status { margin: 8px 0 0; font-size: 12px; overflow-wrap: anywhere; }
     .ladder-status:empty, .ladder-mine:empty { display: none; }
@@ -660,10 +656,7 @@
             <svg class="ladder-transfer-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
             <svg class="ladder-transfer-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v8m0 6h.01"/></svg>
           </span>
-          <div class="ladder-toolbar-field ladder-toolbar-last" data-i18n-title="last-upload-time">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="last-upload-time"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-            <time class="ladder-toolbar-value" id="ladder-sync-result" data-localized-text>—</time>
-          </div>
+          <time class="ladder-toolbar-value" id="ladder-sync-result" data-i18n-title="last-upload-time" data-localized-text>—</time>
         </div>
       </div>
       <section class="ladder-card ladder-rank-card" aria-labelledby="ladder-rank-title">
@@ -677,10 +670,7 @@
             <svg class="ladder-transfer-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
             <svg class="ladder-transfer-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v8m0 6h.01"/></svg>
           </span>
-          <div class="ladder-toolbar-field ladder-toolbar-last" data-i18n-title="last-sync-time">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" role="img" data-i18n-aria-label="last-sync-time"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-            <time class="ladder-toolbar-value" id="ladder-refresh-time" data-localized-text>—</time>
-          </div>
+          <time class="ladder-toolbar-value" id="ladder-refresh-time" data-i18n-title="last-sync-time" data-localized-text>—</time>
         </div>
         <div class="ladder-note ladder-notice" id="ladder-ranking-notice" dir="auto" hidden>
           <p class="ladder-notice-title"><span aria-hidden="true">ℹ️</span> <strong data-i18n="leaderboard-notice-title"></strong></p>

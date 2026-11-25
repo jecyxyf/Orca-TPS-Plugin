@@ -295,9 +295,9 @@ test('non-interactive transfer indicators sit beside the last successful times',
   assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-action-width'], '40px');
   assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-icon-size'], '16px');
   assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-label-size'], '13px');
-  assert.equal(css.get('.ladder-toolbar-field')['font-size'], css.get('.ladder-toolbar .section-title')['font-size']);
-  assert.deepEqual(css.get('.ladder-transfer svg'), css.get('.ladder-toolbar-field svg'));
-  assert.equal(css.get('.ladder-toolbar-field')['grid-template-columns'], 'var(--ladder-toolbar-icon-size) minmax(0, 1fr)');
+  assert.equal(css.get('.ladder-toolbar-value')['font-size'], css.get('.ladder-toolbar .section-title')['font-size']);
+  assert.equal(css.get('.ladder-toolbar-value')['grid-area'], 'last');
+  assert.match(html, /\.ladder-rank-toolbar\.is-off :is\(\.ladder-transfer, \.ladder-toolbar-value\) \{ display: none; \}/);
   assert.equal(css.get('.ladder-personal-data')['scrollbar-gutter'], 'stable');
   assert.equal(css.get('.ladder-personal-data')['max-block-size'], '208px');
   assert.equal(css.get('.ladder-personal-data')['padding-block-end'], '8px');
@@ -306,9 +306,15 @@ test('non-interactive transfer indicators sit beside the last successful times',
   assert.equal(css.get('.ladder-transfer.is-failed .ladder-transfer-error').color, 'var(--error)');
   assert.doesNotMatch(html, /ladder-(?:sync|refresh)-countdown/);
   assert.doesNotMatch(html, /id="ladder-(?:sync-now|update)"|request\('sync'\)/);
-  for (const id of ['upload-state', 'download-state']) {
-    const indicator = new RegExp(`<span[^>]*id="ladder-${id}"[\\s\\S]*?<\\/span>`).exec(html)?.[0];
-    assert.ok(indicator);
+  for (const [id, timeId, tooltip] of [
+    ['upload-state', 'sync-result', 'last-upload-time'],
+    ['download-state', 'refresh-time', 'last-sync-time']
+  ]) {
+    const pair = new RegExp(`(<span[^>]*id="ladder-${id}"[\\s\\S]*?<\\/span>)\\s*` +
+      `(<time[^>]*id="ladder-${timeId}"[^>]*>)`).exec(html);
+    assert.ok(pair, `${id} must sit directly beside its timestamp`);
+    const [, indicator, time] = pair;
+    assert.match(time, new RegExp(`data-i18n-title="${tooltip}"`));
     assert.match(indicator, /role="img" aria-busy="false"/);
     assert.doesNotMatch(indicator, /tabindex|onclick/);
     assert.doesNotMatch(html, new RegExp(`element\\('${id}'\\)\\.addEventListener`));
