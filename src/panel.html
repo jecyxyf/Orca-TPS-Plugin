@@ -632,14 +632,18 @@
       background: color-mix(in srgb, var(--record-card-bg, var(--surface)) var(--record-card-opacity, 100%), transparent);
       backdrop-filter: var(--record-card-blur, none);
     }
-    .card-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; }
-    .identity { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
-    .model-line { display: flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
-    .model-icon {
-      display: inline-grid; place-items: center; flex-shrink: 0;
-      width: 30px; height: 30px; color: var(--icon-color, var(--ink));
+    .card-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+    .identity {
+      display: grid; grid-template-columns: auto minmax(0, 1fr);
+      column-gap: 8px; row-gap: 2px; align-items: center; min-width: 0;
     }
-    .model-icon svg { width: 28px; height: 28px; display: block; }
+    .model-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .model-icon {
+      grid-row: 1 / 3; align-self: center;
+      display: inline-grid; place-items: center; flex-shrink: 0;
+      width: 38px; height: 38px; color: var(--icon-color, var(--ink));
+    }
+    .model-icon svg { width: 36px; height: 36px; display: block; }
     .model { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--purple); font-size: 15px; line-height: 1.45; font-weight: 700; }
     .badge {
       display: inline-grid; place-items: center; flex-shrink: 0;
@@ -649,7 +653,6 @@
     .badge svg { width: 11px; height: 11px; }
     .badge-proxy { background: var(--proxy-bg); color: var(--icon-color, var(--green)); }
     .timestamp {
-      margin-top: 5px;
       color: var(--muted); font-size: 10.5px; line-height: 1.25;
       font-variant-numeric: tabular-nums; white-space: nowrap;
     }
@@ -668,6 +671,8 @@
     .metric-value { min-width: 0; max-width: 100%; font-size: 14px; line-height: 1.25; font-weight: 650; letter-spacing: -.3px; overflow-wrap: anywhere; }
     .metric-unit { color: var(--muted); font-size: 10px; }
     .output { color: var(--blue); }
+    .record-card .output { color: #0066e6; }
+    html.dark .record-card .output { color: #64b0ff; }
     .duration { color: var(--green); }
     .ttft { color: var(--orange); }
     .cache { color: var(--cache); }
@@ -745,8 +750,8 @@
     @media (max-width: 339px) {
       .metrics { gap: 6px; }
       .card-top { gap: 8px; }
-      .model-icon { width: 26px; height: 26px; }
-      .model-icon svg { width: 24px; height: 24px; }
+      .model-icon { width: 34px; height: 34px; }
+      .model-icon svg { width: 32px; height: 32px; }
       .model { font-size: 14px; }
       .speed { gap: 3px; }
       .speed-value { font-size: 17px; }
@@ -1360,10 +1365,10 @@
     <li class="record-card" data-testid="record-card">
       <div class="card-top">
         <div class="identity">
+          <span class="model-icon" data-testid="harness-icon" role="img">
+            <svg width="36" height="36" aria-hidden="true"><use width="100%" height="100%" href="#harness-default"></use></svg>
+          </span>
           <div class="model-line">
-            <span class="model-icon" data-testid="harness-icon" role="img">
-              <svg width="28" height="28" aria-hidden="true"><use width="100%" height="100%" href="#harness-default"></use></svg>
-            </span>
             <h2 class="model" data-testid="model"></h2>
             <span class="badge" data-testid="subagent-badge" data-i18n-title="subagent" data-i18n-aria-label="subagent" hidden>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
