@@ -3,7 +3,8 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { HOUR_MS } from './leaderboard_stats.mjs';
 import { validInstallationId } from './leaderboard_stats.mjs';
-import { HISTORY_DAYS, localHourStart, requestTokens, usageCutoffMs } from './usage-summary.mjs';
+import { requestTokens } from './leaderboard_stats.mjs';
+import { HISTORY_DAYS, localHourStart, usageCutoffMs } from './personal_stats.mjs';
 
 export const USAGE_RETENTION_MS = 720 * HOUR_MS;
 export function personalRecordsCutoff(now) {

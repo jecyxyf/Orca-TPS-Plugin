@@ -1,13 +1,11 @@
-import { gzipSync, gunzipSync } from 'node:zlib';
 import { HOUR_MS, RANKING_HOURS, RANKING_REFRESH_MS, SPEED_MIN_DELTA, isUsageTime, leaderboardDay,
-  leaderboardDayStart, validStatsLabel } from './leaderboard_stats.mjs';
+  leaderboardDayStart, TOKENS_LEADERBOARD, validStatsLabel } from './leaderboard_stats.mjs';
 
 const dayMs = 24 * HOUR_MS;
-const validTime = value => Number.isSafeInteger(value) && value >= 0 && value < 8_640_000_000_000_000;
 const validUsername = value => typeof value === 'string' && value.length > 0 && value.length <= 39;
 const validTokens = value => Number.isInteger(value) && value >= 0 && value <= 720 * Number.MAX_SAFE_INTEGER;
 const validRows = rows => Array.isArray(rows) && rows.length <= 100 && rows.every((row, index) =>
-  row && validUsername(row.username) && row.rank === index + 1 && validTime(row.submittedAt));
+  row && validUsername(row.username) && row.rank === index + 1 && isUsageTime(row.submittedAt));
 const unavailable = reply => ['not_found', 'login_required', 'server_update_required'].includes(reply.code)
   ? 'server_update_required' : 'unavailable';
 
@@ -16,7 +14,7 @@ function validWindow(board, hours, cutoffAt, nextAt, midnight) {
   return board?.hours === hours && board.cutoffAt === cutoffAt && board.nextAt === nextAt &&
     board.windowStart === windowStart && validRows(board.rows) && board.rows.every(row =>
       validTokens(row.tokens) && typeof row.complete === 'boolean' &&
-      (row.lastUploadAt === null || validTime(row.lastUploadAt)) && (hours === 24 ||
+      (row.lastUploadAt === null || isUsageTime(row.lastUploadAt)) && (hours === 24 ||
         (Array.isArray(row.daily) && row.daily.length === hours / 24 && row.daily.every((point, index) =>
           point?.at === board.windowStart + index * 24 * HOUR_MS && validTokens(point.tokens) && typeof point.complete === 'boolean'))));
 }
@@ -24,7 +22,7 @@ function validWindow(board, hours, cutoffAt, nextAt, midnight) {
 function normalizeRecent(recent) {
   const points = Array.isArray(recent?.points) ? recent.points : [];
   return {
-    points: points.filter(point => validTime(point?.submittedAt))
+    points: points.filter(point => isUsageTime(point?.submittedAt))
       .sort((a, b) => a.submittedAt - b.submittedAt).slice(-30)
       .map(({ submittedAt, deltaTokens, avgTps }) => ({
         submittedAt,
@@ -50,14 +48,14 @@ function validSnapshot({ cutoffAt, nextAt, boards, refreshAt, mode } = {}, expec
   if (!isUsageTime(cutoffAt)) return false;
   const midnight = mode === 'calendar' && isUsageTime(cutoffAt + 8 * HOUR_MS)
     ? leaderboardDayStart(leaderboardDay(cutoffAt)) : undefined;
-  if (mode === 'calendar' && !validTime(midnight)) return false;
+  if (mode === 'calendar' && !isUsageTime(midnight)) return false;
   const speed = boards?.[0];
   const speedRows = speed?.rows;
   const speedStart = midnight ?? cutoffAt - dayMs;
   const hasSpeedWindow = speed?.windowStart !== undefined || speed?.cutoffAt !== undefined;
   if (hasSpeedWindow && (speed.windowStart !== speedStart || speed.cutoffAt !== cutoffAt)) return false;
   const interval = nextAt - cutoffAt;
-  const live = validTime(refreshAt) && interval >= 1000 && interval <= HOUR_MS;
+  const live = isUsageTime(refreshAt) && interval >= 1000 && interval <= HOUR_MS;
   return (live || interval === RANKING_REFRESH_MS || (interval === HOUR_MS && cutoffAt % HOUR_MS === 0)) &&
     Object.keys(boards ?? {}).length === 4 &&
     RANKING_HOURS.every(hours => validWindow(boards?.[hours], hours, cutoffAt, nextAt, midnight)) &&
@@ -67,9 +65,8 @@ function validSnapshot({ cutoffAt, nextAt, boards, refreshAt, mode } = {}, expec
       validStatsLabel(row.topModel) && validStatsLabel(row.topCli));
 }
 
-export function createWindowViews({ storage, origin, request, now, panels, scope = () => origin, manager = false, mode = 'hourly' }) {
+export function createWindowViews({ origin, request, now, panels, scope = () => origin, mode = 'hourly' }) {
   const calendar = mode === 'calendar';
-  const cacheKey = calendar ? 'leaderboard:calendar-snapshot' : 'leaderboard:ranking-snapshot';
   const cacheScope = calendar ? () => `calendar/${scope()}` : scope;
   let current, currentScope, pending;
   const view = (snapshot, hours) => ({ ...snapshot.boards[hours], cutoffAt: snapshot.cutoffAt, nextAt: snapshot.nextAt,
@@ -83,13 +80,10 @@ export function createWindowViews({ storage, origin, request, now, panels, scope
     const requestedScope = cacheScope();
     if (requestedScope !== currentScope) clear();
     if (!current) {
-      const saved = await Promise.resolve().then(async () => {
-        if (panels) return panels.readPanel('leaderboard', requestedScope)?.value;
-        const value = await storage.get(cacheKey);
-        return value ? JSON.parse(gunzipSync(Buffer.from(value, 'base64')).toString('utf8')) : null;
-      }).catch(() => null);
+      const saved = await Promise.resolve().then(() => panels?.readPanel('leaderboard', requestedScope)?.value)
+        .catch(() => null);
       if (signal.aborted || requestedScope !== cacheScope() || saved?.origin !== origin ||
-          !validTime(saved.updatedAt) || !validSnapshot(saved, mode)) return null;
+          !isUsageTime(saved.updatedAt) || !validSnapshot(saved, mode)) return null;
       current ??= { ...saved, boards: normalizeUsageBoards(saved.boards) };
       currentScope = requestedScope;
     }
@@ -97,27 +91,21 @@ export function createWindowViews({ storage, origin, request, now, panels, scope
   }
 
   async function download(signal, requestedScope) {
-    if (calendar && !manager) return { code: 'server_update_required' };
-    let reply = await request(manager ? '/api/tokens-manager/snapshot' + (calendar ? '?mode=calendar' : '') : '/api/leaderboard/snapshot',
-      { auth: false, signal, viewHeaders: true, hourlySnapshot: !manager });
-    if (manager && !calendar && reply.code === 'not_found' && !signal.aborted) {
-      reply = await request('/api/leaderboard/snapshot', { auth: false, signal, viewHeaders: true, hourlySnapshot: true });
-    }
+    const path = TOKENS_LEADERBOARD + '/snapshot' + (calendar ? '?mode=calendar' : '');
+    const reply = await request(path, { auth: false, signal, viewHeaders: true });
     if (signal.aborted || requestedScope !== cacheScope()) return {};
     if (calendar && validSnapshot(reply)) return { code: 'server_update_required' };
     if (!validSnapshot(reply, mode)) return { code: unavailable(reply) };
     const updatedAt = now();
     const { cutoffAt, nextAt } = reply;
     const boards = normalizeUsageBoards(reply.boards);
-    const clockOffset = validTime(reply.serverTime) ? reply.serverTime - updatedAt : 0;
+    const clockOffset = isUsageTime(reply.serverTime) ? reply.serverTime - updatedAt : 0;
     const snapshot = { origin, cutoffAt, nextAt, boards: { ...boards, 0: { ...boards[0], clockOffset } }, updatedAt,
       ...(calendar ? { mode } : {}),
-      ...(manager && validTime(reply.refreshAt) ? { refreshAt: Math.max(updatedAt + 1000, reply.refreshAt - clockOffset) } : {}) };
+      ...(isUsageTime(reply.refreshAt) ? { refreshAt: Math.max(updatedAt + 1000, reply.refreshAt - clockOffset) } : {}) };
     current = snapshot;
     currentScope = requestedScope;
-    await Promise.resolve().then(() => panels
-      ? panels.publishPanel('leaderboard', requestedScope, snapshot, updatedAt)
-      : storage.set(cacheKey, gzipSync(JSON.stringify(snapshot)).toString('base64'))).catch(() => {});
+    await Promise.resolve().then(() => panels?.publishPanel('leaderboard', requestedScope, snapshot, updatedAt)).catch(() => {});
     return snapshot;
   }
 

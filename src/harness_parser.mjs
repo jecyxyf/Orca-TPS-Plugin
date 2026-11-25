@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, watch } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import { open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -1981,91 +1981,6 @@ export async function enrichChannelRecords(records, sessions, ccSwitchDb = defau
   return mergeChannelProxyRecords(sources);
 }
 
-/** File signals keep the 250 ms check cheap when every transcript is quiet. */
-export function createLiveSessionReader() {
-  const watchers = new Map(), snapshots = new Map();
-  let version = 0, watchFailed = false, checkedRootsAt = -Infinity, rootsKey, configuring, closed = false;
-
-  function observe(directory, recursive) {
-    const existing = watchers.get(directory);
-    if (existing?.recursive || (existing && !recursive)) return;
-    if (recursive && (directory === path.parse(directory).root || directory === homedir())) return;
-    if (watchers.size >= 64 && !existing) { watchFailed = true; return; }
-    try {
-      existing?.watcher.close();
-      watchers.delete(directory);
-      const watcher = watch(directory, { recursive, persistent: false }, (kind, filename) => {
-        if (filename && /-shm$/i.test(filename)) return;
-        if (!filename || kind === 'rename') {
-          discoveryCache.clear();
-          version++;
-        } else if (/\.(?:jsonl|db|sqlite|sqlite3)(?:-wal)?$/i.test(filename) || /(?:^|[\\/])agent\.log(?:\.\d+)?$/i.test(filename)) {
-          version++;
-        }
-      });
-      watcher.on('error', () => {
-        watcher.close();
-        if (watchers.get(directory)?.watcher === watcher) watchers.delete(directory);
-        watchFailed = true;
-        version++;
-      });
-      watchers.set(directory, { watcher, recursive });
-    } catch { watchFailed = true; }
-  }
-
-  async function refreshWatches(roots) {
-    const key = JSON.stringify(roots ?? {});
-    if (configuring) await configuring;
-    if (closed || (rootsKey === key && Date.now() - checkedRootsAt < 30_000)) return;
-    rootsKey = key;
-    checkedRootsAt = Date.now();
-    configuring = (async () => {
-      const directories = await configuredRoots(roots);
-      if (closed) return;
-      watchFailed = false;
-      for (const source of new Set(Object.values(directories).flat())) {
-        const meta = await info(source);
-        if (closed) return;
-        if (meta?.isDirectory()) observe(source, true);
-        else if (meta?.isFile()) observe(path.dirname(source), false);
-      }
-      const proxy = defaultRoots().ccSwitchDb;
-      if (!closed && (await info(path.dirname(proxy)))?.isDirectory()) observe(path.dirname(proxy), false);
-    })().finally(() => { configuring = null; });
-    await configuring;
-  }
-
-  async function read(target, options = {}) {
-    await refreshWatches(options.roots);
-    if (closed) return { session: null, warnings: [] };
-    for (const session of target.sessions ?? []) {
-      const explicit = session.transcriptPath ?? session.dbPath;
-      if (!explicit) continue;
-      const directory = path.dirname(explicit);
-      if (!watchers.has(directory) && (await info(directory))?.isDirectory() && !closed) observe(directory, false);
-    }
-    const key = JSON.stringify([target.key, target.worktreePath, target.sessions, rootsKey, options.includeUsageRecords === true]);
-    const saved = snapshots.get(key);
-    const at = Date.now();
-    if (!options.fresh && saved?.version === version && at - saved.at < (watchFailed ? 250 : 4000)) return saved.result;
-    const observedVersion = version;
-    const result = await readTargetSession(target, options);
-    snapshots.delete(key);
-    snapshots.set(key, { version: observedVersion, at, result });
-    trimCache(snapshots, 64);
-    return result;
-  }
-
-  function close() {
-    closed = true;
-    for (const { watcher } of watchers.values()) watcher.close();
-    watchers.clear();
-    snapshots.clear();
-  }
-
-  return { read, close };
-}
-
 // ---- Usage totals: every session written in the last 30 days, read whole, once per change. ----
 
 const USAGE_MAX_FILE_BYTES = 256 * 1024 * 1024, USAGE_MAX_UNITS = 20_000, USAGE_MAX_DIRECTORIES = 5_000;
@@ -2408,17 +2323,6 @@ export async function discoverUsageUnits(cutoffMs, options = {}) {
     });
   }
   return units;
-}
-
-export const USAGE_RECORD_PAGE_SIZE = 512;
-
-export function usageRecordPage(result, offset) {
-  if (!Number.isSafeInteger(offset) || offset < 0 || !Array.isArray(result?.records) || offset > result.records.length) {
-    throw new Error('invalid usage records page');
-  }
-  const records = result.records.slice(offset, offset + USAGE_RECORD_PAGE_SIZE);
-  const next = offset + records.length;
-  return { records, nextOffset: next < result.records.length ? next : null, complete: result.complete === true };
 }
 
 /** Discover only configured provider roots. Optional includeDefaults:false isolates tests/custom scans. */

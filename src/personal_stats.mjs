@@ -86,9 +86,10 @@ export function mergePersonalPackets(packets, timeZone, now = Date.now()) {
     const from = key === 'year' ? today.slice(0, 4) + '-01-01' : calendar.dayAgo(now, span - 1);
     return [key, summarizeGroups([group(days.filter(row => row.day >= from && row.day <= today))])];
   }));
-  const hourly = Object.fromEntries(ranges.map(([key, span]) => [
+  const hourly = Object.fromEntries(WINDOWS.map(([key, span]) => [
     key, summarizeGroups([group(hours.filter(row => row.at >= cutoffAt - span * dayMs && row.at < cutoffAt))])
   ]));
+  hourly.past365 = hourly.year;
   const fastest = rows => rows.sort((a, b) => b.tokensPerSecond - a.tokensPerSecond || Number(a.estimated) - Number(b.estimated))[0] ?? null;
   natural.today.maxSpeed = fastest(maxima.filter(row => row.day === today));
   hourly.today.maxSpeed = fastest(maxima.filter(row => row.hour >= cutoffAt - dayMs && row.hour < cutoffAt));

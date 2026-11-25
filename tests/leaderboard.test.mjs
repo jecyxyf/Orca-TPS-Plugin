@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,20 +8,15 @@ import { once } from 'node:events';
 import { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createLeaderboardServer } from '../server/app.mjs';
-import { createTokensRankings } from '../server/tokens-manager-rankings.mjs';
+import { createTokensRankings, leaderboardSnapshotForMode } from '../server/tokens-manager-rankings.mjs';
 import { createTokensManagerJobs } from '../server/tokens-manager-jobs.mjs';
-import { TOKENS_DEFAULT_INTERVALS } from '../src/leaderboard_stats.mjs';
 import { openLeaderboardStore } from '../server/store.mjs';
 import { openLocalUsageDb } from '../src/local-usage-db.mjs';
 import { startLeaderboard } from '../src/leaderboard.mjs';
-import { createSubmissionStats } from '../src/submission-stats.mjs';
-import { createSqliteUploadStorage, uploadUsageChanges } from '../src/usage-upload.mjs';
-import { createHourlySourceUploader } from '../src/hourly-source-upload.mjs';
 import { createWindowViews } from '../src/leaderboard-windows.mjs';
-import { HOUR_MS, USAGE_UPLOAD_BYTES, hourStart } from '../src/leaderboard_stats.mjs';
+import { HOUR_MS, TOKENS_DEFAULT_INTERVALS, hourStart, leaderboardDay, leaderboardDayStart } from '../src/leaderboard_stats.mjs';
 import { createAvatarCache } from '../src/leaderboard-avatars.mjs';
 import { discoverUsageUnits } from '../src/harness_parser.mjs';
-import { createUsageIndex, leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
 
 const ORIGIN = 'http://127.0.0.1:8787';
 const TODAY = '2026-11-18';
@@ -228,116 +222,11 @@ test('normal clients sharing one exit keep their upload and download allowances'
   assert.equal(await request('snapshot'), 200);
 });
 
-test('rolling uploader retries the same bounded payload and marks coverage after the last batch', async () => {
-  const saved = new Map(), sent = [];
-  const now = START + 12 * HOUR_MS;
-  const coverage = [now - 720 * HOUR_MS, now];
-  const buckets = Array.from({ length: 4300 }, (_, i) => [now - i * 1000, 999_000]);
-  const opts = { storage: { get: async key => saved.get(key), set: async (key, value) => saved.set(key, value) },
-    identity: 'test-account', installationId: randomUUID(), now, readUsageTimes: async () => ({ buckets, coverage }),
-    send: async packet => {
-      sent.push(JSON.parse(JSON.stringify(packet)));
-      return sent.length === 1 ? { code: 'unavailable' } : { code: 'accepted', version: packet.body.version };
-    }, active: () => true };
-  assert.equal(await uploadUsageChanges(opts), 'unavailable');
-  assert.equal(await uploadUsageChanges(opts), 'accepted');
-  assert.deepEqual(sent[0], sent[1]);
-  for (let i = 0; i < 5; i++) await uploadUsageChanges(opts);
-  assert.equal(sent.slice(1).flatMap(packet => packet.body.buckets).length, buckets.length);
-  assert.ok(sent.every(packet => Buffer.byteLength(JSON.stringify(packet.body)) <= USAGE_UPLOAD_BYTES));
-  assert.ok(sent.slice(0, -1).every(packet => packet.body.coverage === undefined));
-  assert.deepEqual(sent.at(-1).body.coverage, coverage);
-});
-
-test('a large legacy rolling receipt resumes after a lost response and an interrupted local save', async () => {
-  const now = START + 12 * HOUR_MS, coverage = [now - 720 * HOUR_MS, now];
-  const buckets = Array.from({ length: 32_000 }, (_, index) => {
-    const hash = createHash('sha256').update(String(index)).digest();
-    return [now - 1 - index * 65_000 - hash.readUInt16BE(0) % 1000, hash.readUInt32BE(2) + 1];
-  });
-  const saved = new Map(), sent = [], limit = 256 * 1024;
-  const identity = 'existing-account';
-  const key = 'leaderboard:rolling-upload:' + createHash('sha256').update(identity).digest('hex').slice(0, 24);
-  const encode = state => gzipSync(JSON.stringify(state)).toString('base64');
-  const acknowledged = buckets.slice(0, 10_000);
-  const initial = encode({ version: now - 1, acknowledged, coverage: null, pending: null });
-  assert.ok(Buffer.byteLength(JSON.stringify(initial)) < limit);
-  assert.ok(Buffer.byteLength(JSON.stringify(encode({ acknowledged: buckets }))) > limit);
-  saved.set(key, initial);
-  let publishError;
-  const storage = {
-    get: async name => saved.get(name),
-    set: async (name, value) => {
-      if (Buffer.byteLength(JSON.stringify(value)) > limit) throw new Error('storage value limit');
-      if (name === key && publishError === 'before') {
-        publishError = undefined;
-        throw new Error('interrupted receipt save');
-      }
-      saved.set(name, value);
-      if (name === key && publishError === 'after') {
-        publishError = undefined;
-        throw new Error('receipt saved without a response');
-      }
-    },
-    delete: async name => saved.delete(name)
-  };
-  const installationId = randomUUID();
-  const sync = () => uploadUsageChanges({ storage, identity, installationId, now, active: () => true,
-    readUsageTimes: async () => ({ buckets, coverage }),
-    send: async packet => {
-      sent.push(packet);
-      if (sent.length === 1) return { code: 'unavailable' };
-      if (sent.length === 2) publishError = 'before';
-      if (sent.length === 3) publishError = 'after';
-      return { code: 'accepted', version: packet.body.version };
-    } });
-  assert.equal(await sync(), 'unavailable');
-  const previousHead = saved.get(key);
-  const previousKeyCount = saved.size;
-  await assert.rejects(sync(), /interrupted receipt save/);
-  assert.deepEqual(saved.get(key), previousHead);
-  assert.equal(saved.size, previousKeyCount);
-  for (let attempts = 0; attempts < 20 && await sync() === 'accepted'; attempts++) { /* Drain all pending batches. */ }
-  assert.deepEqual(sent[1], sent[0]);
-  assert.deepEqual(sent[2], sent[0]);
-  assert.deepEqual(sent.slice(2).flatMap(packet => packet.body.buckets), buckets.slice(acknowledged.length));
-  assert.deepEqual(sent.at(-1).body.coverage, coverage);
-  assert.equal(await sync(), undefined);
-  assert.ok(saved.get(key).chunks > 1);
-  assert.equal(saved.size, saved.get(key).chunks + 1);
-});
-
-test('the format 4 uploader keeps failed packets and their clock values across a restart', async t => {
-  const local = openLocalUsageDb(':memory:');
-  t.after(() => local.close());
-  const reporter = randomUUID();
-  const upload = createHourlySourceUploader(createSqliteUploadStorage(local.queue,
-    { origin: ORIGIN, accountId: 1 }, 'pending-hourly'), reporter, () => 'alice');
-  const at = START + 10_000, hour = hourStart(at);
-  const read = async () => [{ sourceId: reporter, hours: [{ hour, tokens: 700, updatedAt: at, coveredUntil: at }] }];
-  let sent;
-  const first = await upload({ now: at, active: () => true, read, send: async body => {
-    sent = body;
-    return { code: 'unavailable' };
-  } });
-  assert.equal(first.code, 'unavailable');
-  const restart = createHourlySourceUploader(createSqliteUploadStorage(local.queue,
-    { origin: ORIGIN, accountId: 1 }, 'pending-hourly'), reporter, () => 'alice');
-  const replay = await restart({ now: at + 11_000, active: () => true, read, send: async body => {
-    assert.deepEqual(body, sent);
-    return { code: 'accepted', tokens: body.data.hours[0].tokens };
-  } });
-  assert.equal(replay.code, 'accepted');
-  assert.equal(replay.tokens, 700);
-  assert.equal(local.queue.next({ origin: ORIGIN, accountId: 1 }, 'pending-hourly'), undefined);
-});
-
 test('viewer receives every rolling window and the speed board in one download and retains it on failure', async t => {
   const { call, advance, clock } = await fixture(t);
   const requests = [];
-  const storage = { get: async () => null, set: async () => {} };
   let offline = false;
-  const viewer = createWindowViews({ storage, manager: true, origin: ORIGIN, now: clock, request: async route => {
+  const viewer = createWindowViews({ origin: ORIGIN, now: clock, request: async route => {
     requests.push(route);
     if (offline) return { code: 'unavailable' };
     return (await call(route)).json();
@@ -363,9 +252,9 @@ test('viewer receives every rolling window and the speed board in one download a
 
 test('calendar viewer requests its own snapshot and keeps the two modes in separate caches', async t => {
   const { call, clock } = await fixture(t);
-  const saved = new Map();
-  const storage = { get: async key => saved.get(key), set: async (key, value) => saved.set(key, value) };
-  const options = { storage, manager: true, origin: ORIGIN, now: clock, request: async route => (await call(route)).json() };
+  const panels = openLocalUsageDb(':memory:');
+  t.after(() => panels.close());
+  const options = { panels, origin: ORIGIN, now: clock, request: async route => (await call(route)).json() };
   const signal = new AbortController().signal;
   const hourly = await createWindowViews(options).fetch(24, false, signal);
   const dateOptions = { ...options, mode: 'calendar' };
@@ -381,7 +270,49 @@ test('calendar viewer requests its own snapshot and keeps the two modes in separ
     .fetch(24, true, signal), { code: 'server_update_required' });
 });
 
-test('viewer replaces invalid recent samples with zero in downloaded and cached rankings', async () => {
+test('the 7-day and 30-day curves survive an offline restart', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'tps-ranking-cache-'));
+  const filename = path.join(directory, 'cache.sqlite');
+  let localDb = openLocalUsageDb(filename);
+  let stop;
+  t.after(async () => {
+    await stop?.();
+    localDb?.close();
+    assert.equal(path.dirname(path.resolve(directory)), path.resolve(tmpdir()));
+    assert.ok(path.basename(directory).startsWith('tps-ranking-cache-'));
+    await rm(directory, { force: true, recursive: true });
+  });
+  const at = START + HOUR_MS;
+  const ranking = createTokensRankings().publish([{
+    account: { id: 1, username: 'alice' }, receivedAt: at,
+    packet: { deviceGuid: randomUUID(), publishedAt: at, hours: [[START, 800]], samples: [] }
+  }], at, TOKENS_DEFAULT_INTERVALS);
+  const snapshot = leaderboardSnapshotForMode(ranking, 'calendar');
+  let handle;
+  const launch = fetcher => startLeaderboard({
+    storage: { get: async () => undefined, set: async () => {} },
+    panels: { handle(_, callback) { handle = callback; return { dispose() {} }; } }
+  }, { endpoint: ORIGIN, now: () => new Date(at), manager: managerClient(), localDb, fetcher });
+
+  stop = launch(async () => Response.json(snapshot));
+  const online = await handle({ action: 'window-state', days: 7, mode: 'calendar' });
+  await stop();
+  stop = undefined;
+  localDb.close();
+  localDb = undefined;
+  localDb = openLocalUsageDb(filename);
+  let downloads = 0;
+  stop = launch(async () => { downloads++; throw new Error('Offline'); });
+  for (const days of [7, 30]) {
+    const { ranking: cached } = await handle({ action: 'window-cache', days, mode: 'calendar' });
+    const hours = days * 24;
+    assert.equal(cached.boards[hours].rows[0].daily.length, days);
+    assert.deepEqual(cached.boards[hours].rows[0].daily, online.boards[hours].rows[0].daily);
+  }
+  assert.equal(downloads, 0);
+});
+
+test('viewer replaces invalid recent samples with zero in downloaded and cached rankings', async t => {
   const at = START + HOUR_MS;
   const snapshot = createTokensRankings().publish([], at, TOKENS_DEFAULT_INTERVALS);
   const row = { tokens: 5000, complete: true, submittedAt: at, lastUploadAt: at };
@@ -395,11 +326,10 @@ test('viewer replaces invalid recent samples with zero in downloaded and cached 
     ] } },
     { ...row, rank: 2, username: 'bob' }
   ];
-  const storage = {
-    get: async () => gzipSync(JSON.stringify({ ...snapshot, origin: ORIGIN, updatedAt: at })).toString('base64'),
-    set: async () => {}
-  };
-  const launch = () => createWindowViews({ storage, manager: true, origin: ORIGIN, now: () => at,
+  const panels = openLocalUsageDb(':memory:');
+  t.after(() => panels.close());
+  panels.publishPanel('leaderboard', ORIGIN, { ...snapshot, origin: ORIGIN, updatedAt: at }, at);
+  const launch = () => createWindowViews({ panels, origin: ORIGIN, now: () => at,
     request: async () => snapshot });
   const signal = new AbortController().signal;
   const downloaded = await launch().fetch(24, true, signal);
@@ -415,30 +345,6 @@ test('viewer replaces invalid recent samples with zero in downloaded and cached 
   ];
   assert.deepEqual(downloaded.rows, expected);
   assert.deepEqual(cached.rows, expected);
-});
-
-test('the client freezes its four statistics across restarts and credits only the confirmed batch', async () => {
-  const values = new Map(), storage = { get: key => values.get(key), set: (key, value) => values.set(key, structuredClone(value)) };
-  let time = START + 60_000;
-  const now = () => time;
-  let tracker = await createSubmissionStats(storage, now);
-  const score = { day: TODAY, tokens: 8000, installationId: randomUUID() };
-  const old = ['a'.repeat(24), time - 1, 10000, 90, 'old', 'pi'];
-  time += 1000;
-  const first = ['b'.repeat(24), time, 100, 20, 'alpha', 'pi'];
-  const second = ['c'.repeat(24), time + 1000, 300, 60, 'beta', 'codex'];
-  tracker.observe('local', [old, first, first]);
-  const batch = await tracker.prepare('session-A', score);
-  assert.deepEqual(batch.body.stats, { deltaTokens: 100, avgTps: 20, topModel: 'alpha', topCli: 'pi' });
-  await tracker.settle(batch, 'unavailable');
-  time += 1000;
-  tracker = await createSubmissionStats(storage, now);
-  tracker.observe('local', [old, first]);
-  tracker.observe('ssh:host', [second]);
-  assert.deepEqual(await tracker.prepare('session-A', { ...score, tokens: 8300 }), batch);
-  await tracker.settle(batch, 'accepted');
-  const next = await tracker.prepare('session-A', { ...score, tokens: 8300 });
-  assert.deepEqual(next.body.stats, { deltaTokens: 300, avgTps: 40, topModel: 'beta', topCli: 'codex' });
 });
 
 test('the ranking switch blocks public reads while login and uploads stay available', async t => {
@@ -459,7 +365,6 @@ test('the ranking switch blocks public reads while login and uploads stay availa
   };
   const launch = () => startLeaderboard(orca, {
     endpoint: api.endpoint, now: () => new Date(api.clock()), manager,
-    readUsage: async () => ({ day: TODAY, tokens: 600, ready: true }),
     fetcher(url, options) {
       if (url.pathname === '/api/tokens-manager/snapshot') {
         rankingReads.push(url.pathname);
@@ -578,184 +483,6 @@ test('avatar lookup by GitHub login accepts only the expected image redirect', a
   ]);
 });
 
-test('logout prevents retrying or recording an earlier automatic submission', async t => {
-  t.mock.timers.enable({ apis: ['setInterval'] });
-  let time = START, handler;
-  const storage = new Map();
-  const automaticStarted = Promise.withResolvers(), automaticResponse = Promise.withResolvers();
-  const requests = [];
-  const stop = startLeaderboard({
-    grantedCapabilities: ['secrets:own'],
-    host: { has: () => true, call: async () => ({ value: 'a'.repeat(43) }) },
-    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value) },
-    panels: { handle: (_, fn) => { handler = fn; return { dispose() {} }; } }
-  }, {
-    endpoint: ORIGIN,
-    now: () => new Date(time),
-    readUsage: async () => ({ ready: true, day: TODAY, tokens: 1234 }),
-    fetcher: async (url, options) => {
-      if (url.pathname === '/api/auth/logout') return Response.json({ ok: true });
-      requests.push({ path: url.pathname, body: JSON.parse(options.body) });
-      if (requests.length === 1) return Response.json({ code: 'unavailable' }, { status: 503 });
-      automaticStarted.resolve();
-      return automaticResponse.promise;
-    }
-  });
-  t.after(stop);
-  const manual = await handler({ action: 'submit' });
-  assert.equal(manual.code, 'unavailable');
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].path, '/api/today/submit');
-  assert.equal(requests[0].body.tokens, 1234);
-  time += 10_000;
-  t.mock.timers.tick(1000);
-  await automaticStarted.promise;
-  const cancelled = await handler({ action: 'logout' });
-  assert.equal(cancelled.signedIn, false);
-  assert.equal(cancelled.nextAutomaticAt, null);
-  assert.equal(cancelled.uploadingKind, 'automatic');
-  assert.equal(requests.length, 2);
-  automaticResponse.resolve(Response.json({ code: 'unavailable' }, { status: 503 }));
-  for (let tries = 0; tries < 25 && (await handler({ action: 'session' })).uploading; tries++) await delay(10);
-  const finished = await handler({ action: 'session' });
-  assert.equal(finished.uploadingKind, null);
-  assert.equal(finished.lastUpload, null);
-  assert.equal(finished.nextAutomaticAt, null);
-  time += 60_000;
-  t.mock.timers.tick(1000);
-  await delay(10);
-  assert.equal(requests.length, 2);
-});
-
-test('manual sync uses the shared cooldown, coalesces clicks, and keeps the last successful time', async t => {
-  t.mock.timers.enable({ apis: ['setInterval'] });
-  let time = START, handler, uploads = 0, secrets = 'a'.repeat(43);
-  const storage = new Map();
-  const launch = () => startLeaderboard({
-    grantedCapabilities: ['secrets:own'],
-    host: { has: () => true, call: async (method, args) => {
-      if (method === 'secrets.get') return { value: secrets };
-      secrets = args.value;
-    } },
-    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value) },
-    panels: { handle: (_, fn) => { handler = fn; return { dispose() {} }; } }
-  }, {
-    endpoint: ORIGIN,
-    now: () => new Date(time),
-    readUsage: async () => ({ ready: true, day: TODAY, tokens: 1234 }),
-    fetcher: async url => {
-      if (url.pathname === '/api/auth/logout') return Response.json({ ok: true });
-      assert.equal(url.pathname, '/api/today/submit');
-      if (++uploads !== 1) return Response.json({ code: 'unavailable' }, { status: 503 });
-      return Response.json({ code: 'accepted', day: TODAY, username: 'alice', tokens: 1234, submitted: true,
-        submittedAt: time, nextUploadAt: time + 10_000 });
-    }
-  });
-  let stop = launch();
-  t.after(() => stop());
-  const run = action => handler({ action });
-  const immediate = await Promise.all([run('sync'), run('sync')]);
-  assert.deepEqual(immediate.map(result => result.code).sort(), ['accepted', 'upload_in_progress']);
-  assert.equal(immediate.find(result => result.code === 'accepted').lastSyncAt, START);
-  assert.equal(uploads, 1);
-  stop();
-  stop = launch();
-  assert.equal((await run('session')).lastSyncAt, START);
-
-  time = START + 1_000;
-  for (const result of await Promise.all([run('sync'), run('sync')])) {
-    assert.equal(result.code, 'sync_queued');
-    assert.equal(result.manualQueued, true);
-    assert.equal(result.lastSyncAt, START);
-  }
-  time = START + 9_999;
-  t.mock.timers.tick(1000);
-  await delay(10);
-  assert.equal(uploads, 1);
-  time += 1;
-  t.mock.timers.tick(1000);
-  for (let tries = 0; tries < 25 && (await run('session')).lastUpload?.code !== 'unavailable'; tries++) await delay(5);
-  const failed = await run('session');
-  assert.equal(uploads, 2);
-  assert.equal(failed.manualQueued, false);
-  assert.deepEqual(failed.lastUpload, { kind: 'manual', code: 'unavailable', at: time });
-  assert.equal(failed.lastSyncAt, START);
-
-  assert.equal((await run('sync')).code, 'sync_queued', 'a failed request also starts the shared cooldown');
-  assert.equal((await run('logout')).manualQueued, false);
-  time += 20_000;
-  t.mock.timers.tick(1000);
-  await delay(10);
-  assert.equal(uploads, 2);
-});
-
-test('a partial upload stays visible until the original rolling batch succeeds on its own', async t => {
-  t.mock.timers.enable({ apis: ['setInterval'] });
-  let clock = START, handler;
-  const token = 'a'.repeat(43);
-  const account = { origin: ORIGIN, username: 'alice', session: createHash('sha256').update(token).digest('hex') };
-  const storage = new Map([['leaderboard:account', account],
-    ['leaderboard:history', { origin: ORIGIN, session: account.session }]]), requests = [];
-  const stop = startLeaderboard({
-    grantedCapabilities: ['secrets:own'],
-    host: { has: () => true, call: async () => ({ value: JSON.stringify({ origin: ORIGIN, token }) }) },
-    storage: { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value) },
-    panels: { handle: (_, fn) => { handler = fn; return { dispose() {} }; } }
-  }, {
-    endpoint: ORIGIN, now: () => new Date(clock),
-    readUsage: async () => ({ day: TODAY, tokens: 1_234 }),
-    readHistory: async () => ({ day: TODAY, ready: true, scores: [{ day: TODAY, tokens: 1_234 }] }),
-    readUsageTimes: async () => ({ buckets: [[START - 1000, 1_234]] }),
-    fetcher: async (url, options) => {
-      const body = JSON.parse(options.body);
-      requests.push({ route: url.pathname, body, requestId: options.headers['Idempotency-Key'] });
-      if (url.pathname === '/api/leaderboard/uploads') return Response.json({
-        daily: { code: 'accepted', day: TODAY, tokens: 1_234, username: 'alice', nextUploadAt: clock + 10_000 },
-        rolling: { code: 'unavailable' }
-      });
-      assert.equal(url.pathname, '/api/leaderboard/rolling-data');
-      return Response.json({ code: 'accepted', version: body.version });
-    }
-  });
-  t.after(stop);
-
-  const partial = await handler({ action: 'sync' });
-  assert.equal(partial.code, 'rolling_upload_failed');
-  assert.equal(partial.board.tokens, 1_234);
-  assert.equal(partial.rollingProblem, 'unavailable');
-  assert.equal(partial.lastSyncAt, null, 'the successful time only advances once both uploads finish');
-
-  clock += 10_000;
-  t.mock.timers.tick(1000);
-  for (let tries = 0; tries < 25 && (await handler({ action: 'session' })).lastSyncAt !== clock; tries++) await delay(5);
-  const repaired = await handler({ action: 'session' });
-  assert.equal(repaired.rollingProblem, null);
-  assert.equal(repaired.lastSyncAt, clock);
-  assert.equal(repaired.initializing, true, 'the rolling retry takes priority over history initialization');
-  assert.deepEqual(requests.map(item => item.route), ['/api/leaderboard/uploads', '/api/leaderboard/rolling-data']);
-  assert.deepEqual(requests[1].body, requests[0].body.rolling.body);
-  assert.equal(requests[1].requestId, requests[0].body.rolling.requestId);
-});
-
-test('the plugin shows the ranking while local usage is still loading', { timeout: 3000 }, async t => {
-  let handle, finishUsage;
-  const usage = new Promise(resolve => { finishUsage = resolve; });
-  const stop = startLeaderboard({
-    storage: { get: async () => undefined, set: async () => {} },
-    panels: { handle: (_, callback) => { handle = callback; return { dispose() {} }; } }
-  }, {
-    now: () => new Date(START),
-    readUsage: () => usage,
-    fetcher: async () => Response.json({ day: TODAY, authenticated: false, rows: [] })
-  });
-  t.after(() => { finishUsage(); stop(); });
-  const personal = handle({ action: 'usage' });
-  assert.deepEqual((await handle({ action: 'state' })).board.rows, []);
-  const local = { day: TODAY, ready: true, tokens: 123 };
-  finishUsage(local);
-  assert.deepEqual(await personal, { local });
-});
-
 test('manager transfer changes publish the upload state immediately', async t => {
   const api = await fixture(t);
   let handle, uploadListener, uploadStatus;
@@ -769,7 +496,6 @@ test('manager transfer changes publish the upload state immediately', async t =>
   }, {
     endpoint: api.endpoint,
     now: () => new Date(api.clock()),
-    readUsage: async () => undefined,
     manager: {
       ...managerClient(),
       uploadStatus: () => uploadStatus,
@@ -795,6 +521,41 @@ test('manager transfer changes publish the upload state immediately', async t =>
   assert.equal(uploadListener, undefined);
 });
 
+test('a non-JSON 401 clears the saved session and stops account retries', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const token = 't'.repeat(43);
+  let handler;
+  let clock = START;
+  let checks = 0;
+  let deleted = false;
+  const stop = startLeaderboard({
+    storage: { get: async () => undefined, set: async () => {} },
+    grantedCapabilities: ['secrets:own'],
+    host: { has: () => true, call: async method => {
+      if (method === 'secrets.get') return { value: token };
+      if (method === 'secrets.delete') deleted = true;
+    } },
+    panels: { handle(_, fn) { handler = fn; return { dispose() {} }; } }
+  }, {
+    endpoint: ORIGIN, now: () => new Date(clock), manager: managerClient(),
+    async fetcher(url) {
+      assert.equal(url.pathname, '/api/tokens-manager/account');
+      checks++;
+      return new Response('<html>Unauthorized</html>', { status: 401 });
+    }
+  });
+  t.after(stop);
+  await delay(0);
+  const session = await handler({ action: 'session' });
+  assert.equal(session.signedIn, false);
+  assert.equal(session.sessionProblem, 'session_expired');
+  assert.equal(deleted, true);
+  clock += 6000;
+  t.mock.timers.tick(1000);
+  await delay(0);
+  assert.equal(checks, 1);
+});
+
 test('manager resumes a lifted ban and reports an expired session to the panel', async t => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const token = 'm'.repeat(43);
@@ -806,7 +567,7 @@ test('manager resumes a lifted ban and reports an expired session to the panel',
     host: { has: () => true, call: async () => ({ value: token }) },
     panels: { handle(_, fn) { handler = fn; return { dispose() {} }; } }
   }, {
-    endpoint: ORIGIN, now: () => new Date(clock), readUsage: async () => undefined,
+    endpoint: ORIGIN, now: () => new Date(clock),
     manager: { ...managerClient(), setCredential: value => credentials.push(value), uploadStatus: () => status,
       onUploadState(listener) { statusListener = listener; } },
     async fetcher(url) {
@@ -853,7 +614,7 @@ test('login retries a lost authorization response and logout does not wait for t
     storage: { get: async () => undefined, set: async () => {} },
     panels: { handle: (_, callback) => { handle = callback; return { dispose() {} }; } }
   }, {
-    endpoint: api.endpoint, now: () => new Date(api.clock()), readUsage: async () => undefined, manager: managerClient(),
+    endpoint: api.endpoint, now: () => new Date(api.clock()), manager: managerClient(),
     async fetcher(url, options) {
       if (url.pathname === '/api/tokens-manager/snapshot') {
         rankCalls++;
@@ -926,7 +687,7 @@ test('an offline logout survives a restart and revokes only the old session', { 
   };
   const launch = () => startLeaderboard(orca, {
     endpoint: api.endpoint, now: () => new Date(api.clock()),
-    readUsage: async () => undefined, manager: managerClient(),
+    manager: managerClient(),
     async fetcher(url, options) {
       if (url.pathname === '/api/auth/logout') {
         attempts++;
@@ -968,108 +729,6 @@ test('an offline logout survives a restart and revokes only the old session', { 
   assert.equal((await api.get(newToken, '/api/tokens-manager/account')).status, 200);
   assert.equal(savedToken(secrets), newToken);
   assert.ok(!secrets.get(SESSION_SECRET).includes(oldToken));
-});
-
-test('the plugin restores public rankings without the network and expires them at Beijing midnight', async t => {
-  const stored = new Map();
-  const row = { rank: 1, username: 'alice', tokens: 5, submittedAt: START };
-  const endpoint = 'http://127.0.0.1:6789';
-  let clock = START, offline = false, fetches = 0, rankingWrites = 0, avatarRequests = 0, handle;
-  const orca = {
-    storage: {
-      get: async key => stored.get(key),
-      set: async (key, value) => {
-        if (key.startsWith('leaderboard:ranking')) rankingWrites++;
-        stored.set(key, value);
-      }
-    },
-    panels: { handle: (_, callback) => { handle = callback; return { dispose() {} }; } }
-  };
-  const launch = address => startLeaderboard(orca, {
-    endpoint: address, now: () => new Date(clock), readUsage: async () => undefined,
-    avatarFetcher: async url => {
-      avatarRequests += 1;
-      return url.hostname === 'github.com' ? Response.redirect('https://avatars.githubusercontent.com/u/1', 302)
-        : new Response('avatar', { headers: { 'content-type': 'image/png' } });
-    },
-    fetcher: async url => {
-      fetches++;
-      if (offline) throw new Error('offline');
-      const days = Number(url.searchParams.get('days') ?? 1);
-      return Response.json({ day: TODAY, days, authenticated: true, banned: true, rank: 1,
-        rows: [{ ...row, tokens: row.tokens * days, mine: true }] });
-    }
-  });
-  let stop = launch(endpoint);
-  t.after(() => stop());
-  const run = (action, days) => handle({ action, days });
-  assert.deepEqual(await run('cache'), { ranking: null });
-  assert.equal(fetches, 0);
-  assert.equal((await run('state')).board.rows[0].mine, false);
-  assert.equal((await run('state')).board.authenticated, false);
-  assert.deepEqual(await handle({ action: 'avatar', username: 'ALICE' }), { image: 'data:image/png;base64,YXZhdGFy' });
-  assert.deepEqual(await handle({ action: 'avatar', username: 'bob' }), { image: null });
-  assert.equal(avatarRequests, 2);
-  assert.equal(rankingWrites, 1);
-  assert.deepEqual(stored.get('leaderboard:ranking'), { origin: endpoint, day: TODAY, rows: [row], updatedAt: START });
-  assert.deepEqual(await run('cache', 7), { ranking: null });
-  assert.equal((await run('state', 7)).board.rows[0].tokens, 35);
-  assert.equal((await run('state', 30)).board.rows[0].tokens, 150);
-  stop();
-
-  offline = true;
-  stop = launch(endpoint);
-  assert.deepEqual(await run('cache'), { ranking: { day: TODAY, rows: [row], updatedAt: START } });
-  assert.equal((await run('cache', 7)).ranking.rows[0].tokens, 35);
-  assert.equal((await run('cache', 30)).ranking.rows[0].tokens, 150);
-  assert.equal(fetches, 4);
-  assert.deepEqual((await run('state')).board, { code: 'unavailable', authenticated: false });
-  assert.equal((await run('cache')).ranking.rows.length, 1);
-  clock = START + 86_400_000;
-  assert.deepEqual(await run('cache'), { ranking: null });
-  assert.deepEqual(await run('cache', 7), { ranking: null });
-  assert.deepEqual(await run('cache', 30), { ranking: null });
-  clock = START;
-  stop();
-
-  stop = launch('http://127.0.0.1:6790');
-  assert.deepEqual(await run('cache'), { ranking: null });
-});
-
-test('usage discovery separates requests on either side of Beijing midnight from one source file', async t => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'tps-rank-usage-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const day = leaderboardDay(Date.now()), start = leaderboardDayStart(day);
-  const cutoff = start + 13 * HOUR_MS, oldest = cutoff - 720 * HOUR_MS;
-  const message = (at, output) => ({
-    type: 'message', timestamp: new Date(at).toISOString(),
-    message: { role: 'assistant', provider: 'test', model: 'test', timestamp: at - 1000,
-      usage: { input: 5, output, cacheRead: 2, cacheWrite: 3 } }
-  });
-  await writeFile(path.join(dir, 'current.jsonl'), [
-    { type: 'session', id: 'current', cwd: dir },
-    message(oldest - 1, 16), message(oldest, 23), message(start - 1, 5), message(start, 40)
-  ].map(row => JSON.stringify(row)).join('\n') + '\n');
-  const values = new Map();
-  const index = createUsageIndex({
-    leaderboard: true, now: () => cutoff, rankDays: 30, includeUsageTimes: true,
-    storage: { keys: async () => [...values.keys()], get: async key => values.get(key),
-      set: async (key, value) => values.set(key, value), delete: async key => values.delete(key) },
-    discover: (scanCutoff, rankDay, rankFrom) => discoverUsageUnits(scanCutoff, {
-      roots: { pi: [dir] }, includeDefaults: false, rankDay, rankFrom, includeUsageTimes: true
-    })
-  });
-  assert.equal(index.leaderboardUsage().ready, false);
-  await index.refresh();
-  const current = index.leaderboardUsage();
-  assert.equal(current.ready, true);
-  assert.equal(current.tokens, 50);
-  const history = index.leaderboardHistory();
-  assert.equal(history.ready, true);
-  assert.deepEqual(history.scores, [{ day: leaderboardDay(start - 1), tokens: 15 }, { day, tokens: 50 }]);
-  assert.deepEqual(index.leaderboardUsageTimes(), {
-    buckets: [[oldest, 33], [start - 1, 15], [start, 50]], coverage: [oldest, cutoff]
-  });
 });
 
 test('usage discovery passes only completed recent requests from the same local and remote parser path', async t => {

@@ -1,15 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs, { appendFile, mkdtemp, writeFile, mkdir, rm, utimes } from 'node:fs/promises';
-import { syncBuiltinESMExports } from 'node:module';
+import { mkdtemp, writeFile, mkdir, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
-  BACKFILL_UNITS, UNIT_KEY_PREFIX, USAGE_SCHEMA, accumulateRecords, createUsageIndex, dayKeyAgo, leaderboardDay,
-  localDayKey, realTokens, summarizeUsage, usageCutoffMs
-} from '../src/usage-summary.mjs';
+  accumulateRecords, dayKeyAgo, localDayKey, mergePersonalPackets, realTokens, summarizeUsage, usageCutoffMs
+} from '../src/personal_stats.mjs';
 import { discoverUsageUnits } from '../src/harness_parser.mjs';
-import { createComputation } from '../src/computation.mjs';
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import('node:sqlite')); }
@@ -67,327 +64,19 @@ test('window totals separate today, week, month and year and include all token t
   assert.equal(windows.month.rows.find(row => row.model === '').tokens, 2, 'missing model stays a separate empty id');
 });
 
-function fakeStorage({ keyLimit = Infinity, valueLimit = Infinity } = {}) {
-  const map = new Map(), writes = [], removals = [];
-  return {
-    map, writes, removals,
-    async keys() { return [...map.keys()]; },
-    async get(key) { return map.has(key) ? structuredClone(map.get(key)) : null; },
-    async set(key, value) {
-      if (!map.has(key) && map.size >= keyLimit) throw new Error('storage key limit');
-      if (Buffer.byteLength(JSON.stringify(value)) > valueLimit) throw new Error('storage value limit');
-      writes.push(key);
-      map.set(key, structuredClone(value));
-    },
-    async delete(key) {
-      removals.push(key);
-      map.delete(key);
-    }
-  };
-}
-
-test('index re-reads only changed units, respects the byte budget, and replaces rather than adds', async () => {
-  const now = at(2026, 11, 8, 9), today = localDayKey(now);
-  const storage = fakeStorage(), reads = [];
-  let units = [];
-  const unit = (key, stamp, tokens, { bytes = 100, mtimeMs = 1, fail = false } = {}) => ({
-    key, stamp, bytes, mtimeMs,
-    read: async () => {
-      reads.push(key);
-      if (fail) throw Object.assign(new Error('boom'), { code: 'EBROKEN' });
-      return { [today]: { codex: { 'gpt-6-astra': [1, tokens, 0, 0, 0] } } };
-    }
-  });
-  const index = createUsageIndex({ storage, discover: async () => units, now: () => now, budgetBytes: 150 });
-
-  units = [unit('a', 's1', 100, { mtimeMs: 3 }), unit('b', 's1', 50, { mtimeMs: 2 })];
-  assert.deepEqual(await index.refresh(), { pending: 1 }, 'budget spent after the newest unit');
-  assert.equal(index.summary().windows.today.tokens, 100);
-  assert.deepEqual(index.summary().progress, { done: 1, total: 2 });
-
-  assert.deepEqual(await index.refresh(), { pending: 0 });
-  assert.equal(index.summary().windows.today.tokens, 150);
-  assert.deepEqual(reads, ['a', 'b']);
-
-  storage.writes.length = 0;
-  await index.refresh();
-  assert.deepEqual(reads, ['a', 'b'], 'unchanged stamps are not read again');
-  assert.deepEqual(storage.writes, [], 'unchanged groups are not written again');
-
-  units = [unit('a', 's2', 300, { mtimeMs: 4 }), unit('b', 's1', 50, { mtimeMs: 2 })];
-  await index.refresh();
-  assert.equal(index.summary().windows.today.tokens, 350, 'changed unit replaces its own totals');
-  assert.deepEqual(reads, ['a', 'b', 'a']);
-  assert.equal(storage.writes.length, 1, 'only the changed group is written');
-
-  units = [unit('a', 's2', 300, { mtimeMs: 4 })];
-  await index.refresh();
-  assert.equal(index.summary().windows.today.tokens, 300, 'units that left the window are dropped');
-  const restarted = createUsageIndex({ storage, discover: async () => units, now: () => now });
-  await restarted.ready();
-  assert.equal(restarted.summary().windows.today.tokens, 300, 'removed units stay removed after restart');
-});
-
-test('a saturated store migrates all its cached sessions and has space for more than 1024 sessions', async () => {
-  const now = at(2026, 11, 8, 9), today = localDayKey(now);
-  const storage = fakeStorage({ keyLimit: 1024, valueLimit: 256 * 1024 });
-  await storage.set('locale', 'zh-CN');
-  const days = { [today]: { codex: { m: [1, 10, 0, 0, 0] } } };
-  let reads = 0;
-  const units = Array.from({ length: 1500 }, (_, i) => ({
-    key: `session-${i}`, stamp: 's1', bytes: 10, mtimeMs: i,
-    async read() { reads++; return days; }
-  }));
-  for (const unit of units.slice(0, 1023)) {
-    await storage.set(UNIT_KEY_PREFIX + unit.key, { stamp: unit.stamp, schema: USAGE_SCHEMA, days });
-  }
-  assert.equal(storage.map.size, 1024);
-  const options = { storage, discover: async () => units, now: () => now, maxUnits: BACKFILL_UNITS };
-  const index = createUsageIndex(options);
-  await index.ready();
-  assert.equal(index.summary().windows.today.requests, 1023, 'old totals are available before migration');
-  storage.writes.length = 0;
-  await index.refresh();
-  assert.ok(storage.writes.length + storage.removals.length <= BACKFILL_UNITS, 'the first migration pass limits store mutations');
-  for (let pass = 0; index.hasBackfill(); pass++) {
-    assert.ok(pass < 1024, 'background migration and new reads complete');
-    await index.refresh();
-  }
-  assert.ok(storage.map.size <= 65);
-  assert.equal(reads, 477, 'cached sessions were migrated without scanning their logs again');
-  const restarted = createUsageIndex(options);
-  await restarted.ready();
-  assert.equal(restarted.summary().windows.today.requests, 1500);
-  assert.equal(await storage.get('locale'), 'zh-CN');
-});
-
-test('a compressed usage group fits the per-value limit even when its JSON is larger', async () => {
-  const now = at(2026, 11, 8, 9);
-  const storage = fakeStorage({ valueLimit: 256 * 1024 });
-  const models = Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`claude-model-${i}`, [1, 20, 0, 0, 0]]));
-  const days = Object.fromEntries(Array.from({ length: 120 }, (_, i) => [dayKeyAgo(now, i), { claude: models }]));
-  const units = ['old-8', 'old-20'].map(key => ({ key, stamp: 's1', bytes: 10, mtimeMs: now, read: async () => days }));
-  assert.ok(Buffer.byteLength(JSON.stringify([days, days])) > 256 * 1024);
-
-  const options = { storage, discover: async () => units, now: () => now };
-  await createUsageIndex(options).refresh();
-  assert.equal(storage.map.size, 1);
-  const restarted = createUsageIndex(options);
-  await restarted.ready();
-  assert.equal(restarted.summary().windows.today.requests, 100);
-  assert.equal(restarted.summary().daily.length, 120);
-});
-
-test('a full store keeps legacy stats across a failed write and resumes after interrupted cleanup', async () => {
-  const now = at(2026, 11, 8, 9), today = localDayKey(now);
-  const storage = fakeStorage({ keyLimit: 3 });
-  // These two legacy units hash to the same group.
-  const keys = ['old-8', 'old-20'];
-  const counters = { [today]: { codex: { m: [1, 10, 0, 0, 0] } } };
-  for (const key of keys) await storage.set(UNIT_KEY_PREFIX + key, { stamp: 's1', schema: USAGE_SCHEMA, days: counters });
-  await storage.set('locale', 'zh-CN');
-  let reads = 0;
-  const units = keys.map(key => ({
-    key, stamp: 's1', bytes: 10, mtimeMs: now,
-    async read() { reads++; return counters; }
-  }));
-  const options = { storage, discover: async () => units, now: () => now };
-  const snapshot = structuredClone(storage.map);
-  const save = storage.set;
-  storage.set = async () => { throw new Error('simulated write failure'); };
-  await createUsageIndex(options).refresh();
-  assert.deepEqual(storage.map, snapshot, 'a failed group write leaves every old value available');
-
-  storage.set = save;
-  const remove = storage.delete;
-  storage.delete = async () => { throw new Error('simulated interruption before cleanup'); };
-  const second = createUsageIndex(options);
-  await second.refresh();
-  assert.equal(storage.map.size, 3, 'the group was written into an existing slot');
-  assert.equal([...storage.map.values()].filter(value => value?.stamp === 's1').length, 1, 'a redundant legacy copy remains');
-
-  storage.delete = remove;
-  storage.writes.length = 0;
-  const restarted = createUsageIndex(options);
-  await restarted.ready();
-  assert.equal(restarted.summary().windows.today.tokens, 20, 'group and legacy copies do not count twice');
-  await restarted.refresh();
-  assert.equal(storage.map.size, 2, 'cleanup frees a slot for other settings');
-  assert.equal(reads, 0, 'migration does not require rereading original logs');
-  assert.deepEqual(storage.writes, [], 'resuming cleanup needs no duplicate group write');
-  assert.equal(await storage.get('locale'), 'zh-CN');
-});
-
-test('index survives restart from storage without immediately retrying failed units', async () => {
-  const now = at(2026, 11, 8, 9), today = localDayKey(now);
-  const storage = fakeStorage(), reads = [];
-  const good = { key: 'good', stamp: 'g1', bytes: 10, mtimeMs: 2, read: async () => ({ [today]: { pi: { '': [2, 40, 10, 0, 0] } } }) };
-  const broken = {
-    key: 'bad', stamp: 'b1', bytes: 10, mtimeMs: 1,
-    read: async () => { reads.push('bad'); throw Object.assign(new Error('x'), { code: 'too_large' }); }
-  };
-  const first = createUsageIndex({ storage, discover: async () => [good, broken], now: () => now });
-  await first.refresh();
-  await first.refresh();
-  assert.deepEqual(reads, ['bad'], 'failed unit waits for its retry delay');
-  assert.equal(first.summary().windows.today.tokens, 50);
-
-  const restarted = createUsageIndex({ storage, discover: async () => [good, broken], now: () => now });
-  await restarted.refresh();
-  assert.equal(restarted.summary().windows.today.tokens, 50, 'totals come back from storage without re-reading');
-  assert.deepEqual(reads, ['bad']);
-});
-
-test('backfill keeps today eligible before older history and retains complete totals across a failed scan', async () => {
-  const now = at(2026, 11, 8, 9), today = localDayKey(now), rankDay = leaderboardDay(now);
-  const yesterday = dayKeyAgo(now, 1), rankYesterday = leaderboardDay(now - 86_400_000);
-  const current = { [today]: { pi: { model: [1, 30, 0, 0, 0] } } };
-  const older = { [yesterday]: { pi: { model: [1, 10, 0, 0, 0] } } };
-  const reads = [], storage = fakeStorage();
-  let complete = true;
-  const descriptors = Array.from({ length: BACKFILL_UNITS + 1 }, (_, i) => ({
-    key: String(i), stamp: '1', bytes: 100, mtimeMs: i === 0 ? now : now - 86_400_000,
-    async read() {
-      reads.push(i);
-      return { days: i === 0 ? current : older, leaderboardFrom: rankYesterday,
-        leaderboardDays: i === 0 ? { [rankDay]: 30 } : { [rankYesterday]: 10 } };
-    }
-  }));
-  const index = createUsageIndex({ storage, now: () => now, leaderboard: true, rankDays: 2, maxUnits: BACKFILL_UNITS,
-    discover: async () => ({ descriptors: complete ? descriptors : [], coveredRemoteScopes: new Set(), localComplete: complete }) });
-  assert.deepEqual(await index.refresh(), { pending: 1 });
-  assert.equal(reads.length, BACKFILL_UNITS);
-  assert.equal(reads[0], 0);
-  assert.equal(index.leaderboardUsage().ready, true);
-  assert.equal(index.leaderboardHistory().ready, false);
-  await index.refresh();
-  const expected = summarizeUsage([current, ...descriptors.slice(1).map(() => older)], now);
-  assert.deepEqual(index.summary().windows, expected);
-  assert.strictEqual(index.summary(), index.summary(), 'repeated reads reuse the summary');
-  assert.deepEqual(index.leaderboardHistory().scores, [
-    { day: rankYesterday, tokens: BACKFILL_UNITS * 10 }, { day: rankDay, tokens: 30 }
-  ]);
-  complete = false;
-  await index.refresh();
-  assert.deepEqual(index.summary().windows, expected);
-  assert.equal(index.leaderboardUsage().ready, false);
-});
-
-test('an unreadable log directory or subagent directory retains usage until the next complete scan', async t => {
-  const root = await fixture(t);
-  const first = path.join(root, 'first'), second = path.join(root, 'second');
-  const main = path.join(second, 'session-b.jsonl');
-  const subagents = path.join(second, 'session-b', 'subagents');
-  await mkdir(first);
-  await mkdir(subagents, { recursive: true });
-  const now = Date.now(), day = leaderboardDay(now);
-  const usage = (id, offset, output) => ({
-    type: 'assistant', uuid: id, timestamp: new Date(now - offset).toISOString(),
-    message: { id, model: 'claude', usage: { input_tokens: 0, output_tokens: output }, stop_reason: 'end_turn' }
-  });
-  await writeFile(path.join(first, 'session-a.jsonl'), jsonl([usage('a', 1, 100)]));
-  await writeFile(main, jsonl([usage('b', 2, 200)]));
-  await writeFile(path.join(subagents, 'agent.jsonl'), jsonl([usage('c', 3, 300)]));
-  const readdir = fs.readdir;
-  let denied;
-  const stub = t.mock.method(fs, 'readdir', async (directory, options) => {
-    if (directory === denied) throw Object.assign(new Error('directory temporarily unreadable'), { code: 'EACCES' });
-    return readdir(directory, options);
-  });
-  syncBuiltinESMExports();
-  t.after(() => {
-    stub.mock.restore();
-    syncBuiltinESMExports();
-  });
-
-  const index = createUsageIndex({ storage: fakeStorage(), now: () => now, leaderboard: true, includeUsageTimes: true,
-    async discover(cutoff, rankDay, rankFrom) {
-      let localComplete = true;
-      const descriptors = await discoverUsageUnits(cutoff, { roots: { claude: [path.join(root, 'missing'), first, second] },
-        includeDefaults: false, rankDay, rankFrom, includeUsageTimes: true, onUnavailable: () => { localComplete = false; } });
-      return { descriptors, localComplete };
-    }
-  });
-  await index.refresh();
-  assert.equal(index.leaderboardUsage().tokens, 600);
-  assert.ok(index.leaderboardUsageTimes().coverage, 'an unused default path does not make a scan partial');
-
-  denied = first;
-  await appendFile(main, jsonl([usage('d', 4, 400)]));
-  await index.refresh();
-  assert.equal(index.leaderboardUsage().tokens, 1_000, 'readable sessions update and the unreadable one keeps its total');
-  assert.deepEqual(index.leaderboardUsageTimes().buckets, [[now - 4, 400], [now - 3, 300], [now - 2, 200], [now - 1, 100]]);
-  assert.equal(index.leaderboardUsageTimes().coverage, undefined, 'a failed scan cannot authorize zeroing missing usage');
-
-  denied = subagents;
-  await appendFile(main, jsonl([usage('e', 5, 500)]));
-  await index.refresh();
-  assert.equal(index.leaderboardUsage().tokens, 1_000, 'a partly readable Claude session keeps its last complete total');
-  assert.equal(index.leaderboardUsageTimes().coverage, undefined);
-
-  denied = undefined;
-  await index.refresh();
-  assert.deepEqual(index.leaderboardUsage(), { day, tokens: 1_500, updatedAt: now, ready: true });
-  assert.ok(index.leaderboardUsageTimes().coverage);
-});
-
-test('the computation thread discovers and returns usage counters without sending raw logs', async t => {
-  const root = await fixture(t), now = Date.now();
-  const file = path.join(root, 'session.jsonl');
-  await writeFile(file, jsonl([{ type: 'session_meta', payload: { id: 'worker-session' } }, {
-    timestamp: new Date(now), type: 'event_msg', payload: { type: 'token_count',
-      info: { last_token_usage: { input_tokens: 600, output_tokens: 400 } } }
-  }]) + '{"incomplete":');
-  const compute = createComputation();
-  t.after(() => compute.close());
-  const { descriptors, complete } = await compute.call('discover', usageCutoffMs(now), {
-    roots: { codex: [root] }, includeDefaults: false, rankDay: leaderboardDay(now)
-  });
-  assert.equal(complete, true);
-  assert.equal(descriptors.length, 1);
-  assert.deepEqual(Object.keys(descriptors[0]).sort(), ['bytes', 'key', 'mtimeMs', 'stamp']);
-  const { key, stamp } = descriptors[0];
-  const result = await compute.call('usage', key, stamp);
-  assert.equal(result.leaderboardDays[leaderboardDay(now)], 1_000);
-  await assert.rejects(compute.call('usage', key, 'stale'), /source changed/);
-});
-
-test('transient read failures preserve cached totals across restart and retry unchanged files', async () => {
-  for (const bytes of [100, 100 * 1024 * 1024]) {
-    let clock = at(2026, 11, 8, 9), stamp = 's1', failing = false, reads = 0;
-    const today = localDayKey(clock), storage = fakeStorage();
-    const discover = async () => [{
-      key: 'session', stamp, bytes, mtimeMs: clock,
-      read: async () => {
-        reads += 1;
-        if (failing) throw Object.assign(new Error('temporarily busy'), { code: 'EBUSY' });
-        return { [today]: { codex: { model: [1, stamp === 's1' ? 100 : 400, 200, 0, 0] } } };
-      }
-    }];
-    const index = createUsageIndex({ storage, discover, now: () => clock });
-    await index.refresh();
-    assert.equal(index.summary().windows.today.tokens, 300);
-
-    // Let a large file become eligible before its changed version temporarily fails.
-    clock += 11 * 60_000;
-    stamp = 's2';
-    failing = true;
-    assert.deepEqual(await index.refresh(), { pending: 1 });
-    assert.equal(index.summary().windows.today.tokens, 300, 'a read failure must retain the last successful counts');
-    assert.deepEqual(index.summary().progress, { done: 0, total: 1 }, 'a failed read is not reported as complete');
-
-    const restarted = createUsageIndex({ storage, discover, now: () => clock });
-    await restarted.ready();
-    assert.equal(restarted.summary().windows.today.tokens, 300, 'retained counts survive a worker restart');
-    failing = false;
-    await restarted.refresh();
-    assert.equal(reads, 2, 'the retry delay prevents a tight loop');
-    clock += 15_000;
-    assert.deepEqual(await restarted.refresh(), { pending: 0 });
-    assert.equal(reads, 3, 'an unchanged file is retried after the delay, including large files');
-    assert.equal(restarted.summary().windows.today.tokens, 600, 'recovery replaces the retained totals instead of adding to them');
-    assert.deepEqual(restarted.summary().progress, { done: 1, total: 1 });
-  }
+test('calendar year excludes December while both hourly 365-day views reuse the same result', () => {
+  const now = Date.UTC(2026, 0, 2, 10);
+  const rows = [
+    { day: '2025-12-31', at: Date.UTC(2025, 11, 31, 12), counters: [1, 800, 0, 0, 0, 0, 0, 0] },
+    { day: '2026-01-01', at: Date.UTC(2026, 0, 1, 12), counters: [1, 100, 0, 0, 0, 0, 0, 0] }
+  ].map(row => ({ ...row, provider: 'codex', model: 'sample' }));
+  const summary = mergePersonalPackets([{
+    deviceGuid: 'local', publishedAt: now, timeZone: 'UTC', days: rows, hours: rows, maxima: []
+  }], 'UTC', now);
+  assert.equal(summary.windows.year.tokens, 100);
+  assert.equal(summary.windows.past365.tokens, 900);
+  assert.equal(summary.hourly.windows.year.tokens, 900);
+  assert.equal(summary.hourly.windows.past365, summary.hourly.windows.year);
 });
 
 test('mirrored rollouts use the most complete copy independently of root order and keep a stable unit key', async t => {
@@ -421,15 +110,12 @@ test('mirrored rollouts use the most complete copy independently of root order a
     assert.equal(totals.tokens, 600, 'both requests count once, regardless of root ordering or copy timestamps');
   }
 
-  let selected = first;
-  const index = createUsageIndex({ storage: fakeStorage(), discover: async () => selected, now: () => now });
-  await index.refresh();
   await writeFile(stalePath, jsonl([meta, request(1), request(2), request(3)]));
-  selected = await discover([stale, complete]);
+  const selected = await discover([stale, complete]);
   assert.equal(selected[0].key, first[0].key, 'switching to a fuller mirror keeps the same logical unit');
-  await index.refresh();
-  assert.equal(index.summary().windows.today.requests, 3);
-  assert.equal(index.summary().windows.today.tokens, 900, 'the fuller mirror replaces the previous copy');
+  const totals = summarizeUsage([await selected[0].read()], now).today;
+  assert.equal(totals.requests, 3);
+  assert.equal(totals.tokens, 900, 'the fuller mirror replaces the previous copy');
 });
 
 test('discovery counts Claude subagent calls once under the parent session and skips files older than a year', async t => {
@@ -479,7 +165,7 @@ test('discovery turns OpenCode sessions into per-session units', sqliteTestOptio
 });
 
 test('daily series keeps one entry per active day within the year, oldest first', async () => {
-  const { dailySeries, HISTORY_DAYS } = await import('../src/usage-summary.mjs');
+  const { dailySeries, HISTORY_DAYS } = await import('../src/personal_stats.mjs');
   const now = at(2026, 11, 8, 9), days = {};
   accumulateRecords(days, 'claude', [
     { completedAt: at(2026, 11, 8, 8), model: 'm', freshInputTokens: 10, outputTokens: 5, cacheReadTokens: 85, cacheCreationTokens: 0 },
@@ -557,25 +243,6 @@ test('streamed Codex usage equals a whole-file parse, and a file name is counted
   assert.equal(units.length, 1, 'the same file name in two roots is one unit');
 });
 
-test('large files that are still growing are re-read at most once per interval', async () => {
-  const now = at(2026, 11, 8, 9), today = localDayKey(now);
-  let clock = now, reads = 0;
-  const storage = fakeStorage();
-  let stamp = 's1';
-  const big = { key: 'big', mtimeMs: now, bytes: 100 * 1024 * 1024, get stamp() { return stamp; }, read: async () => { reads += 1; return { [today]: { codex: { m: [1, 10, 0, 0, 0] } } }; } };
-  const index = createUsageIndex({ storage, discover: async () => [big], now: () => clock });
-  await index.refresh();
-  assert.equal(reads, 1);
-  stamp = 's2';
-  clock += 60_000;
-  await index.refresh();
-  assert.equal(reads, 1, 'within the interval the previous read stays in effect');
-  assert.equal(index.summary().progress.done, 1, 'a deferred large file counts as up to date');
-  clock += 11 * 60_000;
-  await index.refresh();
-  assert.equal(reads, 2, 'after the interval the file is read again');
-});
-
 test('model speed averages per-request TPS across agents, ranks fastest first, and skips sparse or unnamed models', () => {
   const now = at(2026, 11, 8, 9), days = {};
   const turn = (completedAt, model, tokensPerSecond, isEstimatedSpeed = false) => ({
@@ -618,30 +285,4 @@ test('model speed lists at most ten models and counts the rest', () => {
   assert.equal(today.speeds.length, 10);
   assert.equal(today.speeds[0].model, 'm10', 'fastest model first');
   assert.equal(today.speedHidden, 1);
-});
-
-test('index units stored before speed counters keep their totals, are re-read once, then rank speed', async () => {
-  const now = at(2026, 11, 8, 9), today = localDayKey(now);
-  const storage = fakeStorage(), reads = [];
-  // A unit as the previous schema stored it: five counters per cell and no schema field.
-  await storage.set(`${UNIT_KEY_PREFIX}old`, { stamp: 's1', readAt: 1, days: { [today]: { claude: { 'claude-opus-5-5': [2, 100, 50, 0, 0] } } } });
-  const unit = {
-    key: 'old', stamp: 's1', bytes: 100, mtimeMs: 1,
-    read: async () => {
-      reads.push('old');
-      return { [today]: { claude: { 'claude-opus-5-5': [2, 100, 50, 0, 0, 5, 600, 0] } } };
-    }
-  };
-  const index = createUsageIndex({ storage, discover: async () => [unit], now: () => now });
-  await index.ready();
-  assert.equal(index.summary().windows.today.tokens, 150, 'totals stay visible before the re-read');
-  assert.equal(index.summary().windows.today.speeds.length, 0);
-
-  assert.deepEqual(await index.refresh(), { pending: 0 });
-  assert.deepEqual(reads, ['old']);
-  assert.equal(index.summary().windows.today.tokens, 150);
-  assert.equal(index.summary().windows.today.speeds[0].tokensPerSecond, 120);
-  const restarted = createUsageIndex({ storage, discover: async () => [unit], now: () => now });
-  await restarted.refresh();
-  assert.deepEqual(reads, ['old'], 'a current-schema unit is not read again');
 });

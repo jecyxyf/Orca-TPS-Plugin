@@ -1,10 +1,9 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import {
   HOUR_MS, MAX_RECENT_REQUESTS, RANKING_HOURS, RECENT_STATS_MS, SPEED_SAMPLE_WINDOW_MS,
-  hourStart, isHourStart, isUsageTime, qualifyingSpeed, validInstallationId, validRecentRequest
+  hourStart, isHourStart, isUsageTime, leaderboardDay, leaderboardDayStart, qualifyingSpeed, validInstallationId, validRecentRequest
 } from '../src/leaderboard_stats.mjs';
 import { calendarFor } from '../src/personal_stats.mjs';
-import { leaderboardDay, leaderboardDayStart } from '../src/usage-summary.mjs';
 import { openPacketBuffer } from './tokens-manager-buffer.mjs';
 
 const dayMs = 24 * HOUR_MS;
