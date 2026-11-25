@@ -5,7 +5,7 @@
   "owner": "jecyxyf",
   "plugins": [
     {
-      "id": "jecyxyf.tps-stats",
+      "id": "jecyxyf.tps-plugin",
       "source": {
         "kind": "git",
         "url": "https://github.com/jecyxyf/Orca-TPS-Plugin.git",
@@ -159,7 +159,21 @@
             ]
           },
           "changelog": "Unifies cross-device statistics, simplifies Tokens Manager and leaderboard processing, and improves cached charts, avatar downloads, and SQLite reads."
-        },
+        }
+      ]
+    },
+    {
+      "id": "jecyxyf.tps-stats",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/jecyxyf/Orca-TPS-Plugin.git",
+        "ref": "main"
+      },
+      "description": "Track live request speed and token usage in Orca. Compare models, spot daily trends, and join a cross-device leaderboard with GitHub sign-in.",
+      "categories": [
+        "productivity"
+      ],
+      "releases": [
         {
           "version": "1.6.4",
           "commit": "1bac1fcd07b919e58f628ccab71a643cac37d6eb",
