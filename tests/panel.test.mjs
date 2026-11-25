@@ -656,12 +656,16 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(css.get('.record-card').background, /--record-card-bg/);
   assert.match(css.get('.record-card').background, /--record-card-opacity/);
 
+  assert.equal(css.get('.metrics')['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)');
+  const cardCode = /function formatTps\(record\) \{[\s\S]*?(?=\n      \/\/ 用量战况)/.exec(html)?.[0] ?? '';
+  assert.ok(cardCode);
+  assert.doesNotMatch(cardCode, /≈/);
   const template = /<template id="record-template">([\s\S]*?)<\/template>/.exec(html)?.[1] ?? '';
   assert.match(template, /class="model-icon"[\s\S]*?<svg\b/);
   assert.match(template, /data-testid="subagent-badge"[\s\S]*?<svg\b/);
   assert.match(template, /data-testid="proxy-badge"[\s\S]*?<svg\b/);
-  assert.match(template, /data-testid="ttft"[\s\S]*?<svg\b[\s\S]*?data-testid="ttft-value"/);
-  assert.equal((template.match(/class="metric-icon"/g) ?? []).length, 3);
+  assert.match(template, /<dl class="metrics">[\s\S]*?data-testid="output-value"[\s\S]*?class="metric ttft" data-testid="ttft"[\s\S]*?data-testid="ttft-value"[\s\S]*?data-testid="duration-value"[\s\S]*?data-testid="cache-value"/);
+  assert.equal((template.match(/class="metric-icon"/g) ?? []).length, 4);
   assert.doesNotMatch(template, /🤖|📦|⏳|🍪|metric-label/);
   assert.equal(css.get('.settings-color-row')['justify-content'], 'flex-start');
   assert.equal(css.get('.settings-sheet')['--surface'], '#262628');

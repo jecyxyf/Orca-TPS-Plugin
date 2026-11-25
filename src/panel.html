@@ -651,31 +651,27 @@
     .badge-proxy { background: var(--proxy-bg); color: var(--icon-color, var(--green)); }
     .meta-line { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 7px; margin-top: 2px; color: var(--muted); font-size: 11px; }
     .timestamp { overflow-wrap: anywhere; }
-    .ttft {
-      display: inline-flex; align-items: center; gap: 2px;
-      font-variant-numeric: tabular-nums; white-space: nowrap;
-    }
-    .ttft svg { width: 11px; height: 11px; flex: none; color: var(--icon-color, currentColor); }
     .speed { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-width: 0; padding: 6px 10px; border-radius: 15px; background: color-mix(in srgb, var(--speed-bg) var(--record-card-opacity, 100%), transparent); color: var(--speed); white-space: nowrap; }
     .rocket { width: 16px; height: 16px; flex-shrink: 0; align-self: center; color: var(--icon-color, currentColor); }
     .speed-value { min-width: 0; font-size: 20px; font-weight: 750; line-height: 1.15; letter-spacing: -.6px; }
     .speed-unit { font-size: 11px; font-weight: 550; line-height: 1; }
-    .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid var(--line); }
-    .metric { display: flex; align-items: center; gap: 5px; min-width: 0; }
+    .metrics { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid var(--line); }
+    .metric { display: flex; align-items: center; gap: 4px; min-width: 0; }
     .metric-icon {
       display: inline-grid; place-items: center; flex: none;
-      width: 15px; height: 15px; color: var(--icon-color, currentColor);
+      width: 14px; height: 14px; color: var(--icon-color, currentColor);
     }
-    .metric-icon svg { width: 14px; height: 14px; }
-    .metric-value-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 1px 3px; min-width: 0; margin: 0; }
-    .metric-value { min-width: 0; max-width: 100%; font-size: 15px; line-height: 1.25; font-weight: 650; letter-spacing: -.3px; overflow-wrap: anywhere; }
+    .metric-icon svg { width: 13px; height: 13px; }
+    .metric-value-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 1px 2px; min-width: 0; margin: 0; }
+    .metric-value { min-width: 0; max-width: 100%; font-size: 14px; line-height: 1.25; font-weight: 650; letter-spacing: -.3px; overflow-wrap: anywhere; }
     .metric-unit { color: var(--muted); font-size: 10px; }
     .output { color: var(--blue); }
     .duration { color: var(--green); }
+    .ttft { color: var(--orange); }
     .cache { color: var(--cache); }
     .speed-value, .metric-value { font-variant-numeric: tabular-nums; }
-    .metric-value.is-long { font-size: 14px; letter-spacing: -.4px; }
-    .metric-value.is-very-long { font-size: 12px; }
+    .metric-value.is-long { font-size: 12.5px; letter-spacing: -.4px; }
+    .metric-value.is-very-long { font-size: 11px; }
     .speed-value.is-long { font-size: 16px; }
     .speed-value.is-very-long { font-size: 14px; }
     .empty { margin-top: 16px; padding: 28px 18px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); text-align: center; }
@@ -1203,10 +1199,6 @@
           </div>
           <div class="meta-line">
             <time class="timestamp" data-testid="timestamp"></time>
-            <span class="ttft" data-testid="ttft" data-localized-text hidden>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>
-              <span data-testid="ttft-value"></span>
-            </span>
           </div>
         </div>
         <div class="speed">
@@ -1224,6 +1216,12 @@
             </svg>
           </dt>
           <dd class="metric-value-line"><span class="metric-value" data-testid="output-value"></span><span class="metric-unit">Tokens</span></dd>
+        </div>
+        <div class="metric ttft" data-testid="ttft">
+          <dt class="metric-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>
+          </dt>
+          <dd class="metric-value-line"><span class="metric-value" data-testid="ttft-value"></span><span class="metric-unit" data-testid="ttft-unit" hidden><span data-i18n="seconds-unit"></span></span></dd>
         </div>
         <div class="metric duration">
           <dt class="metric-icon" data-i18n-title="duration" data-i18n-aria-label="duration">
@@ -1518,8 +1516,7 @@
       function formatTps(record) {
         const tps = record?.tokensPerSecond;
         if (!numeric(tps) || tps <= 0) return '—';
-        const core = number(tps, tps < 1 ? 1 : 0);
-        return record?.isEstimatedSpeed ? `≈${core}` : core;
+        return number(tps, tps < 1 ? 1 : 0);
       }
       function speedTooltip(record) {
         const tps = record?.tokensPerSecond;
@@ -1592,16 +1589,18 @@
         if (when) timestamp.dateTime = when.toISOString();
 
         const session = isSessionLog(record);
-        const ttftEl = find('ttft'), ttftVal = find('ttft-value');
+        const ttftEl = find('ttft'), ttftVal = find('ttft-value'), ttftUnit = find('ttft-unit');
         if (numeric(record.firstTokenMs) && record.firstTokenMs > 0) {
           const ttftSec = number(record.firstTokenMs / 1000, 1);
-          ttftEl.hidden = false;
-          ttftVal.textContent = `${session ? '≈' : ''}${ttftSec}s`;
-          ttftEl.title = t('first-token-detail', session ? t('estimated') : t('exact'), number(record.firstTokenMs), ttftSec);
-        } else if (hermes) {
-          ttftEl.hidden = false;
-          ttftVal.textContent = '—';
-          ttftEl.title = t('hermes-missing-first-token');
+          const ttftTip = t('first-token-detail', session ? t('estimated') : t('exact'), number(record.firstTokenMs), ttftSec);
+          ttftUnit.hidden = false;
+          setValue(ttftVal, ttftSec, ttftTip);
+          ttftEl.title = ttftTip;
+        } else {
+          const missingTip = hermes ? t('hermes-missing-first-token') : t('missing-first-token-speed');
+          ttftUnit.hidden = true;
+          setValue(ttftVal, '—', missingTip);
+          ttftEl.title = missingTip;
         }
 
         setValue(find('speed-value'), formatTps(record), speedTooltip(record));
@@ -1610,7 +1609,7 @@
 
         const hasDuration = numeric(record.durationMs) && record.durationMs > 0;
         const seconds = hasDuration ? record.durationMs / 1000 : null;
-        const durationText = hasDuration ? `${session ? '≈' : ''}${number(seconds, 1)}` : '—';
+        const durationText = hasDuration ? number(seconds, 1) : '—';
         const durationTip = hasDuration
           ? t('request-duration-detail', session ? t('estimated-duration') : t('exact-duration'), number(record.durationMs), number(seconds, 2))
           : t('duration-unknown');
