@@ -266,7 +266,14 @@
   "settings-title": "設定",
   "settings-close": "設定を閉じる",
   "settings-style": "スタイル",
-  "settings-style-empty": "スタイル設定は今後ここに追加されます。",
+  "settings-bg-image": "背景画像",
+  "settings-bg-image-hint": "SVG、JPG、PNG、WebP、GIF に対応（最大 2 MB）。",
+  "settings-bg-upload": "画像をアップロード",
+  "settings-bg-reset": "リセット",
+  "settings-bg-empty": "デフォルト背景を使用中",
+  "settings-bg-error-type": "SVG、JPG、PNG、WebP、または GIF 画像を選択してください。",
+  "settings-bg-error-size": "画像が大きすぎます。2 MB 以内にしてください。",
+  "settings-bg-error-save": "画像を保存できませんでした。より小さいファイルをお試しください。",
   "open-repository": "GitHub リポジトリを開く",
   "star-repository": "気に入ったら GitHub で Star をお願いします！"
 }

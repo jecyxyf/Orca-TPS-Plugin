@@ -266,7 +266,14 @@
   "settings-title": "Pengaturan",
   "settings-close": "Tutup pengaturan",
   "settings-style": "Gaya",
-  "settings-style-empty": "Opsi gaya akan segera ditambahkan di sini.",
+  "settings-bg-image": "Gambar latar",
+  "settings-bg-image-hint": "Mendukung SVG, JPG, PNG, WebP, dan GIF (maks 2 MB).",
+  "settings-bg-upload": "Unggah gambar",
+  "settings-bg-reset": "Atur ulang",
+  "settings-bg-empty": "Menggunakan latar bawaan",
+  "settings-bg-error-type": "Pilih gambar berformat SVG, JPG, PNG, WebP, atau GIF.",
+  "settings-bg-error-size": "Ukuran gambar terlalu besar. Maksimal 2 MB.",
+  "settings-bg-error-save": "Tidak dapat menyimpan gambar. Coba file yang lebih kecil.",
   "open-repository": "Buka repositori GitHub",
   "star-repository": "Suka plugin ini? Beri Star di GitHub!"
 }

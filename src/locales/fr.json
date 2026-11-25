@@ -266,7 +266,14 @@
   "settings-title": "Paramètres",
   "settings-close": "Fermer les paramètres",
   "settings-style": "Style",
-  "settings-style-empty": "Les options de style seront ajoutées ici bientôt.",
+  "settings-bg-image": "Image d’arrière-plan",
+  "settings-bg-image-hint": "Prend en charge SVG, JPG, PNG, WebP et GIF (2 Mo max).",
+  "settings-bg-upload": "Importer une image",
+  "settings-bg-reset": "Réinitialiser",
+  "settings-bg-empty": "Arrière-plan par défaut utilisé",
+  "settings-bg-error-type": "Veuillez choisir une image SVG, JPG, PNG, WebP ou GIF.",
+  "settings-bg-error-size": "L’image est trop volumineuse (2 Mo maximum).",
+  "settings-bg-error-save": "Impossible d’enregistrer l’image. Essayez un fichier plus léger.",
   "open-repository": "Ouvrir le dépôt GitHub",
   "star-repository": "Ce plugin vous plaît ? Mettez-lui une étoile sur GitHub !"
 }

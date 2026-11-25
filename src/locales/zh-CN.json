@@ -266,7 +266,14 @@
   "settings-title": "设置",
   "settings-close": "关闭设置",
   "settings-style": "样式",
-  "settings-style-empty": "样式选项待补充。",
+  "settings-bg-image": "背景图片",
+  "settings-bg-image-hint": "支持 SVG、JPG、PNG、WebP、GIF（最大 2 MB）。",
+  "settings-bg-upload": "上传图片",
+  "settings-bg-reset": "恢复默认",
+  "settings-bg-empty": "当前使用默认背景",
+  "settings-bg-error-type": "请选择 SVG、JPG、PNG、WebP 或 GIF 格式的图片。",
+  "settings-bg-error-size": "图片超过 2 MB，请换一张更小的图片。",
+  "settings-bg-error-save": "无法保存图片，请换一张更小的图片。",
   "open-repository": "打开 GitHub 代码仓库",
   "star-repository": "喜欢的话，去 GitHub 点个 Star 支持一下！"
 }

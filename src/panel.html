@@ -163,12 +163,41 @@
     .settings-body { display: grid; gap: 14px; margin-top: 12px; }
     .settings-section { display: grid; gap: 8px; min-width: 0; }
     .settings-label { margin: 0; color: var(--ink); font-size: 12px; font-weight: 700; }
-    .settings-empty {
-      margin: 0; padding: 20px 12px;
-      border: 1px dashed var(--line); border-radius: 12px;
-      background: var(--speed-bg); color: var(--muted);
-      font-size: 12px; text-align: center; overflow-wrap: anywhere;
+    .panel-bg-layer {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-position: center; background-size: cover; background-repeat: no-repeat;
     }
+    .panel-bg-layer::after {
+      content: ""; position: absolute; inset: 0;
+      background: rgb(242 242 247 / 42%);
+    }
+    html.dark .panel-bg-layer::after { background: rgb(22 22 24 / 52%); }
+    main#panel { position: relative; z-index: 1; }
+    .settings-bg-card {
+      display: grid; gap: 8px; padding: 10px;
+      border: 1px solid var(--line); border-radius: 14px; background: var(--speed-bg);
+    }
+    .settings-bg-preview {
+      display: grid; place-items: center; height: 92px; padding: 8px;
+      border: 1px dashed var(--line); border-radius: 10px;
+      background: var(--surface); background-position: center; background-size: cover; background-repeat: no-repeat;
+      color: var(--muted); font-size: 11px; text-align: center; overflow: hidden;
+    }
+    .settings-bg-preview.has-image { border-style: solid; }
+    .settings-bg-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .settings-bg-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 32px; padding: 6px 12px; border: 0; border-radius: 10px;
+      background: var(--button-bg); color: var(--blue); font-size: 12px; font-weight: 650; cursor: pointer;
+    }
+    .settings-bg-btn:hover { filter: brightness(.96); }
+    .settings-bg-btn-secondary {
+      border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+    }
+    .settings-bg-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .settings-bg-hint, .settings-bg-error { margin: 0; font-size: 11px; overflow-wrap: anywhere; }
+    .settings-bg-hint { color: var(--muted); }
+    .settings-bg-error { color: var(--error); }
     .language-picker { position: relative; flex: 0 1 140px; min-width: 0; }
     .language-toggle, .language-option {
       display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 32px;
@@ -648,6 +677,7 @@
   </style>
 </head>
 <body>
+  <div class="panel-bg-layer" id="panel-bg-layer" aria-hidden="true" hidden></div>
   <main id="panel" aria-labelledby="panel-title">
     <div class="title-bar" dir="ltr">
       <div class="panel-brand">
@@ -900,7 +930,20 @@
       <div class="settings-body">
         <section class="settings-section" id="settings-style-section" aria-labelledby="settings-style-label">
           <p class="settings-label" id="settings-style-label" data-i18n="settings-style"></p>
-          <p class="settings-empty" id="settings-style-empty" data-i18n="settings-style-empty"></p>
+          <div class="settings-bg-card">
+            <p class="settings-label" data-i18n="settings-bg-image"></p>
+            <div class="settings-bg-preview" id="settings-bg-preview">
+              <span id="settings-bg-empty" data-i18n="settings-bg-empty"></span>
+            </div>
+            <input id="settings-bg-input" data-testid="settings-bg-input" type="file"
+                   accept=".svg,.jpg,.jpeg,.png,.webp,.gif,image/svg+xml,image/jpeg,image/png,image/webp,image/gif" hidden>
+            <div class="settings-bg-actions">
+              <button class="settings-bg-btn" id="settings-bg-upload" data-testid="settings-bg-upload" type="button" data-i18n="settings-bg-upload"></button>
+              <button class="settings-bg-btn settings-bg-btn-secondary" id="settings-bg-reset" data-testid="settings-bg-reset" type="button" data-i18n="settings-bg-reset" hidden></button>
+            </div>
+            <p class="settings-bg-hint" data-i18n="settings-bg-image-hint"></p>
+            <p class="settings-bg-error" id="settings-bg-error" role="alert" data-localized-text hidden></p>
+          </div>
         </section>
       </div>
     </div>
@@ -2600,15 +2643,89 @@
     (() => {
       const byId = id => document.getElementById(id);
       const lifetime = new AbortController();
+      const BG_IMAGE_KEY = 'tps:panel-bg-image';
+      const MAX_BG_BYTES = 2 * 1024 * 1024;
+      const MIME_BY_EXT = {
+        svg: 'image/svg+xml', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        png: 'image/png', webp: 'image/webp', gif: 'image/gif'
+      };
+      const ALLOWED_MIMES = new Set(Object.values(MIME_BY_EXT));
+      const DATA_IMAGE_RE = /^data:image\/(?:svg\+xml|jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/;
       const toggle = byId('settings-toggle');
       const dialog = byId('settings-dialog');
       const closeButton = byId('settings-close');
+      const bgLayer = byId('panel-bg-layer');
+      const bgPreview = byId('settings-bg-preview');
+      const bgEmpty = byId('settings-bg-empty');
+      const bgInput = byId('settings-bg-input');
+      const bgUpload = byId('settings-bg-upload');
+      const bgReset = byId('settings-bg-reset');
+      const bgError = byId('settings-bg-error');
+
+      function readStore(key) {
+        try { return localStorage.getItem(key); } catch { return null; }
+      }
+      function writeStore(key, value) {
+        try {
+          if (value === null) localStorage.removeItem(key);
+          else localStorage.setItem(key, value);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function showBgError(key) {
+        bgError.hidden = !key;
+        bgError.textContent = key ? t(key) : '';
+      }
+
+      function applyBackgroundImage(dataUrl) {
+        const valid = typeof dataUrl === 'string' && DATA_IMAGE_RE.test(dataUrl);
+        bgLayer.hidden = !valid;
+        bgLayer.style.backgroundImage = valid ? `url("${dataUrl}")` : '';
+        bgPreview.classList.toggle('has-image', valid);
+        bgPreview.style.backgroundImage = valid ? `url("${dataUrl}")` : '';
+        bgEmpty.hidden = valid;
+        bgReset.hidden = !valid;
+      }
+
+      function resolveImageMime(file) {
+        const rawType = typeof file?.type === 'string' ? file.type.split(';')[0].trim().toLowerCase() : '';
+        if (ALLOWED_MIMES.has(rawType)) return rawType;
+        const ext = typeof file?.name === 'string' ? file.name.split('.').pop()?.toLowerCase() : '';
+        return ext && Object.hasOwn(MIME_BY_EXT, ext) ? MIME_BY_EXT[ext] : null;
+      }
+
+      function readAsDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+          reader.onerror = () => reject(new Error('read_failed'));
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function decodesImage(dataUrl) {
+        return new Promise(resolve => {
+          const img = new Image();
+          img.addEventListener('load', () => resolve(true), { once: true });
+          img.addEventListener('error', () => resolve(false), { once: true });
+          img.src = dataUrl;
+        });
+      }
+
+      applyBackgroundImage(readStore(BG_IMAGE_KEY));
 
       function setOpen(open, restoreFocus = false) {
         dialog.hidden = !open;
         toggle.setAttribute('aria-expanded', String(open));
-        if (open) closeButton.focus();
-        else if (restoreFocus) toggle.focus();
+        if (open) {
+          showBgError('');
+          closeButton.focus();
+        } else if (restoreFocus) {
+          toggle.focus();
+        }
       }
 
       toggle.addEventListener('click', () => setOpen(dialog.hidden, !dialog.hidden));
@@ -2622,6 +2739,34 @@
           setOpen(false, true);
         }
       }, { signal: lifetime.signal });
+
+      bgUpload.addEventListener('click', () => bgInput.click());
+      bgReset.addEventListener('click', () => {
+        showBgError('');
+        writeStore(BG_IMAGE_KEY, null);
+        applyBackgroundImage('');
+      });
+      bgInput.addEventListener('change', async () => {
+        const file = bgInput.files?.[0];
+        bgInput.value = '';
+        if (!file) return;
+        showBgError('');
+        const mime = resolveImageMime(file);
+        if (!mime) return showBgError('settings-bg-error-type');
+        if (file.size > MAX_BG_BYTES) return showBgError('settings-bg-error-size');
+        try {
+          const dataUrl = await readAsDataUrl(new Blob([await file.arrayBuffer()], { type: mime }));
+          if (!DATA_IMAGE_RE.test(dataUrl) || !await decodesImage(dataUrl)) {
+            return showBgError('settings-bg-error-type');
+          }
+          if (!writeStore(BG_IMAGE_KEY, dataUrl)) {
+            return showBgError('settings-bg-error-save');
+          }
+          applyBackgroundImage(dataUrl);
+        } catch {
+          showBgError('settings-bg-error-type');
+        }
+      });
 
       for (const link of [byId('panel-repo-link'), byId('panel-star-link')]) {
         link?.addEventListener('click', event => {

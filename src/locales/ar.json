@@ -266,7 +266,14 @@
   "settings-title": "الإعدادات",
   "settings-close": "إغلاق الإعدادات",
   "settings-style": "المظهر",
-  "settings-style-empty": "ستُضاف خيارات المظهر هنا لاحقاً.",
+  "settings-bg-image": "صورة الخلفية",
+  "settings-bg-image-hint": "يدعم SVG وJPG وPNG وWebP وGIF (بحد أقصى 2 ميجابايت).",
+  "settings-bg-upload": "رفع صورة",
+  "settings-bg-reset": "استعادة الافتراضي",
+  "settings-bg-empty": "يتم استخدام الخلفية الافتراضية",
+  "settings-bg-error-type": "يرجى اختيار صورة بصيغة SVG أو JPG أو PNG أو WebP أو GIF.",
+  "settings-bg-error-size": "حجم الصورة كبير جداً. يرجى اختيار صورة أصغر من 2 ميجابايت.",
+  "settings-bg-error-save": "تعذّر حفظ الصورة. جرّب ملفاً أصغر حجماً.",
   "open-repository": "فتح مستودع GitHub",
   "star-repository": "هل أعجبك الإضافة؟ ادعمنا بنجمة على GitHub!"
 }

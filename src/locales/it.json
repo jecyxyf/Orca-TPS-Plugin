@@ -266,7 +266,14 @@
   "settings-title": "Impostazioni",
   "settings-close": "Chiudi impostazioni",
   "settings-style": "Stile",
-  "settings-style-empty": "Le opzioni di stile verranno aggiunte qui presto.",
+  "settings-bg-image": "Immagine di sfondo",
+  "settings-bg-image-hint": "Supporta SVG, JPG, PNG, WebP e GIF (fino a 2 MB).",
+  "settings-bg-upload": "Carica immagine",
+  "settings-bg-reset": "Ripristina",
+  "settings-bg-empty": "Sfondo predefinito in uso",
+  "settings-bg-error-type": "Scegli un’immagine SVG, JPG, PNG, WebP o GIF.",
+  "settings-bg-error-size": "Immagine troppo grande. Il limite è 2 MB.",
+  "settings-bg-error-save": "Impossibile salvare l’immagine. Prova con un file più piccolo.",
   "open-repository": "Apri repository GitHub",
   "star-repository": "Ti piace? Lascia una stella su GitHub!"
 }

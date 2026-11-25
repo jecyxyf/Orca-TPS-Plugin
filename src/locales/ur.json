@@ -266,7 +266,14 @@
   "settings-title": "ترتیبات",
   "settings-close": "ترتیبات بند کریں",
   "settings-style": "انداز",
-  "settings-style-empty": "انداز کے اختیارات جلد یہاں شامل کیے جائیں گے۔",
+  "settings-bg-image": "پس منظر تصویر",
+  "settings-bg-image-hint": "SVG، JPG، PNG، WebP اور GIF کی سہولت (زیادہ سے زیادہ 2 MB)۔",
+  "settings-bg-upload": "تصویر اپ لوڈ کریں",
+  "settings-bg-reset": "ری سیٹ کریں",
+  "settings-bg-empty": "طے شدہ پس منظر استعمال ہو رہا ہے",
+  "settings-bg-error-type": "براہ کرم SVG، JPG، PNG، WebP یا GIF تصویر منتخب کریں۔",
+  "settings-bg-error-size": "تصویر بہت بڑی ہے۔ براہ کرم 2 MB کے اندر رکھیں۔",
+  "settings-bg-error-save": "تصویر محفوظ نہیں ہو سکی۔ کوئی چھوٹی فائل آزمائیں۔",
   "open-repository": "GitHub ریپوزٹری کھولیں",
   "star-repository": "پسند آیا؟ GitHub پر Star دے کر سپورٹ کریں!"
 }

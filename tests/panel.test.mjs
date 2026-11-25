@@ -603,21 +603,27 @@ test('panel avatar view loads visible avatars through the observer and retries a
   assert.equal(observed.length, 3);
 });
 
-test('top-right header places language picker beside settings gear and modal keeps style section only', async () => {
+test('top-right header places language picker beside settings gear and modal offers background image upload', async () => {
   const html = await readFile(panelPath, 'utf8');
   const titleBar = /<div class="title-bar"[^>]*>([\s\S]*?)<div class="panel-tabs"/.exec(html)?.[1] ?? '';
   assert.match(titleBar, /id="language-picker"/);
   assert.match(titleBar, /<button[^>]*id="settings-toggle"[^>]*aria-controls="settings-dialog"/);
   assert.ok(titleBar.indexOf('id="language-picker"') < titleBar.indexOf('id="settings-toggle"'));
+  assert.match(html, /<div class="panel-bg-layer" id="panel-bg-layer"/);
 
   const dialog = /<div[^>]*id="settings-dialog"[^>]*role="dialog"[^>]*aria-modal="true"[\s\S]*?(?=\n\s*<template id="ladder-avatar-fallback">)/.exec(html)?.[0] ?? '';
   assert.ok(dialog, 'settings modal dialog must exist');
   assert.match(dialog, /id="settings-close"/);
   assert.match(dialog, /id="settings-style-section"/);
-  assert.doesNotMatch(dialog, /id="language-picker"|settings-timezone|data-bg-preset/);
+  assert.match(dialog, /id="settings-bg-preview"/);
+  assert.match(dialog, /id="settings-bg-upload"/);
+  assert.match(dialog, /id="settings-bg-reset"/);
+  assert.match(dialog, /id="settings-bg-input"[^>]*accept="[^"]*\.svg[^"]*\.jpg[^"]*\.png/);
+  assert.doesNotMatch(dialog, /id="language-picker"|settings-timezone/);
 
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
   assert.equal(css.get('.settings-backdrop').position, 'fixed');
+  assert.equal(css.get('.panel-bg-layer').position, 'fixed');
   assert.equal(css.get('html').background, 'var(--page)');
 });
 

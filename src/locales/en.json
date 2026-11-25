@@ -266,7 +266,14 @@
   "settings-title": "Settings",
   "settings-close": "Close settings",
   "settings-style": "Style",
-  "settings-style-empty": "Style options will be added here soon.",
+  "settings-bg-image": "Background image",
+  "settings-bg-image-hint": "Supports SVG, JPG, PNG, WebP, and GIF (up to 2 MB).",
+  "settings-bg-upload": "Upload image",
+  "settings-bg-reset": "Reset",
+  "settings-bg-empty": "Using default background",
+  "settings-bg-error-type": "Please choose an SVG, JPG, PNG, WebP, or GIF image.",
+  "settings-bg-error-size": "Image is too large. Please keep it within 2 MB.",
+  "settings-bg-error-save": "Could not save the image. Try a smaller file.",
   "open-repository": "Open GitHub repository",
   "star-repository": "Enjoying TPS Plugin? Give it a Star on GitHub!"
 }

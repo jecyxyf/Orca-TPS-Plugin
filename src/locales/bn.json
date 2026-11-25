@@ -266,7 +266,14 @@
   "settings-title": "সেটিংস",
   "settings-close": "সেটিংস বন্ধ করুন",
   "settings-style": "স্টাইল",
-  "settings-style-empty": "স্টাইল বিকল্পগুলো শিগগিরই এখানে যোগ করা হবে।",
+  "settings-bg-image": "পটভূমির ছবি",
+  "settings-bg-image-hint": "SVG, JPG, PNG, WebP এবং GIF সমর্থিত (সর্বোচ্চ ২ MB)।",
+  "settings-bg-upload": "ছবি আপলোড করুন",
+  "settings-bg-reset": "ডিফল্টে ফেরান",
+  "settings-bg-empty": "ডিফল্ট পটভূমি ব্যবহৃত হচ্ছে",
+  "settings-bg-error-type": "অনুগ্রহ করে SVG, JPG, PNG, WebP বা GIF ছবি নির্বাচন করুন।",
+  "settings-bg-error-size": "ছবিটি খুব বড়। অনুগ্রহ করে ২ MB-এর মধ্যে রাখুন।",
+  "settings-bg-error-save": "ছবি সংরক্ষণ করা যায়নি। আরও ছোট ফাইল ব্যবহার করে দেখুন।",
   "open-repository": "GitHub রিপোজিটরি খুলুন",
   "star-repository": "পছন্দ হলে GitHub-এ একটি Star দিন!"
 }

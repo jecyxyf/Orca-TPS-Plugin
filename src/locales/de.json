@@ -266,7 +266,14 @@
   "settings-title": "Einstellungen",
   "settings-close": "Einstellungen schließen",
   "settings-style": "Stil",
-  "settings-style-empty": "Stiloptionen werden hier bald ergänzt.",
+  "settings-bg-image": "Hintergrundbild",
+  "settings-bg-image-hint": "Unterstützt SVG, JPG, PNG, WebP und GIF (max. 2 MB).",
+  "settings-bg-upload": "Bild hochladen",
+  "settings-bg-reset": "Zurücksetzen",
+  "settings-bg-empty": "Standardhintergrund aktiv",
+  "settings-bg-error-type": "Bitte wähle ein SVG-, JPG-, PNG-, WebP- oder GIF-Bild.",
+  "settings-bg-error-size": "Das Bild ist zu groß. Maximal 2 MB sind erlaubt.",
+  "settings-bg-error-save": "Bild konnte nicht gespeichert werden. Bitte eine kleinere Datei wählen.",
   "open-repository": "GitHub-Repository öffnen",
   "star-repository": "Gefällt dir das Plugin? Gib ihm einen Stern auf GitHub!"
 }
