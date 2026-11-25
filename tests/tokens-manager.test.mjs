@@ -12,6 +12,7 @@ import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { calendarFor } from '../src/personal_stats.mjs';
 import { openTokensManagerDb, readRemoteDeviceCache } from '../src/database.mjs';
+import { normalizeComparePath } from '../src/harness_parser.mjs';
 import { makePersonalPacket, mergePersonalPackets } from '../src/personal_stats.mjs';
 import { makeLeaderboardPacket, TOKENS_DEFAULT_INTERVALS } from '../src/leaderboard_stats.mjs';
 import { createPacketReceiver, createTokensRankings, validatePacket } from '../server/tokens-manager-rankings.mjs';
@@ -225,16 +226,17 @@ test('backfills indexed channel lookups and retrieves the newest matching reques
   old.close();
   const migrated = open();
   try {
+    const projectPath = normalizeComparePath('/project/x');
     assert.equal(migrated.details().length, 160);
-    assert.equal(migrated.channelDetails('/project/x', []).length, 80);
-    assert.equal(migrated.channelDetails('/project/other', []).length, 80);
-    const results = migrated.channelDetails('/project/x', [{ provider: 'opencode', sessionId: 'session-1' },
+    assert.equal(migrated.channelDetails(projectPath, []).length, 80);
+    assert.equal(migrated.channelDetails(normalizeComparePath('/project/other'), []).length, 80);
+    const results = migrated.channelDetails(projectPath, [{ provider: 'opencode', sessionId: 'session-1' },
       { provider: 'codex', sessionId: 'session-0' }]);
     assert.equal(results.length, 81);
     assert.deepEqual(results.slice(0, 3).map(row => row.id), ['request-0', 'request-1', 'request-2']);
     migrated.commitSource('fixture-2', '123', [{ ...rows[0], cwd: '/project/new' }], at);
-    assert.deepEqual(migrated.channelDetails('/project/new', []).map(row => row.id), ['request-0']);
-    assert.equal(migrated.channelDetails('/project/x', []).length, 79);
+    assert.deepEqual(migrated.channelDetails(normalizeComparePath('/project/new'), []).map(row => row.id), ['request-0']);
+    assert.equal(migrated.channelDetails(projectPath, []).length, 79);
   } finally { migrated.close(); }
 });
 
