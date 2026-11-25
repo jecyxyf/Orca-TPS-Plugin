@@ -134,13 +134,15 @@ test('panel resolves per-record agent label from record.provider', async () => {
   assert.match(html, /function\s+agentLabel\(\s*provider\s*\)/, 'agentLabel must accept per-record provider override');
 });
 
-test('the panel title has a logo and Current Data shows the update time without a refresh button', async () => {
+test('the panel title has a logo and Current Data shows the countdown icon and update time without a refresh button', async () => {
   const html = await readFile(panelPath, 'utf8');
   const logo = /<h1\b[^>]*\bid="panel-title"[^>]*>[\s\S]*?<img\b[^>]*\bsrc="([^"]+)"[^>]*\balt=""[^>]*>\s*TPS Plugin/.exec(html);
   assert.ok(logo, 'logo must be left of the title');
   const png = await readFile(path.resolve(path.dirname(panelPath), logo[1]));
   assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
-  assert.match(html, /<div class="panel-header">\s*<p\b[^>]*\bid="updated"[^>]*>—<\/p>\s*<\/div>/);
+  assert.match(html, /<div class="panel-header">\s*<p\b[^>]*\bid="updated-wrap"[\s\S]*?id="updated-icon"[\s\S]*?<svg\b[\s\S]*?<span\b[^>]*\bid="updated"[^>]*>—<\/span>\s*<\/p>\s*<\/div>/);
+  assert.match(html, /@keyframes spin-once/);
+  assert.match(html, /\.current-updated-icon\.is-spinning svg/);
   assert.doesNotMatch(html, /<button\b[^>]*\bid="refresh"|current-refresh/);
   assert.doesNotMatch(html, /recent-requests|request-speed-note/);
 });
@@ -623,6 +625,7 @@ test('top-right header places language picker beside settings gear and modal off
   assert.doesNotMatch(dialog, /settings-color-(?:un)?selected-reset/);
   assert.match(dialog, /id="settings-color-icon"[^>]*type="color"/);
   assert.match(dialog, /id="settings-color-icon-reset"/);
+  assert.match(dialog, /id="settings-record-card-style"[\s\S]*?id="settings-card-color"[^>]*type="color"[\s\S]*?id="settings-card-reset"[\s\S]*?id="settings-card-opacity"[^>]*type="range"[^>]*min="0"[^>]*max="100"/);
   assert.doesNotMatch(dialog, /id="language-picker"|settings-timezone|settings-bg-zoom|settings-bg-preview/);
 
   const editor = /<div[^>]*id="bg-editor"[^>]*role="dialog"[\s\S]*?(?=\n\s*<template id="ladder-avatar-fallback">)/.exec(html)?.[0] ?? '';
@@ -646,6 +649,8 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(html, /root\.setProperty\('--ink', value\)[\s\S]*?root\.setProperty\('--purple', value\)[\s\S]*?root\.setProperty\('--muted',[\s\S]*?root\.setProperty\('--tab-unselected', value\)/);
   assert.match(html, /root\.setProperty\('--blue', value\)[\s\S]*?root\.setProperty\('--tab-selected', value\)/);
   assert.match(html, /setProperty\('--icon-color', value\)/);
+  assert.match(css.get('.record-card').background, /--record-card-bg/);
+  assert.match(css.get('.record-card').background, /--record-card-opacity/);
   assert.equal(css.get('.settings-color-row')['justify-content'], 'flex-start');
   assert.equal(css.get('.settings-sheet')['--surface'], '#262628');
   assert.equal(css.get('.settings-sheet')['--ink'], '#ffffff');

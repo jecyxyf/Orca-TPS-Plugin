@@ -270,6 +270,16 @@
     .settings-color-input::-webkit-color-swatch { border: 0; border-radius: 5px; }
     .settings-color-input::-moz-color-swatch { border: 0; border-radius: 5px; }
     .settings-color-input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .settings-card-opacity-row {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) 3.2em;
+      align-items: center; gap: 8px; margin-top: 2px;
+    }
+    .settings-card-range { width: 100%; min-width: 0; margin: 0; accent-color: var(--blue); cursor: pointer; }
+    .settings-card-range:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .settings-color-value {
+      text-align: end; font-size: 11px; font-weight: 600;
+      font-variant-numeric: tabular-nums; color: var(--ink);
+    }
     .language-picker {
       position: relative; flex: 0 1 140px; min-width: 0;
       --ink: #1c1c1e; --muted: #6d6d75; --blue: #0066e6;
@@ -305,7 +315,19 @@
     .language-option { width: 100%; border-color: transparent; text-align: start; }
     .language-option:hover, .language-option[aria-pressed="true"] { background: var(--button-bg); color: var(--blue); }
     .language-message { margin: 4px 6px; color: var(--muted); overflow-wrap: anywhere; }
-    .current-updated { margin: 0; color: var(--tab-unselected, var(--muted)); font-size: 11px; }
+    .current-updated {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin: 0; color: var(--tab-unselected, var(--muted));
+      font-size: 11px; font-variant-numeric: tabular-nums;
+    }
+    .current-updated-icon {
+      display: inline-grid; place-items: center; flex: none;
+      width: 14px; height: 14px;
+      color: var(--icon-color, var(--tab-unselected, var(--muted)));
+    }
+    .current-updated-icon svg { width: 14px; height: 14px; transform-origin: center; }
+    .current-updated-icon.is-spinning svg { animation: spin-once .6s cubic-bezier(.22, 1, .36, 1); }
+    @keyframes spin-once { to { transform: rotate(360deg); } }
     .refresh {
       display: inline-flex; align-items: center; justify-content: center; gap: 5px;
       flex-shrink: 0; min-height: 34px; padding: 7px 11px; border: 0; border-radius: 13px;
@@ -603,7 +625,11 @@
     .loading { margin: 12px 2px 0; color: var(--muted); font-size: 12px; }
     .records { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
     .record-card, .war, .heat, .ladder-card { min-width: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
-    .record-card { padding: 10px 16px; }
+    .record-card {
+      padding: 10px 16px;
+      background: color-mix(in srgb, var(--record-card-bg, var(--surface)) var(--record-card-opacity, 100%), transparent);
+      backdrop-filter: var(--record-card-blur, none);
+    }
     .card-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
     .identity { min-width: 0; }
     .agent { margin: 0 0 1px 25px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .02em; line-height: 1.4; }
@@ -615,7 +641,7 @@
     .meta-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 5px; margin-top: 2px; color: var(--muted); font-size: 11px; }
     .timestamp { overflow-wrap: anywhere; }
     .ttft { font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .speed { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-width: 0; padding: 6px 10px; border-radius: 15px; background: var(--speed-bg); color: var(--speed); white-space: nowrap; }
+    .speed { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-width: 0; padding: 6px 10px; border-radius: 15px; background: color-mix(in srgb, var(--speed-bg) var(--record-card-opacity, 100%), transparent); color: var(--speed); white-space: nowrap; }
     .rocket { width: 16px; height: 16px; flex-shrink: 0; align-self: center; color: var(--icon-color, currentColor); }
     .speed-value { min-width: 0; font-size: 20px; font-weight: 750; line-height: 1.15; letter-spacing: -.6px; }
     .speed-unit { font-size: 11px; font-weight: 550; line-height: 1; }
@@ -742,7 +768,7 @@
       .war-period-tabs .war-tab { padding-inline: 1px; font-size: 10px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner { animation: none; }
+      .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner, .current-updated-icon.is-spinning svg { animation: none; }
       .refresh:active:not(:disabled) { transform: none; }
       .panel-title-link, .panel-star-link, .settings-toggle, .settings-toggle svg, .settings-close { transition: none; }
       .panel-star-link:hover { transform: none; }
@@ -978,7 +1004,17 @@
     </section>
     <section class="panel-view" id="current-data" role="tabpanel" aria-labelledby="tab-current" tabindex="0" hidden>
       <div class="panel-header">
-        <p class="current-updated" id="updated" data-localized-text>—</p>
+        <p class="current-updated" id="updated-wrap">
+          <span class="current-updated-icon" id="updated-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 2h4"/>
+              <path d="M12 14v-4"/>
+              <path d="M4 13a8 8 0 0 1 8-7 8 8 0 1 1-5.3 14L4 17.6"/>
+              <path d="M9 17H4v5"/>
+            </svg>
+          </span>
+          <span id="updated" data-localized-text>—</span>
+        </p>
       </div>
       <div id="current-scroll" role="region" tabindex="0" data-i18n-aria-label="per-request-speeds">
         <div class="message message-error" id="error" data-testid="error" role="alert" data-localized-text hidden></div>
@@ -1071,6 +1107,29 @@
                   </svg>
                 </button>
               </div>
+            </div>
+          </div>
+          <div class="settings-bg-card" id="settings-record-card-style">
+            <div class="settings-bg-row">
+              <p class="settings-bg-title" data-i18n="settings-current-card"></p>
+              <div class="settings-color-row">
+                <div class="settings-color-item">
+                  <label class="settings-color-label" for="settings-card-color" data-i18n="settings-card-color"></label>
+                  <input class="settings-color-input" id="settings-card-color" data-testid="settings-card-color" type="color" value="#ffffff">
+                </div>
+                <button class="settings-bg-btn" id="settings-card-reset" data-testid="settings-card-reset" type="button"
+                        data-i18n-title="settings-card-reset" data-i18n-aria-label="settings-card-reset" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+                    <path d="M3 3v5h5"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="settings-card-opacity-row">
+              <label class="settings-color-label" for="settings-card-opacity" data-i18n="settings-card-opacity"></label>
+              <input class="settings-card-range" id="settings-card-opacity" data-testid="settings-card-opacity" type="range" min="0" max="100" step="1" value="100">
+              <span class="settings-color-value" id="settings-card-opacity-value">100%</span>
             </div>
           </div>
         </section>
@@ -1333,7 +1392,7 @@
     (() => {
       'use strict';
       const byId = id => document.getElementById(id);
-      const ui = Object.fromEntries(['current-data', 'current-scroll', 'updated', 'error', 'warnings', 'loading', 'records', 'empty', 'empty-text', 'record-template'].map(id => [id, byId(id)]));
+      const ui = Object.fromEntries(['current-data', 'current-scroll', 'updated-wrap', 'updated-icon', 'updated', 'error', 'warnings', 'loading', 'records', 'empty', 'empty-text', 'record-template'].map(id => [id, byId(id)]));
       const views = [...byId('panel-tabs').children];
       const lifetime = new AbortController();
       const bridge = window.orca?.plugin;
@@ -1380,6 +1439,10 @@
       let recordNodes = new Map(), currentFrame;
       let drawnWarnings;
       let resetScroll = false;
+      let lastUpdatedAt;
+      ui['updated-icon'].addEventListener('animationend', () => {
+        ui['updated-icon'].classList.remove('is-spinning');
+      }, { signal: lifetime.signal });
       document.addEventListener('DOMContentLoaded', async () => {
         await locale.ready;
         if (activeTab) return;
@@ -1766,7 +1829,19 @@
         const working = busy || Boolean(current?.loading);
         ui['current-data'].setAttribute('aria-busy', String(working));
         const updatedAt = current?.updatedAt;
-        ui.updated.textContent = date(updatedAt) ? t('updated-at', timeLabel(updatedAt)) : '—';
+        const formattedUpdate = date(updatedAt) ? timeLabel(updatedAt) : null;
+        ui.updated.textContent = formattedUpdate ?? '—';
+        ui['updated-wrap'].title = formattedUpdate ? t('updated-at', formattedUpdate) : '';
+        if (formattedUpdate && updatedAt !== lastUpdatedAt) {
+          if (lastUpdatedAt !== undefined) {
+            ui['updated-icon'].classList.remove('is-spinning');
+            void ui['updated-icon'].offsetWidth;
+            ui['updated-icon'].classList.add('is-spinning');
+          }
+          lastUpdatedAt = updatedAt;
+        } else if (!formattedUpdate) {
+          lastUpdatedAt = null;
+        }
         ui.error.hidden = !problem;
         ui.error.textContent = problem ? t(problem) : '';
         ui.loading.hidden = !working;
@@ -2784,6 +2859,8 @@
       const COLOR_UNSELECTED_KEY = 'tps:panel-color-unselected';
       const COLOR_SELECTED_KEY = 'tps:panel-color-selected';
       const COLOR_ICON_KEY = 'tps:panel-color-icon';
+      const CARD_COLOR_KEY = 'tps:panel-card-color';
+      const CARD_OPACITY_KEY = 'tps:panel-card-opacity';
       const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
       const DEFAULT_BG_TRANSFORM = { scale: 100, x: 0, y: 0 };
       const MAX_BG_BYTES = 2 * 1024 * 1024;
@@ -2984,8 +3061,62 @@
         for (const entry of colorInputs) {
           if (!entry.custom) entry.input.value = entry.fallback();
         }
+        if (!cardCustomColor) cardColorInput.value = cardColorFallback();
       });
       themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+      const cardColorInput = byId('settings-card-color');
+      const cardOpacityInput = byId('settings-card-opacity');
+      const cardOpacityValue = byId('settings-card-opacity-value');
+      const cardReset = byId('settings-card-reset');
+      const cardColorFallback = () => document.documentElement.classList.contains('dark') ? '#262628' : '#ffffff';
+      let cardCustomColor = false;
+      let cardOpacity = 100;
+
+      function applyCardStyle({ color, opacity }, persist = false) {
+        const root = document.documentElement.style;
+        const validColor = typeof color === 'string' && HEX_COLOR_RE.test(color);
+        cardCustomColor = validColor;
+        if (validColor) root.setProperty('--record-card-bg', color.toLowerCase());
+        else root.removeProperty('--record-card-bg');
+        cardColorInput.value = validColor ? color.toLowerCase() : cardColorFallback();
+
+        cardOpacity = clampInt(opacity, 0, 100, 100);
+        if (cardOpacity < 100) {
+          root.setProperty('--record-card-opacity', `${cardOpacity}%`);
+          root.setProperty('--record-card-blur', 'blur(8px)');
+        } else {
+          root.removeProperty('--record-card-opacity');
+          root.removeProperty('--record-card-blur');
+        }
+        cardOpacityInput.value = String(cardOpacity);
+        cardOpacityValue.textContent = `${cardOpacity}%`;
+        cardReset.disabled = !cardCustomColor && cardOpacity === 100;
+
+        if (persist) {
+          writeStore(CARD_COLOR_KEY, validColor ? color.toLowerCase() : null);
+          writeStore(CARD_OPACITY_KEY, cardOpacity < 100 ? String(cardOpacity) : null);
+        }
+      }
+
+      applyCardStyle({
+        color: readStore(CARD_COLOR_KEY),
+        opacity: readStore(CARD_OPACITY_KEY) ?? 100
+      }, false);
+
+      cardColorInput.addEventListener('input', () => applyCardStyle({
+        color: cardColorInput.value, opacity: cardOpacity
+      }, false));
+      cardColorInput.addEventListener('change', () => applyCardStyle({
+        color: cardColorInput.value, opacity: cardOpacity
+      }, true));
+      cardOpacityInput.addEventListener('input', () => applyCardStyle({
+        color: cardCustomColor ? cardColorInput.value : null, opacity: cardOpacityInput.value
+      }, false));
+      cardOpacityInput.addEventListener('change', () => applyCardStyle({
+        color: cardCustomColor ? cardColorInput.value : null, opacity: cardOpacityInput.value
+      }, true));
+      cardReset.addEventListener('click', () => applyCardStyle({ color: null, opacity: 100 }, true));
 
       function setOpen(open, restoreFocus = false) {
         dialog.hidden = !open;
