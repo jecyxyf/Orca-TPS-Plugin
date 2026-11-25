@@ -681,6 +681,12 @@ test('top-right header places language picker beside settings gear and modal off
   assert.equal(css.get('.usage-ranking .section-title')['border-bottom'], '1px solid var(--line)');
   assert.equal(css.get('.rank-tps').background, 'transparent');
   assert.equal(css.get('#speed-rows .war-meta-item:first-child')['min-width'], '5.2em');
+  assert.equal(css.get('.war-track').height, '9px');
+  assert.match(html, /@keyframes usage-stars-drift\b[\s\S]*?@keyframes usage-stars-twinkle\b/);
+  assert.match(html, /@keyframes speed-gradient-flow\b/);
+  assert.match(css.get('#war-rows .war-fill::before').animation, /usage-stars-drift/);
+  assert.match(css.get('#war-rows .war-fill::after').animation, /usage-stars-twinkle/);
+  assert.match(css.get('#speed .war-fill::before').animation, /speed-gradient-flow/);
 
   assert.equal(css.get('.metrics')['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)');
   const cardCode = /function formatTps\(record\) \{[\s\S]*?(?=\n      \/\/ 用量战况)/.exec(html)?.[0] ?? '';

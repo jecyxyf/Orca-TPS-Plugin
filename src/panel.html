@@ -813,8 +813,52 @@
     .war-agent-icon svg { width: 18px; height: 18px; display: block; }
     .war-model { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--purple); font-size: 13px; font-weight: 700; }
     .war-amount { flex-shrink: 0; color: var(--blue); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .war-track { height: 4px; margin: 6px 0 4px; border-radius: 2px; background: var(--tag-bg); overflow: hidden; }
-    .war-fill { height: 100%; border-radius: 2px; background: var(--blue); }
+    .war-track { height: 9px; margin: 6px 0 5px; border-radius: 999px; background: var(--tag-bg); overflow: hidden; }
+    .war-fill { position: relative; height: 100%; border-radius: 999px; background: var(--blue); overflow: hidden; }
+    #war-rows .war-fill {
+      background: linear-gradient(90deg, #004fd6 0%, #1c88ff 58%, #5ee0ff 100%);
+      box-shadow: 0 0 8px color-mix(in srgb, #38b6ff 45%, transparent);
+    }
+    #war-rows .war-fill::before,
+    #war-rows .war-fill::after {
+      content: '';
+      position: absolute;
+      inset: 0 auto 0 0;
+      pointer-events: none;
+      background-repeat: repeat-x;
+    }
+    #war-rows .war-fill::before {
+      left: -42px;
+      width: calc(100% + 42px);
+      background-image:
+        radial-gradient(circle 1.3px at 6px 2.5px, rgba(255, 255, 255, .96) 95%, transparent),
+        radial-gradient(circle 1px at 19px 6.5px, rgba(165, 243, 252, .92) 95%, transparent),
+        radial-gradient(circle 1.4px at 33px 3px, rgba(255, 255, 255, .94) 95%, transparent);
+      background-size: 42px 9px;
+      animation: usage-stars-drift 5.5s linear infinite, usage-stars-twinkle 2.1s ease-in-out infinite alternate;
+    }
+    #war-rows .war-fill::after {
+      left: -34px;
+      width: calc(100% + 34px);
+      background-image:
+        radial-gradient(circle 1.5px at 8px 6.2px, rgba(255, 255, 255, .98) 95%, transparent),
+        radial-gradient(circle 1px at 21px 2.2px, rgba(196, 241, 255, .94) 95%, transparent),
+        radial-gradient(circle 1.2px at 30px 6.8px, rgba(255, 255, 255, .86) 95%, transparent);
+      background-size: 34px 9px;
+      animation: usage-stars-drift-b 4.2s linear infinite, usage-stars-twinkle 1.6s ease-in-out -.8s infinite alternate;
+    }
+    @keyframes usage-stars-drift {
+      from { transform: translateX(0); }
+      to { transform: translateX(42px); }
+    }
+    @keyframes usage-stars-drift-b {
+      from { transform: translateX(0); }
+      to { transform: translateX(34px); }
+    }
+    @keyframes usage-stars-twinkle {
+      from { opacity: .35; }
+      to { opacity: 1; }
+    }
     .war-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
     #war-rows .war-meta { display: grid; grid-template-columns: 5.2em 6.2em 6.2em minmax(0, 1fr); gap: 2px 8px; }
     .war-meta-item { display: inline-flex; align-items: center; gap: 3px; min-width: 0; white-space: nowrap; }
@@ -826,7 +870,23 @@
     .rank-tps { flex-shrink: 0; color: var(--speed); background: transparent; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .rank-tps small { margin-inline-start: 2px; color: var(--muted); font-size: 10px; font-weight: 600; }
     #speed-rows .war-meta-item:first-child { min-width: 5.2em; }
-    #speed .war-fill { background: var(--speed); }
+    #speed .war-fill {
+      background: transparent;
+      box-shadow: 0 0 8px color-mix(in srgb, #ff4b2b 42%, transparent);
+    }
+    #speed .war-fill::before {
+      content: '';
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 200%;
+      pointer-events: none;
+      background: linear-gradient(90deg, #ff2a5f 0%, #ff7a18 12.5%, #ffd23f 25%, #e84393 37.5%, #ff2a5f 50%, #ff7a18 62.5%, #ffd23f 75%, #e84393 87.5%, #ff2a5f 100%);
+      animation: speed-gradient-flow 2.8s linear infinite;
+    }
+    @keyframes speed-gradient-flow {
+      from { transform: translateX(-50%); }
+      to { transform: translateX(0); }
+    }
     .heat { position: relative; grid-template-rows: minmax(0, 1fr); }
     .heat-scroll { direction: ltr; margin-top: 8px; padding-bottom: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
     .heat-canvas { position: relative; width: max-content; }
@@ -905,6 +965,7 @@
       .panel-star-link:hover { transform: none; }
       .panel-star-svg .star-core, .panel-star-svg .star-spark { animation: none; }
       .ladder-medal::before, .ladder-medal::after, .ladder-medal-emblem::before { animation: none; opacity: 0; }
+      #war-rows .war-fill::before, #war-rows .war-fill::after, #speed .war-fill::before { animation: none; }
     }
   </style>
 </head>
