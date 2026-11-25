@@ -4,20 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed
-- **Leaderboard sync no longer waits for every file**: Today's usage now uploads whatever has been read so far, and later syncs replace it as more files are read. Heavy users with a large session file that was still being written (over 64 MB) previously got "usage not ready" on almost every sync. The one-time history upload for past days still waits for complete data, because the server keeps the first total it receives for each past day.
-- **Leaderboard avatars recover after a failed download**: An avatar that is still the default icon is fetched again when its leaderboard row changes after a sync, and the account avatar is retried too. A loaded avatar updates every place the same user appears and is not downloaded again. Failed downloads now wait 10 seconds (one sync interval) instead of 5 minutes.
-- **Orca 1.4.255+ Active Conversation Tracking**: Adapted to Orca's split state storage (`profile_state_document_parts` and `profile_state_document_parts_meta`), resolving an issue where the sidebar and status bar stayed frozen on an older session after switching channels/tabs. Falls back seamlessly to monolithic `profile_state_documents` on earlier Orca versions.
+## [1.6.5] - 2026-11-25
 
-### Changed
-- The default leaderboard avatar is a black hat with a white band and a thin gray outline.
-- **Sub-Second Active Tab Polling (250ms)**: Lowered focus poll interval from 1000ms to 250ms with a lightweight revision stamp check (`workspaceStamp`), avoiding full-tree re-parsing when the workspace state is unchanged, reducing channel switch latency to 0.7~1.5s.
+**Upgrading from 1.6.4:** Uninstall the old TPS Plugin in Orca, then install 1.6.5. This release changes how the plugin collects usage and connects to the leaderboard.
 
 ### Added
-- **Antigravity CLI support** (`antigravity` agent): token counts and cache hit rate come from the live `brain/<conversation-id>/.system_generated/logs/transcript.jsonl` (rotated copies are ignored). `input_tokens` is treated as excluding cache reads.
-- Antigravity model, TTFT, and request latency come from its native store `conversations/<conversation-id>.db`, read-only and limited to step and generation metadata. Model priority: generation display name, then the latest `Model Selection` change, then the family name. Without the native store only tokens and cache are shown.
-- **Usage totals panel and yearly heatmap**: 当日战况, 近一周战况 and 近一月战况 at the top of the panel, showing total tokens (new input, output, cache writes and cache reads, matching CC Switch's real total), cache hit rate and request counts, with a per-agent and per-model breakdown. A GitHub-style heatmap of the last year shows daily totals on hover. Totals come from an incremental background index of local session files (Codex, Claude Code including subagents, Pi, OpenCode sessions, and Antigravity conversations). Each file is read once and re-read only when it changes (large, still-growing files at most every 10 minutes); Codex rollouts stream through the incremental parser; identical Codex rollouts copied into Orca's managed home are counted once.
-- **Model average speed ranking** (模型均速): inside the 用量统计 group, models are ranked by their mean per-request output speed (tokens/s) over the selected 当日 / 近一周 / 近一月 window, fastest first. Agents are merged per model; a model needs at least 5 requests in the window to be ranked, and models whose samples are mostly log estimates are marked `≈`. Speeds come from the same local session logs as the totals, so CC Switch proxy speeds are not included. Index units written by earlier versions are re-read once to fill in the speed counters.
+
+- Track token usage and generation speed across 16 harnesses. The plugin offers 15 interface languages and remembers the last selection.
+- Review daily, hourly, and annual usage in Personal Stats. Compare models by token usage and average generation speed, and explore the yearly heatmap.
+- Browse separate usage and speed leaderboards in calendar and completed-hour modes. The daily usage board shows a live usage chart, and longer periods show daily trends.
+
+### Changed
+
+- Tokens Managers collect usage on each device and sync it over SSH. Personal Stats and leaderboard uploads use the same device totals and count each device once.
+- The leaderboard runs on the new server. Rankings, usage totals, and speed samples stay in memory, while GitHub account and sign-in state is stored separately.
+- Simplified the leaderboard controls and sign-in notices. The sidebar now shows the plugin version, and both READMEs and Orca gallery images have been refreshed.
+
+### Fixed
+
+- Keep daily uploads moving when a conversation log is still being written, and retry leaderboard avatars after a failed load.
+- Keep the sidebar and status bar in sync with active conversation changes in Orca 1.4.255 and later.
 
 ## [1.6.4] - 2026-11-19
 
