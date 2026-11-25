@@ -361,6 +361,8 @@
     :is(.usage-scroll, #current-scroll, .ladder-ranking-scroll):focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
     .section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; }
     .section-title { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; font-weight: 700; }
+    .usage-breakdown .section-title { font-size: 14px; font-weight: 750; line-height: 1.5; }
+    .usage-ranking .section-title { padding-bottom: 4px; border-bottom: 1px solid var(--line); }
     .section-detail { margin: 0; color: var(--muted); font-size: 11px; }
     .ladder-card { padding: 12px 16px; }
     #leaderboard {
@@ -804,13 +806,25 @@
     .war-row { padding: 8px 2px 7px; border-top: 1px solid var(--line); }
     .war-row:first-child { border-top: 0; }
     .war-row-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
-    .war-agent { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; background: var(--tag-bg); color: var(--muted); font-size: 10px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+    .war-agent-icon {
+      display: inline-grid; place-items: center; flex: none;
+      width: 20px; height: 20px; color: var(--icon-color, var(--ink));
+    }
+    .war-agent-icon svg { width: 18px; height: 18px; display: block; }
     .war-model { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--purple); font-size: 13px; font-weight: 700; }
     .war-amount { flex-shrink: 0; color: var(--blue); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .war-track { height: 4px; margin: 6px 0 4px; border-radius: 2px; background: var(--tag-bg); overflow: hidden; }
     .war-fill { height: 100%; border-radius: 2px; background: var(--blue); }
-    .war-meta { display: flex; flex-wrap: wrap; gap: 0 10px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-    .war-meta span { white-space: nowrap; }
+    .war-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+    #war-rows .war-meta { display: grid; grid-template-columns: 5.2em 6.2em 6.2em minmax(0, 1fr); gap: 2px 8px; }
+    .war-meta-item { display: inline-flex; align-items: center; gap: 3px; min-width: 0; white-space: nowrap; }
+    .war-meta-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .war-meta-item svg { width: 12px; height: 12px; flex: none; color: var(--icon-color, currentColor); }
+    .war-meta-harness {
+      display: inline-grid; place-items: center; flex: none;
+      width: 15px; height: 15px; color: var(--icon-color, var(--ink));
+    }
+    .war-meta-harness svg { width: 14px; height: 14px; display: block; }
     .war-empty { margin: 10px 2px 2px; color: var(--muted); font-size: 12px; text-align: center; }
     .war-empty[hidden] { display: none; }
     .rank-index { flex-shrink: 0; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -865,6 +879,7 @@
       .war-totals { gap: 4px; }
       .war-stat { gap: 4px; }
       .war-value { font-size: 14px; }
+      #war-rows .war-meta { grid-template-columns: 4.6em 5.6em 5.6em minmax(0, 1fr); gap: 2px 6px; }
       .ladder-total { padding-inline: 6px; font-size: 12px; }
       .ladder-speed-row .ladder-total { padding-inline: 4px; font-size: 11px; }
       .settings-sheet { padding: 12px; }
@@ -1299,14 +1314,10 @@
           </div>
         </section>
         <section class="war usage-ranking" id="speed" aria-labelledby="speed-title" data-testid="speed">
-          <div class="section-head">
-            <h2 class="section-title" id="speed-title"><span data-i18n="average-model-speed"></span></h2>
-            <p class="section-detail"><span data-i18n="model-speed-description"></span></p>
-          </div>
+          <h2 class="section-title" id="speed-title"><span data-i18n="average-model-speed"></span></h2>
           <div class="usage-scroll" tabindex="0" aria-labelledby="speed-title">
             <ol class="war-rows" id="speed-rows" data-testid="speed-rows" data-i18n-aria-label="model-speed-list"></ol>
             <p class="war-empty" id="speed-empty" data-testid="speed-empty" hidden><span data-i18n="empty-model-speeds"></span></p>
-            <p class="war-note" id="speed-note" data-testid="speed-note" data-localized-text hidden></p>
           </div>
         </section>
         <section class="heat" id="heat" aria-labelledby="heat-title" data-testid="heatmap">
@@ -1519,8 +1530,8 @@
         <div class="metric output">
           <dt class="metric-icon" data-i18n-title="output" data-i18n-aria-label="output">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-              <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
+              <path d="M12 15V3m-4 4 4-4 4 4"/>
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
             </svg>
           </dt>
           <dd class="metric-value-line"><span class="metric-value" data-testid="output-value"></span><span class="metric-unit">tokens</span></dd>
@@ -1543,8 +1554,9 @@
         <div class="metric cache">
           <dt class="metric-icon" data-i18n-title="cache-hit" data-i18n-aria-label="cache-hit">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
-              <path d="M22 12A10 10 0 0 0 12 2v10Z"/>
+              <path d="M3 5a9 3 0 1 0 18 0a9 3 0 1 0-18 0"/>
+              <path d="M3 5v14a9 3 0 0 0 18 0V5"/>
+              <path d="M3 12a9 3 0 0 0 18 0"/>
             </svg>
           </dt>
           <dd class="metric-value-line"><span class="metric-value" data-testid="cache-value"></span></dd>
@@ -1745,10 +1757,7 @@
     }
     const formatMillionTokens = tokens => {
       if (!Number.isFinite(tokens) || tokens < 0) return '—';
-      const options = tokens < 1_000_000
-        ? { maximumFractionDigits: 6 }
-        : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
-      return locale.number(tokens / 1_000_000, options) + ' M';
+      return locale.number(tokens / 1_000_000, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' M';
     };
 
     (() => {
@@ -2060,14 +2069,60 @@
         if (!numeric(value)) return '—';
         return value >= 1e4 ? locale.number(value, { notation: 'compact', maximumFractionDigits: 2 }) : number(value);
       }
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const WAR_METRIC_PATHS = {
+        requests: ['M22 12h-4l-3 9L9 3l-3 9H2'],
+        input: ['M12 3v12m-4-4 4 4 4-4', 'M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2'],
+        output: ['M12 15V3m-4 4 4-4 4 4', 'M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2'],
+        cache: ['M3 5a9 3 0 1 0 18 0a9 3 0 1 0-18 0', 'M3 5v14a9 3 0 0 0 18 0V5', 'M3 12a9 3 0 0 0 18 0']
+      };
+      function harnessBadge(provider, size = 18) {
+        const label = AGENT_LABELS[provider] ?? String(provider || 'agent').slice(0, 40);
+        const badge = document.createElement('span');
+        badge.className = size >= 18 ? 'war-agent-icon' : 'war-meta-harness';
+        badge.title = label;
+        badge.setAttribute('role', 'img');
+        badge.setAttribute('aria-label', label);
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('width', String(size));
+        svg.setAttribute('height', String(size));
+        svg.setAttribute('aria-hidden', 'true');
+        const use = document.createElementNS(SVG_NS, 'use');
+        use.setAttribute('width', '100%');
+        use.setAttribute('height', '100%');
+        use.setAttribute('href', `#harness-${harnessIconId(provider)}`);
+        svg.append(use);
+        badge.append(svg);
+        return badge;
+      }
+      function warMetaMetric(kind, valueText, tooltip) {
+        const item = document.createElement('span');
+        item.className = 'war-meta-item';
+        item.title = tooltip;
+        item.setAttribute('aria-label', tooltip);
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        svg.setAttribute('aria-hidden', 'true');
+        for (const d of WAR_METRIC_PATHS[kind]) {
+          const path = document.createElementNS(SVG_NS, 'path');
+          path.setAttribute('d', d);
+          svg.append(path);
+        }
+        const text = document.createElement('span');
+        text.textContent = valueText;
+        item.append(svg, text);
+        return item;
+      }
       function usageRow(row, max) {
         const item = document.createElement('li');
         item.className = 'war-row';
         const head = document.createElement('div');
         head.className = 'war-row-head';
-        const agent = document.createElement('span');
-        agent.className = 'war-agent';
-        agent.textContent = AGENT_LABELS[row.provider] ?? String(row.provider || 'agent').slice(0, 40);
         const model = document.createElement('span');
         model.className = 'war-model';
         model.textContent = row.model || t('unknown-model');
@@ -2075,7 +2130,7 @@
         const amount = document.createElement('span');
         amount.className = 'war-amount';
         amount.textContent = formatMillionTokens(row.tokens);
-        head.append(agent, model, amount);
+        head.append(harnessBadge(row.provider, 18), model, amount);
         const track = document.createElement('div');
         track.className = 'war-track';
         const fill = document.createElement('div');
@@ -2084,12 +2139,12 @@
         track.append(fill);
         const meta = document.createElement('div');
         meta.className = 'war-meta';
-        for (const part of [t('requests-counted', formatCount(row.requests)), t('fresh-input-amount', formatMillionTokens(row.freshInput)), t('output-amount', formatMillionTokens(row.output)), t('cache-read-amount', formatMillionTokens(row.cacheRead))]) {
-          const span = document.createElement('span');
-          span.setAttribute('data-localized-text', '');
-          span.textContent = part;
-          meta.append(span);
-        }
+        meta.append(
+          warMetaMetric('requests', formatCount(row.requests), t('requests-counted', formatCount(row.requests))),
+          warMetaMetric('input', formatMillionTokens(row.freshInput), t('fresh-input-amount', formatMillionTokens(row.freshInput))),
+          warMetaMetric('output', formatMillionTokens(row.output), t('output-amount', formatMillionTokens(row.output))),
+          warMetaMetric('cache', formatMillionTokens(row.cacheRead), t('cache-read-amount', formatMillionTokens(row.cacheRead)))
+        );
         item.append(head, track, meta);
         return item;
       }
@@ -2113,8 +2168,7 @@
         const maxSpeed = range?.maxSpeed;
         const hasMaxSpeed = Number.isFinite(maxSpeed?.tokensPerSecond) && maxSpeed.tokensPerSecond > 0;
         byId('war-max-speed-row').hidden = usageRange !== 'today';
-        byId('war-max-speed').textContent = hasMaxSpeed
-          ? `${maxSpeed.estimated ? '≈' : ''}${speedText(maxSpeed.tokensPerSecond)}` : '—';
+        byId('war-max-speed').textContent = hasMaxSpeed ? speedText(maxSpeed.tokensPerSecond) : '—';
         byId('war-max-speed-unit').hidden = !hasMaxSpeed;
         const list = Array.isArray(range?.rows) ? range.rows : [];
         const signature = JSON.stringify([usageRange, usageMode, list, range?.speeds]);
@@ -2145,7 +2199,7 @@
         model.title = entry.model;
         const value = document.createElement('span');
         value.className = 'rank-tps';
-        value.textContent = `${entry.estimated ? '≈' : ''}${speedText(entry.tokensPerSecond)} tokens/s`;
+        value.textContent = `${speedText(entry.tokensPerSecond)} tokens/s`;
         head.append(rank, model, value);
         const track = document.createElement('div');
         track.className = 'war-track';
@@ -2155,12 +2209,13 @@
         track.append(fill);
         const meta = document.createElement('div');
         meta.className = 'war-meta';
-        const agents = [...new Set((entry.providers ?? []).map(provider => AGENT_LABELS[provider] ?? String(provider).slice(0, 40)))];
-        for (const part of [t('requests-counted', formatCount(entry.samples)), ...agents]) {
-          const span = document.createElement('span');
-          span.setAttribute('data-localized-text', '');
-          span.textContent = part;
-          meta.append(span);
+        meta.append(warMetaMetric('requests', formatCount(entry.samples), t('requests-counted', formatCount(entry.samples))));
+        const seenIcons = new Set();
+        for (const provider of entry.providers ?? []) {
+          const iconId = harnessIconId(provider);
+          if (seenIcons.has(iconId)) continue;
+          seenIcons.add(iconId);
+          meta.append(harnessBadge(provider, 14));
         }
         item.append(head, track, meta);
         return item;
@@ -2170,11 +2225,6 @@
         const max = list.reduce((top, entry) => Math.max(top, numeric(entry.tokensPerSecond) ? entry.tokensPerSecond : 0), 0);
         byId('speed-rows').replaceChildren(...list.map((entry, index) => speedRow(entry, index, max)));
         byId('speed-empty').hidden = !range || list.length > 0;
-        const notes = [];
-        if (range && numeric(range.speedSparse) && range.speedSparse > 0) notes.push(t('model-speed-insufficient-samples', number(range.speedSparse)));
-        if (range && numeric(range.speedHidden) && range.speedHidden > 0) notes.push(t('model-list-truncated', number(range.speedHidden)));
-        byId('speed-note').textContent = notes.join(' · ');
-        byId('speed-note').hidden = notes.length === 0;
       }
       async function loadUsage() {
         if (!bridge || disposed || usagePending || typeof bridge.request !== 'function') return;

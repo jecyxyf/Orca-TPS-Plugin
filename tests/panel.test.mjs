@@ -24,7 +24,7 @@ test('upload failures keep an accessible reason without a visible notice', async
   assert.equal(failure({ lastUpload: { at: 120, code: 'accepted', rollingCode: 'accepted' }, rollingProblem: null }), '');
 });
 
-test('per-request output uses tokens and aggregate usage uses millions without rounding small counts to zero', async () => {
+test('per-request output uses tokens and aggregate usage formats millions to two decimal places', async () => {
   const html = await readFile(panelPath, 'utf8');
   const source = /const formatMillionTokens = tokens => \{[\s\S]*?\n    \};/.exec(html)?.[0];
   assert.ok(source);
@@ -32,9 +32,10 @@ test('per-request output uses tokens and aggregate usage uses millions without r
   const format = new Function('locale', `${source}\nreturn formatMillionTokens;`)({
     number: (value, options) => new Intl.NumberFormat('en', options).format(value)
   });
-  assert.equal(format(501), '0.000501 M');
+  assert.equal(format(501), '0.00 M');
+  assert.equal(format(700_612), '0.70 M');
   assert.equal(format(1_250_000), '1.25 M');
-  assert.equal(format(0), '0 M');
+  assert.equal(format(0), '0.00 M');
   assert.equal(format(null), '—');
 });
 
@@ -161,6 +162,13 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.doesNotMatch(warTotals, /class="war-label"/);
   assert.match(html, /\.war-totals\s*\{[^}]*grid-auto-flow:\s*column/);
   assert.match(html, /\.war-value\.speed-max\s*\{\s*color:\s*var\(--speed\)/);
+  assert.doesNotMatch(html, /speed-note|model-speed-description|model-speed-insufficient-samples|model-list-truncated|class="war-agent"/);
+  assert.match(html, /#war-rows \.war-meta\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*5\.2em 6\.2em 6\.2em minmax\(0, 1fr\)/);
+  assert.match(html, /function harnessBadge\(provider/);
+  assert.match(html, /function warMetaMetric\(kind/);
+  assert.match(html, /output:\s*\['M12 15V3m-4 4 4-4 4 4'/);
+  assert.match(html, /cache:\s*\['M3 5a9 3 0 1 0 18 0a9 3 0 1 0-18 0'/);
+  assert.match(html, /warMetaMetric\('requests'[\s\S]*?warMetaMetric\('input'[\s\S]*?warMetaMetric\('output'[\s\S]*?warMetaMetric\('cache'/);
   assert.deepEqual([...html.matchAll(/data-ladder-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
     .map(match => match.slice(1)), expectedModes);
   assert.match(html, /usageMode = 'calendar'/);
@@ -666,11 +674,13 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(css.get('.heat').background, /--record-card-bg/);
   assert.match(css.get('.ladder-card').background, /--record-card-bg/);
   assert.match(css.get('.empty').background, /--record-card-bg/);
+  assert.equal(css.get('.usage-breakdown .section-title')['font-size'], '14px');
+  assert.equal(css.get('.usage-ranking .section-title')['border-bottom'], '1px solid var(--line)');
 
   assert.equal(css.get('.metrics')['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)');
   const cardCode = /function formatTps\(record\) \{[\s\S]*?(?=\n      \/\/ 用量战况)/.exec(html)?.[0] ?? '';
   assert.ok(cardCode);
-  assert.doesNotMatch(cardCode, /≈/);
+  assert.doesNotMatch(html, /≈/);
   const template = /<template id="record-template">([\s\S]*?)<\/template>/.exec(html)?.[1] ?? '';
   assert.doesNotMatch(template, /data-testid="agent"|class="agent"/);
   assert.match(template, /class="model-icon"[^>]*data-testid="harness-icon"[\s\S]*?<use[^>]*href="#harness-default"/);
@@ -692,6 +702,8 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(template, /data-testid="subagent-badge"[\s\S]*?<svg\b/);
   assert.match(template, /data-testid="proxy-badge"[\s\S]*?<svg\b/);
   assert.match(template, /<dl class="metrics">[\s\S]*?data-testid="output-value"[\s\S]*?class="metric ttft" data-testid="ttft"[\s\S]*?data-testid="ttft-value"[\s\S]*?data-testid="duration-value"[\s\S]*?data-testid="cache-value"/);
+  assert.match(template, /class="metric output"[\s\S]*?M12 15V3m-4 4 4-4 4 4/);
+  assert.match(template, /class="metric cache"[\s\S]*?M3 5v14a9 3 0 0 0 18 0V5/);
   assert.equal((template.match(/class="metric-icon"/g) ?? []).length, 4);
   assert.doesNotMatch(template, /🤖|📦|⏳|🍪|metric-label/);
   assert.equal(css.get('.record-card').position, 'relative');
