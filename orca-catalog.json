@@ -18,8 +18,8 @@
       "releases": [
         {
           "version": "1.6.5",
-          "commit": "b09c2b2f30f068ab5eb322243605b0444520bc1b",
-          "contentHash": "f5ce5aa25906ccfc75720e7527a7882d417f28ff445d7e63ad2aa09c1df2c0cd",
+          "commit": "3b92d986e1479390963b45f5839b91b80d2d6d80",
+          "contentHash": "08964b03ec4f4e1c4beb99331dbcef537b10b828c7acebcdd8bffc41e7585605",
           "execution": "trusted-worker",
           "minimumOrca": "1.4.251",
           "name": "TPS Plugin",
@@ -86,7 +86,7 @@
               }
             ]
           },
-          "changelog": "Unifies cross-device usage with Tokens Managers, adds separate usage and speed rankings, and refreshes Personal Stats, the README, and gallery images."
+          "changelog": "Unifies cross-device usage with Tokens Managers, adds separate usage and speed rankings, restores cached ranking charts and removes the unused Windows executable."
         },
         {
           "version": "1.6.4",
