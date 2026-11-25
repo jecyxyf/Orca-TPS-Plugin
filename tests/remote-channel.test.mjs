@@ -9,7 +9,7 @@ import { createInterface } from 'node:readline';
 import { launchSsh } from '../src/remote-channel.mjs';
 import { readTokensManagerBundle, tokensManagerBootstrap } from '../src/tokens-manager-client.mjs';
 
-test('SSH bootstrap installs six files, uses the existing device ID and reuses the installed bundle', { timeout: 15_000 }, async t => {
+test('SSH bootstrap installs the required files, uses the existing device ID and reuses the installed bundle', { timeout: 15_000 }, async t => {
   const home = await mkdtemp(path.join(tmpdir(), 'tps-ssh-'));
   t.after(() => rm(home, { recursive: true, force: true }));
   const root = path.join(home, '.orca', 'tpsplugin'), bin = path.join(root, 'bin');

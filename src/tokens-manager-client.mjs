@@ -6,15 +6,17 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { publicChannelId } from './controller.mjs';
 import { keepLatest, validPersonal } from './database.mjs';
-import { tokensIntervals, validInstallationId } from './leaderboard_stats.mjs';
+import { tokensIntervals } from './leaderboard_stats.mjs';
 import { createRuntimeLookup, launchSsh } from './remote-channel.mjs';
-import { TOKEN_MANAGER_ENTRY, TOKENS_HEARTBEAT_MS, TOKENS_LEASE_MS, TOKENS_RETRY_MS, TOKENS_ROOT, tokensMessage } from './orca_connection.mjs';
+import { compatibleManagerProtocol, decodeManagerMessage, keepManagerLinkAlive, MANAGER_PROTOCOL_VERSION, MESSAGE,
+  TOKEN_MANAGER_ENTRY, TOKENS_HANDSHAKE_MS, TOKENS_HEARTBEAT_MS, TOKENS_RETRY_MS, TOKENS_ROOT, tokensMessage } from './orca_connection.mjs';
 import { calendarFor } from './personal_stats.mjs';
 
 const localHost = '';
 const timezoneKey = 'tokens-manager:timezone';
 const managerFiles = [
-  'database.mjs', 'harness_parser.mjs', 'leaderboard_stats.mjs', 'orca_connection.mjs', 'personal_stats.mjs', TOKEN_MANAGER_ENTRY
+  'database.mjs', 'harness_parser.mjs', 'harnesses.mjs', 'leaderboard_stats.mjs', 'orca_connection.mjs',
+  'personal_stats.mjs', 'sqlite.mjs', TOKEN_MANAGER_ENTRY
 ];
 
 async function installedManagerVersion(root, names) {
@@ -80,7 +82,7 @@ export async function readTokensManagerBundle() {
   return { files, version };
 }
 
-async function remoteBootstrap(install, versionOf, names, entry) {
+async function remoteBootstrap(install, versionOf, names, entry, messageTypes) {
   const { createInterface } = await import('node:readline');
   const { homedir } = await import('node:os');
   const { join } = await import('node:path');
@@ -92,19 +94,19 @@ async function remoteBootstrap(install, versionOf, names, entry) {
     reader.once('line', line => { reader.close(); process.stdin.pause(); resolve(JSON.parse(line)); });
     reader.once('close', () => queueMicrotask(() => reject(new Error('Manager installation cancelled'))));
   });
-  console.log(JSON.stringify({ type: 'bootstrap', version }));
+  console.log(JSON.stringify({ type: messageTypes.bootstrap, version }));
   const payload = await request;
   if (payload.version !== version) await install(root, payload, names, versionOf);
   const child = spawn(process.execPath, [join(root, 'bin', entry), '--connect'],
     { stdio: ['pipe', 'inherit', 'inherit'], env: { ...process.env, ORCA_TPS_TOKENS_ROOT: root } });
   process.stdin.pipe(child.stdin);
   child.stdin.on('error', () => {});
-  console.log(JSON.stringify({ type: 'installed' }));
+  console.log(JSON.stringify({ type: messageTypes.installed }));
   await new Promise(resolve => child.once('exit', resolve));
   process.stdin.destroy();
 }
 
-export const tokensManagerBootstrap = `await (${remoteBootstrap})(${installManagerFiles}, ${installedManagerVersion}, ${JSON.stringify(managerFiles)}, ${JSON.stringify(TOKEN_MANAGER_ENTRY)});`;
+export const tokensManagerBootstrap = `await (${remoteBootstrap})(${installManagerFiles}, ${installedManagerVersion}, ${JSON.stringify(managerFiles)}, ${JSON.stringify(TOKEN_MANAGER_ENTRY)}, ${JSON.stringify(MESSAGE)});`;
 
 function localBridge(root) {
   return spawn(process.execPath, [path.join(root, 'bin', TOKEN_MANAGER_ENTRY), '--connect'], {
@@ -147,11 +149,11 @@ export async function createTokensManagerClient(orca, {
     const signature = JSON.stringify(channels);
     if (signature === connection.channelSignature) return;
     connection.channelSignature = signature;
-    send(connection, { type: 'channels', channels });
+    send(connection, { type: MESSAGE.channels, channels });
   }
 
   function sendCredential(connection) {
-    if (connection.ready && credentials) send(connection, { type: 'credential', endpoint, ...credentials });
+    if (connection.ready && credentials) send(connection, { type: MESSAGE.credential, endpoint, ...credentials });
   }
 
   function sendSyncTargets() {
@@ -163,22 +165,22 @@ export async function createTokensManagerClient(orca, {
     const signature = JSON.stringify(targets);
     if (signature === local.syncSignature) return;
     local.syncSignature = signature;
-    send(local, { type: 'sync-targets', targets });
+    send(local, { type: MESSAGE.syncTargets, targets });
   }
 
   function handle(connection, event, payload) {
     connection.lastSeen = Date.now();
     switch (event.type) {
-      case 'bootstrap':
+      case MESSAGE.bootstrap:
         if (event.version === payload.version) send(connection, { version: payload.version });
         else send(connection, payload);
         break;
-      case 'installed':
-        send(connection, { type: 'hello', endpoint, timeZone, bundleVersion: payload.version });
+      case MESSAGE.installed:
+        send(connection, { type: MESSAGE.hello, endpoint, timeZone, bundleVersion: payload.version,
+          protocolVersion: MANAGER_PROTOCOL_VERSION });
         break;
-      case 'ready':
-        if (event.bundleVersion !== payload.version) return disconnect(connection, true);
-        if (!validInstallationId(event.deviceGuid)) return;
+      case MESSAGE.ready:
+        if (!compatibleManagerProtocol(event) || event.bundleVersion !== payload.version) return disconnect(connection, true);
         connection.ready = true;
         connection.deviceGuid = event.deviceGuid;
         intervals = tokensIntervals(event.intervals, intervals);
@@ -186,44 +188,44 @@ export async function createTokensManagerClient(orca, {
         sendCredential(connection);
         sendSyncTargets();
         if (connection.host === localHost) {
-          for (const packet of pendingRemote.values()) send(connection, { type: 'device-personal', packet });
+          for (const packet of pendingRemote.values()) send(connection, { type: MESSAGE.devicePersonal, packet });
           pendingRemote.clear();
         }
         break;
-      case 'intervals':
+      case MESSAGE.intervals:
         intervals = tokensIntervals(event.intervals, intervals);
         break;
-      case 'progress':
+      case MESSAGE.progress:
         progress = { done: event.done, total: event.total };
         if (!summary()?.updatedAt) onChange(summary());
         break;
-      case 'personal': {
+      case MESSAGE.personal: {
         const packet = event.packet;
         if (connection.host === localHost || !validPersonal(packet) || packet.deviceGuid !== connection.deviceGuid) return;
         const local = connections.get(localHost);
-        if (local?.ready) send(local, { type: 'device-personal', packet });
+        if (local?.ready) send(local, { type: MESSAGE.devicePersonal, packet });
         else keepLatest(pendingRemote, packet.deviceGuid, packet);
         break;
       }
-      case 'summary':
+      case MESSAGE.summary:
         if (connection.host === localHost) {
           personalSummary = event.summary;
           onChange(summary());
         }
         break;
-      case 'channel':
+      case MESSAGE.channel:
         if (event.deviceGuid === connection.deviceGuid && typeof event.channelId === 'string') {
           connection.channels.set(event.channelId, event.result);
         }
         break;
-      case 'uploaded':
+      case MESSAGE.uploaded:
         if (connection === connections.get(localHost) && event.accountId === credentials?.accountId) {
           lastUploadedAt = event.at;
           onUploaded(event.at);
           notifyUploadState();
         }
         break;
-      case 'upload-state':
+      case MESSAGE.uploadState:
         if (connection === connections.get(localHost) && event.accountId === credentials?.accountId) {
           uploadStatus = event;
           notifyUploadState();
@@ -255,10 +257,14 @@ export async function createTokensManagerClient(orca, {
     child.once('exit', () => disconnect(connection));
     const reader = createInterface({ input: child.stdout });
     reader.on('line', line => {
-      try { handle(connection, JSON.parse(line), payload); } catch {}
+      try {
+        const event = decodeManagerMessage(line);
+        if (event) handle(connection, event, payload);
+      } catch {}
     });
     if (connection.host === localHost) {
-      send(connection, { type: 'hello', endpoint, timeZone, deviceGuid, local: true, bundleVersion: payload.version });
+      send(connection, { type: MESSAGE.hello, endpoint, timeZone, deviceGuid, local: true, bundleVersion: payload.version,
+        protocolVersion: MANAGER_PROTOCOL_VERSION });
     }
   }
 
@@ -271,7 +277,7 @@ export async function createTokensManagerClient(orca, {
     }
     sendSyncTargets();
     if (connection.child?.exitCode === null) {
-      if (graceful && connection.child.stdin.writable) connection.child.stdin.end(tokensMessage({ type: 'unsubscribe' }));
+      if (graceful && connection.child.stdin.writable) connection.child.stdin.end(tokensMessage({ type: MESSAGE.unsubscribe }));
       else connection.child.kill();
     }
     if (!stopped && hostTargets.has(connection.host)) {
@@ -291,18 +297,13 @@ export async function createTokensManagerClient(orca, {
         continue;
       }
       if (!existing.child) continue;
-      if (now - existing.lastSeen >= (existing.ready ? TOKENS_LEASE_MS : 45_000)) {
-        disconnect(existing);
-      } else if (existing.ready && now >= existing.nextHeartbeat) {
-        send(existing, { type: 'heartbeat' });
-        existing.nextHeartbeat = now + TOKENS_HEARTBEAT_MS;
-      }
+      if (!keepManagerLinkAlive(existing, now, TOKENS_HANDSHAKE_MS)) disconnect(existing);
     }
   }
 
   function remove(connection) {
     if (!connection) return;
-    if (connection.ready) send(connection, { type: 'unsubscribe' });
+    if (connection.ready) send(connection, { type: MESSAGE.unsubscribe });
     connection.child?.stdin.end();
     connections.delete(connection.host);
     if (!stopped) sendSyncTargets();
@@ -345,7 +346,7 @@ export async function createTokensManagerClient(orca, {
     },
     upload() {
       const local = connections.get(localHost);
-      if (local?.ready) send(local, { type: 'upload' });
+      if (local?.ready) send(local, { type: MESSAGE.upload });
       return Boolean(local?.ready);
     },
     async setTimeZone(zone) {
@@ -353,7 +354,7 @@ export async function createTokensManagerClient(orca, {
       if (timeZone === next) return { timeZone };
       timeZone = next;
       await orca.storage.set(timezoneKey, timeZone);
-      for (const connection of connections.values()) if (connection.ready) send(connection, { type: 'timezone', timeZone });
+      for (const connection of connections.values()) if (connection.ready) send(connection, { type: MESSAGE.timezone, timeZone });
       onChange(summary());
       return { timeZone };
     },

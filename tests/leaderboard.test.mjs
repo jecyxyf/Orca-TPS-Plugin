@@ -464,9 +464,10 @@ test('avatar downloads are bounded and reject non-image or oversized replies', a
 });
 
 test('avatar lookup by GitHub login accepts only the expected image redirect', async () => {
-  const calls = [];
+  const calls = [], signals = [];
   const cache = createAvatarCache({ async fetcher(url, options) {
     calls.push([url.href, options.redirect]);
+    signals.push(options.signal);
     if (url.pathname === '/alice.png') return Response.redirect('https://avatars.githubusercontent.com/u/1?s=64', 302);
     if (url.pathname === '/bob.png') return Response.redirect('https://example.test/u/2', 302);
     return new Response('avatar', { headers: { 'content-type': 'image/png' } });
@@ -474,6 +475,7 @@ test('avatar lookup by GitHub login accepts only the expected image redirect', a
   const image = 'data:image/png;base64,YXZhdGFy';
   assert.equal(await cache.get('Alice'), image);
   assert.equal(await cache.get('alice'), image);
+  assert.equal(signals[0], signals[1], 'avatar lookup and download share one deadline');
   assert.equal(await cache.get('bob'), null);
   assert.equal(await cache.get('alice/..'), null);
   assert.deepEqual(calls, [

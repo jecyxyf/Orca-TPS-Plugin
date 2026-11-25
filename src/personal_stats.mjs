@@ -1,14 +1,12 @@
 import { createHash } from 'node:crypto';
-import { HOUR_MS, MAX_RECENT_REQUESTS, leaderboardDay, requestTokens, usageCount, validStatsLabel } from './leaderboard_stats.mjs';
+import { HOUR_MS, MAX_RECENT_REQUESTS, USAGE_COUNTER, countUsageRecord, emptyUsageCounters, leaderboardDay,
+  requestTokens, usageCount, usageCounterTokens, validStatsLabel } from './leaderboard_stats.mjs';
+import { harnessFamily } from './harnesses.mjs';
 
 export const HISTORY_DAYS = 365;
 export const WINDOWS = [['today', 1], ['week', 7], ['month', 30], ['year', HISTORY_DAYS]];
 export const ROW_LIMIT = 30;
 const SPEED_ROW_LIMIT = 10;
-// Per day, provider and model: requests, fresh input, output, cache read, cache write, then speed samples:
-// requests that had a per-request TPS, the sum of those TPS values, and how many were session-log estimates.
-export const COUNTERS = 8;
-export const SPEED_AT = 5;
 // Units stored with an older schema keep their totals for display but are read again to fill the speed counters.
 export const SPEED_MIN_SAMPLES = 5;
 
@@ -98,8 +96,8 @@ export function mergePersonalPackets(packets, timeZone, now = Date.now()) {
   for (const { day, counters } of days) {
     if (day < firstDay || day > today) continue;
     const total = dayTotals.get(day) ?? { day, tokens: 0, requests: 0 };
-    total.requests += counters[0];
-    total.tokens += counters[1] + counters[2] + counters[3] + counters[4];
+    total.requests += counters[USAGE_COUNTER.requests];
+    total.tokens += usageCounterTokens(counters);
     dayTotals.set(day, total);
   }
   return { updatedAt, timeZone, progress: { done: sources.size, total: sources.size }, windows: natural,
@@ -148,7 +146,7 @@ export function accumulateRecords(days, sourceProvider, records, { minDay = '', 
         const id = createHash('sha256').update(record.id).digest('hex').slice(0, 24);
         const model = typeof record.model === 'string' ? record.model.slice(0, 128) : null;
         leaderboardDays.recent.push([id, record.completedAt, tokens, usageCount(record.tokensPerSecond) || null,
-          validStatsLabel(model) ? model : null, provider === 'opencode2' ? 'opencode' : provider]);
+          validStatsLabel(model) ? model : null, harnessFamily(provider)]);
         if (leaderboardDays.recent.length >= 2 * MAX_RECENT_REQUESTS) trimRecentRequests(leaderboardDays.recent);
       }
     }
@@ -170,18 +168,8 @@ export function accumulateRecords(days, sourceProvider, records, { minDay = '', 
 function countRequest(byProvider, provider, record) {
   const model = typeof record.model === 'string' && record.model ? record.model.slice(0, 128) : '';
   const byModel = byProvider[provider] ??= Object.create(null);
-  const cell = byModel[model] ??= new Array(COUNTERS).fill(0);
-  cell[0] += 1;
-  cell[1] += usageCount(record.freshInputTokens);
-  cell[2] += usageCount(record.outputTokens);
-  cell[3] += usageCount(record.cacheReadTokens);
-  cell[4] += usageCount(record.cacheCreationTokens);
-  const speed = usageCount(record.tokensPerSecond);
-  if (speed > 0) {
-    cell[SPEED_AT] += 1;
-    cell[SPEED_AT + 1] += speed;
-    if (record.isEstimatedSpeed) cell[SPEED_AT + 2] += 1;
-  }
+  const cell = byModel[model] ??= emptyUsageCounters();
+  countUsageRecord(cell, record);
 }
 
 export function trimRecentRequests(requests) {
@@ -278,12 +266,12 @@ export function summarizeGroups(groups) {
 
 /** Speed samples for one model, merged across agents; a cell without speed counters (older schema) adds nothing. */
 function addSpeed(speeds, provider, model, cell) {
-  const samples = cell[SPEED_AT] ?? 0;
+  const samples = cell[USAGE_COUNTER.speedSamples] ?? 0;
   if (!samples) return;
   const entry = speeds.get(model) ?? { model, samples: 0, sum: 0, estimated: 0, providers: new Set() };
   entry.samples += samples;
-  entry.sum += cell[SPEED_AT + 1] ?? 0;
-  entry.estimated += cell[SPEED_AT + 2] ?? 0;
+  entry.sum += cell[USAGE_COUNTER.speedSum] ?? 0;
+  entry.estimated += cell[USAGE_COUNTER.estimatedSpeedSamples] ?? 0;
   entry.providers.add(provider);
   speeds.set(model, entry);
 }
@@ -326,9 +314,9 @@ export function dailySeries(dayMaps, nowMs) {
 }
 
 function addCounters(target, cell) {
-  target.requests += cell[0];
-  target.freshInput += cell[1];
-  target.output += cell[2];
-  target.cacheRead += cell[3];
-  target.cacheWrite += cell[4];
+  target.requests += cell[USAGE_COUNTER.requests];
+  target.freshInput += cell[USAGE_COUNTER.freshInput];
+  target.output += cell[USAGE_COUNTER.output];
+  target.cacheRead += cell[USAGE_COUNTER.cacheRead];
+  target.cacheWrite += cell[USAGE_COUNTER.cacheWrite];
 }
