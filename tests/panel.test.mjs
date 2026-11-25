@@ -655,6 +655,10 @@ test('top-right header places language picker beside settings gear and modal off
   assert.equal(css.get('.record-card').width, '95%');
   assert.match(css.get('.record-card').background, /--record-card-bg/);
   assert.match(css.get('.record-card').background, /--record-card-opacity/);
+  assert.match(css.get('.war').background, /--record-card-bg/);
+  assert.match(css.get('.heat').background, /--record-card-bg/);
+  assert.match(css.get('.ladder-card').background, /--record-card-bg/);
+  assert.match(css.get('.empty').background, /--record-card-bg/);
 
   assert.equal(css.get('.metrics')['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)');
   const cardCode = /function formatTps\(record\) \{[\s\S]*?(?=\n      \/\/ 用量战况)/.exec(html)?.[0] ?? '';
