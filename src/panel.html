@@ -634,25 +634,41 @@
     }
     .card-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
     .identity { min-width: 0; }
-    .agent { margin: 0 0 1px 25px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .02em; line-height: 1.4; }
+    .agent { margin: 0 0 1px 23px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .02em; line-height: 1.4; }
     .model-line { display: flex; align-items: center; gap: 5px; min-width: 0; }
-    .model-icon { flex-shrink: 0; width: 20px; text-align: center; font-size: 16px; }
-    .model { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--purple); font-size: 13px; line-height: 1.6; font-weight: 700; }
-    .badge { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; background: var(--tag-bg); color: var(--muted); font-size: 10px; font-weight: 600; line-height: 1.4; }
-    .badge-proxy { background: var(--proxy-bg); color: var(--green); }
-    .meta-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 5px; margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .model-icon {
+      display: inline-grid; place-items: center; flex-shrink: 0;
+      width: 18px; height: 18px; color: var(--icon-color, var(--muted));
+    }
+    .model-icon svg { width: 15px; height: 15px; }
+    .model { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--purple); font-size: 13px; line-height: 1.5; font-weight: 700; }
+    .badge {
+      display: inline-grid; place-items: center; flex-shrink: 0;
+      width: 20px; height: 18px; padding: 0; border-radius: 999px;
+      background: var(--tag-bg); color: var(--icon-color, var(--muted));
+    }
+    .badge svg { width: 11px; height: 11px; }
+    .badge-proxy { background: var(--proxy-bg); color: var(--icon-color, var(--green)); }
+    .meta-line { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 7px; margin-top: 2px; color: var(--muted); font-size: 11px; }
     .timestamp { overflow-wrap: anywhere; }
-    .ttft { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ttft {
+      display: inline-flex; align-items: center; gap: 2px;
+      font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .ttft svg { width: 11px; height: 11px; flex: none; color: var(--icon-color, currentColor); }
     .speed { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-width: 0; padding: 6px 10px; border-radius: 15px; background: color-mix(in srgb, var(--speed-bg) var(--record-card-opacity, 100%), transparent); color: var(--speed); white-space: nowrap; }
     .rocket { width: 16px; height: 16px; flex-shrink: 0; align-self: center; color: var(--icon-color, currentColor); }
     .speed-value { min-width: 0; font-size: 20px; font-weight: 750; line-height: 1.15; letter-spacing: -.6px; }
     .speed-unit { font-size: 11px; font-weight: 550; line-height: 1; }
     .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid var(--line); }
-    .metric { display: flex; flex-direction: column; min-width: 0; }
-    .metric-label { margin: 0 0 3px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
-    .metric-label span[aria-hidden] { margin-inline-end: 3px; font-size: 12px; }
-    .metric-value-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 1px 3px; min-width: 0; margin: auto 0 0; }
-    .metric-value { min-width: 0; max-width: 100%; font-size: 16px; line-height: 1.25; font-weight: 650; letter-spacing: -.3px; overflow-wrap: anywhere; }
+    .metric { display: flex; align-items: center; gap: 5px; min-width: 0; }
+    .metric-icon {
+      display: inline-grid; place-items: center; flex: none;
+      width: 15px; height: 15px; color: var(--icon-color, currentColor);
+    }
+    .metric-icon svg { width: 14px; height: 14px; }
+    .metric-value-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 1px 3px; min-width: 0; margin: 0; }
+    .metric-value { min-width: 0; max-width: 100%; font-size: 15px; line-height: 1.25; font-weight: 650; letter-spacing: -.3px; overflow-wrap: anywhere; }
     .metric-unit { color: var(--muted); font-size: 10px; }
     .output { color: var(--blue); }
     .duration { color: var(--green); }
@@ -1164,14 +1180,33 @@
         <div class="identity">
           <p class="agent" data-testid="agent" hidden></p>
           <div class="model-line">
-            <span class="model-icon" aria-hidden="true">🤖</span>
+            <span class="model-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="6" width="12" height="12" rx="3"/>
+                <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>
+              </svg>
+            </span>
             <h2 class="model" data-testid="model"></h2>
-            <span class="badge" data-testid="subagent-badge" hidden><span data-i18n="subagent"></span></span>
-            <span class="badge badge-proxy" data-testid="proxy-badge" hidden><span data-i18n="proxy"></span></span>
+            <span class="badge" data-testid="subagent-badge" data-i18n-title="subagent" data-i18n-aria-label="subagent" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="6" cy="6" r="2.5"/>
+                <circle cx="18" cy="8" r="2.5"/>
+                <circle cx="6" cy="18" r="2.5"/>
+                <path d="M6 8.5v7M18 10.5c0 4-6 3.5-12 5"/>
+              </svg>
+            </span>
+            <span class="badge badge-proxy" data-testid="proxy-badge" data-i18n-title="proxy" data-i18n-aria-label="proxy" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>
+              </svg>
+            </span>
           </div>
           <div class="meta-line">
             <time class="timestamp" data-testid="timestamp"></time>
-            <span class="ttft" data-testid="ttft" data-localized-text hidden></span>
+            <span class="ttft" data-testid="ttft" data-localized-text hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>
+              <span data-testid="ttft-value"></span>
+            </span>
           </div>
         </div>
         <div class="speed">
@@ -1182,15 +1217,30 @@
       </div>
       <dl class="metrics">
         <div class="metric output">
-          <dt class="metric-label"><span aria-hidden="true">📦</span><span data-i18n="output"></span></dt>
+          <dt class="metric-icon" data-i18n-title="output" data-i18n-aria-label="output">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+              <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
+            </svg>
+          </dt>
           <dd class="metric-value-line"><span class="metric-value" data-testid="output-value"></span><span class="metric-unit">Tokens</span></dd>
         </div>
         <div class="metric duration">
-          <dt class="metric-label"><span aria-hidden="true">⏳</span><span data-i18n="duration"></span></dt>
+          <dt class="metric-icon" data-i18n-title="duration" data-i18n-aria-label="duration">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 2h12M6 22h12"/>
+              <path d="M8 2v4l4 4 4-4V2M8 22v-4l4-4 4 4v4"/>
+            </svg>
+          </dt>
           <dd class="metric-value-line"><span class="metric-value" data-testid="duration-value"></span><span class="metric-unit"><span data-i18n="seconds-unit"></span></span></dd>
         </div>
         <div class="metric cache">
-          <dt class="metric-label"><span aria-hidden="true">🍪</span><span data-i18n="cache-hit"></span></dt>
+          <dt class="metric-icon" data-i18n-title="cache-hit" data-i18n-aria-label="cache-hit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
+              <path d="M22 12A10 10 0 0 0 12 2v10Z"/>
+            </svg>
+          </dt>
           <dd class="metric-value-line"><span class="metric-value" data-testid="cache-value"></span></dd>
         </div>
       </dl>
@@ -1542,15 +1592,15 @@
         if (when) timestamp.dateTime = when.toISOString();
 
         const session = isSessionLog(record);
-        const ttftEl = find('ttft');
+        const ttftEl = find('ttft'), ttftVal = find('ttft-value');
         if (numeric(record.firstTokenMs) && record.firstTokenMs > 0) {
           const ttftSec = number(record.firstTokenMs / 1000, 1);
           ttftEl.hidden = false;
-          ttftEl.textContent = t('first-token-short', session ? '≈' : '', ttftSec);
+          ttftVal.textContent = `${session ? '≈' : ''}${ttftSec}s`;
           ttftEl.title = t('first-token-detail', session ? t('estimated') : t('exact'), number(record.firstTokenMs), ttftSec);
         } else if (hermes) {
           ttftEl.hidden = false;
-          ttftEl.textContent = t('first-token-missing');
+          ttftVal.textContent = '—';
           ttftEl.title = t('hermes-missing-first-token');
         }
 

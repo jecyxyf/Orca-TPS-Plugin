@@ -655,6 +655,14 @@ test('top-right header places language picker beside settings gear and modal off
   assert.equal(css.get('.record-card').width, '95%');
   assert.match(css.get('.record-card').background, /--record-card-bg/);
   assert.match(css.get('.record-card').background, /--record-card-opacity/);
+
+  const template = /<template id="record-template">([\s\S]*?)<\/template>/.exec(html)?.[1] ?? '';
+  assert.match(template, /class="model-icon"[\s\S]*?<svg\b/);
+  assert.match(template, /data-testid="subagent-badge"[\s\S]*?<svg\b/);
+  assert.match(template, /data-testid="proxy-badge"[\s\S]*?<svg\b/);
+  assert.match(template, /data-testid="ttft"[\s\S]*?<svg\b[\s\S]*?data-testid="ttft-value"/);
+  assert.equal((template.match(/class="metric-icon"/g) ?? []).length, 3);
+  assert.doesNotMatch(template, /🤖|📦|⏳|🍪|metric-label/);
   assert.equal(css.get('.settings-color-row')['justify-content'], 'flex-start');
   assert.equal(css.get('.settings-sheet')['--surface'], '#262628');
   assert.equal(css.get('.settings-sheet')['--ink'], '#ffffff');
