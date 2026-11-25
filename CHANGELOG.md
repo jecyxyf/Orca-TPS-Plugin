@@ -19,11 +19,13 @@ All notable changes to this project will be documented in this file.
 - Tokens Managers collect usage on each device and sync it over SSH. Personal Stats and leaderboard uploads use the same device totals and count each device once.
 - The leaderboard runs on the new server. Rankings, usage totals, and speed samples stay in memory, while GitHub account and sign-in state is stored separately.
 - Simplified the leaderboard controls and sign-in notices. The sidebar now shows the plugin version, and both READMEs and Orca gallery images have been refreshed.
+- Simplified usage and leaderboard processing and removed an unused Windows executable from the plugin package.
 
 ### Fixed
 
 - Keep daily uploads moving when a conversation log is still being written, and retry leaderboard avatars after a failed load.
 - Keep the sidebar and status bar in sync with active conversation changes in Orca 1.4.255 and later.
+- Restore 7-day and 30-day leaderboard charts from the local cache and clear expired sessions when an HTTP 401 response has no JSON body.
 
 ## [1.6.4] - 2026-11-19
 
