@@ -8,7 +8,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
 import { defaultRoots } from '../src/harness_parser.mjs';
 import { discoverUsageUnits, readTargetSession } from '../src/harness_parser.mjs';
-import { leaderboardDay, leaderboardDayStart, localDayKey } from '../src/usage-summary.mjs';
+import { leaderboardDay, leaderboardDayStart } from '../src/leaderboard_stats.mjs';
+import { localDayKey } from '../src/personal_stats.mjs';
 
 const options = root => ({ roots: { hermes: [root] }, includeDefaults: false, ccSwitchDb: null });
 const localTime = clock => {

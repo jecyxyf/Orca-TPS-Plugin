@@ -1,12 +1,2 @@
-import { randomUUID } from 'node:crypto';
-import { validInstallationId } from './leaderboard_stats.mjs';
-
+// Read only to carry the device identity forward from older installations.
 export const INSTALLATION_KEY = 'leaderboard:installation-id';
-
-export async function loadInstallationId(storage) {
-  const saved = await storage.get(INSTALLATION_KEY);
-  if (validInstallationId(saved)) return saved;
-  const created = randomUUID();
-  await storage.set(INSTALLATION_KEY, created);
-  return created;
-}

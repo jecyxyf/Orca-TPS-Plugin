@@ -60,8 +60,7 @@ export default async function activate(orca) {
   });
   await controller.start({ background: true });
   try {
-    stopLeaderboard = startLeaderboard(orca, { endpoint, localDb: db, manager: client,
-      readUsage: () => client.summary()?.windows?.today ?? null });
+    stopLeaderboard = startLeaderboard(orca, { endpoint, localDb: db, manager: client });
   } catch { orca.log(language.t('notice.leaderboard-url-invalid')); }
 }
 
