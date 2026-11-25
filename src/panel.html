@@ -170,9 +170,8 @@
     .ladder-secondary { color: var(--muted); background: var(--tag-bg); }
     .ladder-note { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
     .ladder-notice p { margin: 0; }
-    .ladder-notice p + p, .ladder-notice ul + p { margin-top: .6em; }
+    .ladder-notice p + p { margin-top: .6em; }
     .ladder-notice-title { color: var(--ink); }
-    .ladder-login-notice-list { margin: .35em 0 0; padding-inline-start: 1.5em; }
     .ladder-toolbar {
       --ladder-toolbar-title-width: clamp(62px, 26vw, 106px);
       --ladder-toolbar-action-width: 40px;
@@ -589,15 +588,6 @@
           <div class="ladder-note ladder-notice" id="ladder-login-notice" dir="auto">
             <p class="ladder-notice-title"><span aria-hidden="true">ℹ️</span> <strong data-i18n="leaderboard-notice-title"></strong></p>
             <p data-i18n="github-login-notice-consent"></p>
-            <p data-i18n="github-login-notice-sync"></p>
-            <ul class="ladder-login-notice-list">
-              <li data-i18n="github-login-notice-username"></li>
-              <li data-i18n="github-login-notice-tokens"></li>
-              <li data-i18n="github-login-notice-speed"></li>
-              <li data-i18n="github-login-notice-model"></li>
-              <li data-i18n="github-login-notice-harness"></li>
-            </ul>
-            <p data-i18n="github-login-notice-logout"></p>
           </div>
         </div>
         <div class="ladder-preview" id="ladder-login-wait" hidden>
@@ -675,7 +665,6 @@
         <div class="ladder-note ladder-notice" id="ladder-ranking-notice" dir="auto" hidden>
           <p class="ladder-notice-title"><span aria-hidden="true">ℹ️</span> <strong data-i18n="leaderboard-notice-title"></strong></p>
           <p data-i18n="ranking-notice-consent"></p>
-          <p data-i18n="ranking-notice-disable"></p>
         </div>
         <div id="ladder-ranking-content" hidden>
           <div class="war-tabs ladder-tabs" role="group" data-i18n-aria-label="ranking-period">

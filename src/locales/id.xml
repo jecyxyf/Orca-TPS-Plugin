@@ -7,14 +7,7 @@
   <message id="signed-out-label">Belum masuk</message>
   <message id="github-login">Masuk dengan GitHub</message>
   <message id="leaderboard-notice-title">Pemberitahuan</message>
-  <message id="github-login-notice-consent">Jika Anda setuju untuk menyinkronkan statistik dan mengikuti pemeringkatan, masuk dengan GitHub.</message>
-  <message id="github-login-notice-sync">Selama Anda masuk, plugin mencoba menyinkronkan data berikut ke server</message>
-  <message id="github-login-notice-username">Nama pengguna GitHub</message>
-  <message id="github-login-notice-tokens">Penggunaan token</message>
-  <message id="github-login-notice-speed">Kecepatan generasi (TPS)</message>
-  <message id="github-login-notice-model">Model yang paling sering digunakan</message>
-  <message id="github-login-notice-harness">Harness yang paling sering digunakan</message>
-  <message id="github-login-notice-logout">Anda dapat keluar kapan saja. Setelah keluar, plugin akan berhenti menyinkronkan data ini ke server.</message>
+  <message id="github-login-notice-consent">Setelah Anda masuk, plugin mengirimkan statistik token Anda untuk papan peringkat.</message>
   <message id="github-authorize">Selesaikan otorisasi GitHub di peramban. Papan peringkat akan diperbarui setelah Anda masuk.</message>
   <message id="cancel">Batal</message>
   <message id="sign-out">Keluar</message>
@@ -147,8 +140,7 @@
   <message id="checking-login">Memeriksa status masuk…</message>
   <message id="period-rankings">Peringkat</message>
   <message id="ranking-toggle">Data peringkat</message>
-  <message id="ranking-notice-consent">Jika Anda setuju plugin mencoba mengambil peringkat TPS global dari server setiap 10 detik, aktifkan peringkat.</message>
-  <message id="ranking-notice-disable">Anda dapat menonaktifkannya kapan saja. Plugin akan berhenti meminta data papan peringkat.</message>
+  <message id="ranking-notice-consent">Saat peringkat diaktifkan, plugin mengunduh data papan peringkat terbaru secara berkala.</message>
   <message id="ranking-preference-failed">Setelan peringkat tidak dapat disimpan.</message>
   <message id="empty-rankings">Tidak ada skor dalam periode ini.</message>
   <message id="notice.no-conversation">Tidak ada percakapan yang terbuka.</message>

@@ -7,14 +7,7 @@
   <message id="signed-out-label">未ログイン</message>
   <message id="github-login">GitHub でログイン</message>
   <message id="leaderboard-notice-title">お知らせ</message>
-  <message id="github-login-notice-consent">統計データの同期に同意し、ランキングに参加する場合は、GitHub でログインしてください。</message>
-  <message id="github-login-notice-sync">ログイン中、プラグインは次のデータをサーバーと同期しようとします</message>
-  <message id="github-login-notice-username">GitHub ユーザー名</message>
-  <message id="github-login-notice-tokens">トークン使用量</message>
-  <message id="github-login-notice-speed">生成速度（TPS）</message>
-  <message id="github-login-notice-model">最もよく使うモデル</message>
-  <message id="github-login-notice-harness">最もよく使う Harness</message>
-  <message id="github-login-notice-logout">いつでもログアウトできます。ログアウトすると、プラグインはこれらのデータのサーバーへの同期を停止します。</message>
+  <message id="github-login-notice-consent">ログインすると、プラグインはランキングに使うトークン関連の統計情報を送信します。</message>
   <message id="github-authorize">ブラウザーで GitHub の認証を完了してください。ログイン後にランキングが更新されます。</message>
   <message id="cancel">キャンセル</message>
   <message id="sign-out">ログアウト</message>
@@ -147,8 +140,7 @@
   <message id="checking-login">ログイン状態を確認中…</message>
   <message id="period-rankings">ランキング</message>
   <message id="ranking-toggle">ランキングデータ</message>
-  <message id="ranking-notice-consent">プラグインが 10 秒ごとにサーバーから世界中の参加者の TPS ランキングの取得を試みることに同意する場合は、ランキングをオンにしてください。</message>
-  <message id="ranking-notice-disable">いつでもオフにできます。オフにすると、プラグインはランキングデータの取得を停止します。</message>
+  <message id="ranking-notice-consent">ランキングをオンにすると、プラグインが最新のランキングデータを定期的に取得します。</message>
   <message id="ranking-preference-failed">ランキングの設定を保存できませんでした。</message>
   <message id="empty-rankings">この期間に成績はありません。</message>
   <message id="notice.no-conversation">会話が開かれていません。</message>

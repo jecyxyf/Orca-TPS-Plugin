@@ -7,14 +7,7 @@
   <message id="signed-out-label">لم تسجّل الدخول</message>
   <message id="github-login">تسجيل الدخول عبر GitHub</message>
   <message id="leaderboard-notice-title">تنبيه</message>
-  <message id="github-login-notice-consent">إذا وافقت على مزامنة الإحصاءات والمشاركة في ترتيب لوحة المتصدرين، فسجّل الدخول عبر GitHub.</message>
-  <message id="github-login-notice-sync">ما دمت مسجّل الدخول، يحاول المكوّن الإضافي مزامنة البيانات التالية مع الخادم</message>
-  <message id="github-login-notice-username">اسم مستخدم GitHub</message>
-  <message id="github-login-notice-tokens">استخدام الرموز</message>
-  <message id="github-login-notice-speed">سرعة التوليد (TPS)</message>
-  <message id="github-login-notice-model">النموذج الأكثر استخدامًا</message>
-  <message id="github-login-notice-harness">Harness الأكثر استخدامًا</message>
-  <message id="github-login-notice-logout">يمكنك تسجيل الخروج في أي وقت. بعد تسجيل الخروج، يتوقف المكوّن الإضافي عن مزامنة هذه البيانات مع الخادم.</message>
+  <message id="github-login-notice-consent">بعد تسجيل الدخول، يرسل المكوّن الإضافي إحصاءات استخدام الرموز الخاصة بك للمشاركة في الترتيب.</message>
   <message id="github-authorize">أكمل تفويض GitHub في المتصفح. ستُحدّث لوحة المتصدرين بعد تسجيل الدخول.</message>
   <message id="cancel">إلغاء</message>
   <message id="sign-out">تسجيل الخروج</message>
@@ -147,8 +140,7 @@
   <message id="checking-login">جارٍ التحقق من تسجيل الدخول…</message>
   <message id="period-rankings">ترتيب المتصدرين</message>
   <message id="ranking-toggle">بيانات ترتيب المتصدرين</message>
-  <message id="ranking-notice-consent">إذا وافقت على أن يحاول المكوّن الإضافي جلب ترتيب TPS للمشاركين حول العالم من الخادم كل 10 ثوانٍ، فعّل ترتيب المتصدرين.</message>
-  <message id="ranking-notice-disable">يمكنك إيقافه في أي وقت. عند إيقافه، يتوقف المكوّن الإضافي عن طلب بيانات ترتيب المتصدرين.</message>
+  <message id="ranking-notice-consent">عند تفعيل الترتيب، ينزّل المكوّن الإضافي أحدث بيانات لوحة المتصدرين دوريًا.</message>
   <message id="ranking-preference-failed">تعذّر حفظ إعداد ترتيب المتصدرين.</message>
   <message id="empty-rankings">لا توجد نتائج في هذه الفترة.</message>
   <message id="notice.no-conversation">لا توجد محادثة مفتوحة.</message>

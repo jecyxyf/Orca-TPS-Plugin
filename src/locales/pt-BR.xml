@@ -7,14 +7,7 @@
   <message id="signed-out-label">Sessão encerrada</message>
   <message id="github-login">Entrar com GitHub</message>
   <message id="leaderboard-notice-title">Aviso</message>
-  <message id="github-login-notice-consent">Se você concorda em sincronizar estatísticas e participar do ranking, entre com o GitHub.</message>
-  <message id="github-login-notice-sync">Enquanto você estiver conectado, o plugin tenta sincronizar os seguintes dados com o servidor</message>
-  <message id="github-login-notice-username">Nome de usuário do GitHub</message>
-  <message id="github-login-notice-tokens">Uso de tokens</message>
-  <message id="github-login-notice-speed">Velocidade de geração (TPS)</message>
-  <message id="github-login-notice-model">Modelo mais usado</message>
-  <message id="github-login-notice-harness">Harness mais usado</message>
-  <message id="github-login-notice-logout">Você pode sair da sua conta a qualquer momento. Ao sair, o plugin deixará de sincronizar esses dados com o servidor.</message>
+  <message id="github-login-notice-consent">Após entrar, o plugin envia suas estatísticas de tokens para o ranking.</message>
   <message id="github-authorize">Conclua a autorização do GitHub no navegador. A classificação será atualizada após a entrada.</message>
   <message id="cancel">Cancelar</message>
   <message id="sign-out">Sair</message>
@@ -147,8 +140,7 @@
   <message id="checking-login">Verificando a sessão…</message>
   <message id="period-rankings">Classificação</message>
   <message id="ranking-toggle">Dados da classificação</message>
-  <message id="ranking-notice-consent">Se você concorda que o plugin tente buscar no servidor o ranking global de TPS a cada 10 segundos, ative a classificação.</message>
-  <message id="ranking-notice-disable">Você pode desativá-la a qualquer momento. O plugin deixará de solicitar os dados da classificação.</message>
+  <message id="ranking-notice-consent">Ao ativar o ranking, o plugin baixa regularmente os dados mais recentes.</message>
   <message id="ranking-preference-failed">Não foi possível salvar a configuração da classificação.</message>
   <message id="empty-rankings">Não há pontuações neste período.</message>
   <message id="notice.no-conversation">Nenhuma conversa está aberta.</message>

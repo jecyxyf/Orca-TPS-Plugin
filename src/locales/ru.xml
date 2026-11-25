@@ -7,14 +7,7 @@
   <message id="signed-out-label">Вы не вошли</message>
   <message id="github-login">Войти через GitHub</message>
   <message id="leaderboard-notice-title">Примечание</message>
-  <message id="github-login-notice-consent">Если вы согласны синхронизировать статистику и участвовать в рейтинге, войдите через GitHub.</message>
-  <message id="github-login-notice-sync">Пока вы вошли в систему, плагин пытается синхронизировать с сервером следующие данные</message>
-  <message id="github-login-notice-username">Имя пользователя GitHub</message>
-  <message id="github-login-notice-tokens">Расход токенов</message>
-  <message id="github-login-notice-speed">Скорость генерации (TPS)</message>
-  <message id="github-login-notice-model">Наиболее часто используемая модель</message>
-  <message id="github-login-notice-harness">Наиболее часто используемый Harness</message>
-  <message id="github-login-notice-logout">Вы можете выйти в любое время. После выхода плагин прекратит синхронизировать эти данные с сервером.</message>
+  <message id="github-login-notice-consent">После входа плагин отправляет статистику использования токенов для рейтинга.</message>
   <message id="github-authorize">Завершите авторизацию GitHub в браузере. После входа рейтинг обновится.</message>
   <message id="cancel">Отмена</message>
   <message id="sign-out">Выйти</message>
@@ -147,8 +140,7 @@
   <message id="checking-login">Проверяем вход…</message>
   <message id="period-rankings">Рейтинг</message>
   <message id="ranking-toggle">Данные рейтинга</message>
-  <message id="ranking-notice-consent">Если вы согласны, чтобы плагин каждые 10 секунд пытался получить с сервера мировой рейтинг TPS, включите рейтинг.</message>
-  <message id="ranking-notice-disable">Вы можете отключить рейтинг в любое время. После этого плагин прекратит запрашивать его данные.</message>
+  <message id="ranking-notice-consent">После включения рейтинга плагин регулярно загружает свежие данные.</message>
   <message id="ranking-preference-failed">Не удалось сохранить настройку рейтинга.</message>
   <message id="empty-rankings">За этот период результатов нет.</message>
   <message id="notice.no-conversation">Нет открытого диалога.</message>

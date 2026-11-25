@@ -7,14 +7,7 @@
   <message id="signed-out-label">Abgemeldet</message>
   <message id="github-login">Mit GitHub anmelden</message>
   <message id="leaderboard-notice-title">Hinweis</message>
-  <message id="github-login-notice-consent">Wenn Sie der Synchronisierung Ihrer Statistikdaten zustimmen und an der Bestenliste teilnehmen möchten, melden Sie sich mit GitHub an.</message>
-  <message id="github-login-notice-sync">Solange Sie angemeldet sind, versucht das Plugin, die folgenden Daten mit dem Server zu synchronisieren</message>
-  <message id="github-login-notice-username">GitHub-Benutzername</message>
-  <message id="github-login-notice-tokens">Token-Verbrauch</message>
-  <message id="github-login-notice-speed">Ausgabegeschwindigkeit (TPS)</message>
-  <message id="github-login-notice-model">Meistgenutztes Modell</message>
-  <message id="github-login-notice-harness">Meistgenutztes Harness</message>
-  <message id="github-login-notice-logout">Sie können sich jederzeit abmelden. Danach synchronisiert das Plugin diese Daten nicht mehr mit dem Server.</message>
+  <message id="github-login-notice-consent">Nach der Anmeldung übermittelt das Plugin Ihre Token-Statistiken für die Bestenliste.</message>
   <message id="github-authorize">Schließen Sie die GitHub-Autorisierung im Browser ab. Die Bestenliste wird nach der Anmeldung aktualisiert.</message>
   <message id="cancel">Abbrechen</message>
   <message id="sign-out">Abmelden</message>
@@ -147,8 +140,7 @@
   <message id="checking-login">Anmeldung wird geprüft…</message>
   <message id="period-rankings">Rangliste</message>
   <message id="ranking-toggle">Bestenlistendaten</message>
-  <message id="ranking-notice-consent">Wenn Sie zustimmen, dass das Plugin alle 10 Sekunden versucht, die weltweiten TPS-Ranglistendaten vom Server abzurufen, schalten Sie die Rangliste ein.</message>
-  <message id="ranking-notice-disable">Sie können sie jederzeit ausschalten. Das Plugin ruft dann keine Bestenlistendaten mehr ab.</message>
+  <message id="ranking-notice-consent">Wenn Sie die Rangliste aktivieren, lädt das Plugin regelmäßig die neuesten Ranglistendaten.</message>
   <message id="ranking-preference-failed">Die Bestenlisteneinstellung konnte nicht gespeichert werden.</message>
   <message id="empty-rankings">In diesem Zeitraum gibt es keine Ergebnisse.</message>
   <message id="notice.no-conversation">Es ist keine Unterhaltung geöffnet.</message>

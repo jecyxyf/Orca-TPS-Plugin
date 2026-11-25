@@ -7,14 +7,7 @@
   <message id="signed-out-label">साइन इन नहीं है</message>
   <message id="github-login">GitHub से साइन इन करें</message>
   <message id="leaderboard-notice-title">सूचना</message>
-  <message id="github-login-notice-consent">अगर आप आँकड़े सिंक करने और लीडरबोर्ड की रैंकिंग में शामिल होने के लिए सहमत हैं, तो GitHub से साइन इन करें।</message>
-  <message id="github-login-notice-sync">साइन इन रहने पर प्लगइन नीचे दिया गया डेटा सर्वर के साथ सिंक करने की कोशिश करता है</message>
-  <message id="github-login-notice-username">GitHub उपयोगकर्ता नाम</message>
-  <message id="github-login-notice-tokens">टोकन उपयोग</message>
-  <message id="github-login-notice-speed">जनरेशन की गति (TPS)</message>
-  <message id="github-login-notice-model">सबसे ज़्यादा इस्तेमाल किया गया मॉडल</message>
-  <message id="github-login-notice-harness">सबसे ज़्यादा इस्तेमाल किया गया Harness</message>
-  <message id="github-login-notice-logout">आप कभी भी साइन आउट कर सकते हैं। साइन आउट करने के बाद प्लगइन आपका यह डेटा सर्वर के साथ सिंक करना बंद कर देगा।</message>
+  <message id="github-login-notice-consent">साइन इन करने के बाद प्लगइन लीडरबोर्ड के लिए आपके टोकन से जुड़े आँकड़े भेजता है।</message>
   <message id="github-authorize">ब्राउज़र में GitHub अनुमति दें। साइन इन के बाद रैंकिंग अपडेट होगी।</message>
   <message id="cancel">रद्द करें</message>
   <message id="sign-out">साइन आउट करें</message>
@@ -147,8 +140,7 @@
   <message id="checking-login">साइन इन की जाँच हो रही है…</message>
   <message id="period-rankings">लीडरबोर्ड रैंकिंग</message>
   <message id="ranking-toggle">लीडरबोर्ड डेटा</message>
-  <message id="ranking-notice-consent">अगर आप सहमत हैं कि प्लगइन हर 10 सेकंड में दुनिया भर के प्रतिभागियों की TPS रैंकिंग सर्वर से प्राप्त करने की कोशिश करे, तो लीडरबोर्ड रैंकिंग चालू करें।</message>
-  <message id="ranking-notice-disable">आप इसे कभी भी बंद कर सकते हैं। बंद करने पर प्लगइन लीडरबोर्ड का डेटा माँगना बंद कर देगा।</message>
+  <message id="ranking-notice-consent">रैंकिंग चालू करने पर प्लगइन नियमित रूप से लीडरबोर्ड का नवीनतम डेटा डाउनलोड करता है।</message>
   <message id="ranking-preference-failed">लीडरबोर्ड की सेटिंग सेव नहीं हो सकी।</message>
   <message id="empty-rankings">इस अवधि में कोई स्कोर नहीं है।</message>
   <message id="notice.no-conversation">कोई बातचीत खुली नहीं है।</message>

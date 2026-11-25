@@ -7,14 +7,7 @@
   <message id="signed-out-label">Non connesso</message>
   <message id="github-login">Accedi con GitHub</message>
   <message id="leaderboard-notice-title">Avviso</message>
-  <message id="github-login-notice-consent">Se accetti di sincronizzare le statistiche e partecipare alla classifica, accedi con GitHub.</message>
-  <message id="github-login-notice-sync">Finché hai effettuato l’accesso, il plugin tenta di sincronizzare i seguenti dati con il server</message>
-  <message id="github-login-notice-username">Nome utente GitHub</message>
-  <message id="github-login-notice-tokens">Uso di token</message>
-  <message id="github-login-notice-speed">Velocità di generazione (TPS)</message>
-  <message id="github-login-notice-model">Modello più usato</message>
-  <message id="github-login-notice-harness">Harness più usato</message>
-  <message id="github-login-notice-logout">Puoi disconnetterti in qualsiasi momento. Da quel momento il plugin smette di sincronizzare questi dati con il server.</message>
+  <message id="github-login-notice-consent">Dopo l’accesso, il plugin invia le tue statistiche sui token per la classifica.</message>
   <message id="github-authorize">Completa l’autorizzazione GitHub nel browser. La classifica si aggiornerà dopo l’accesso.</message>
   <message id="cancel">Annulla</message>
   <message id="sign-out">Esci</message>
@@ -147,8 +140,7 @@
   <message id="checking-login">Verifica dell’accesso…</message>
   <message id="period-rankings">Classifica</message>
   <message id="ranking-toggle">Dati della classifica</message>
-  <message id="ranking-notice-consent">Se acconsenti che il plugin tenti di recuperare dal server la classifica TPS globale ogni 10 secondi, attiva la classifica.</message>
-  <message id="ranking-notice-disable">Puoi disattivarla in qualsiasi momento. Il plugin smetterà di richiedere i dati della classifica.</message>
+  <message id="ranking-notice-consent">Una volta attivata la classifica, il plugin scarica regolarmente i dati aggiornati.</message>
   <message id="ranking-preference-failed">Impossibile salvare l’impostazione della classifica.</message>
   <message id="empty-rankings">Nessun risultato in questo periodo.</message>
   <message id="notice.no-conversation">Nessuna conversazione aperta.</message>

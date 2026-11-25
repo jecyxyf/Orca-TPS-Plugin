@@ -7,14 +7,7 @@
   <message id="signed-out-label">سائن اِن نہیں ہیں</message>
   <message id="github-login">GitHub سے سائن اِن کریں</message>
   <message id="leaderboard-notice-title">اطلاع</message>
-  <message id="github-login-notice-consent">اگر آپ اعداد و شمار ہم آہنگ کرنے اور درجہ بندی میں حصہ لینے پر رضامند ہیں تو GitHub سے سائن اِن کریں۔</message>
-  <message id="github-login-notice-sync">سائن اِن رہنے کے دوران پلگ اِن درج ذیل ڈیٹا سرور کے ساتھ ہم آہنگ کرنے کی کوشش کرتا ہے</message>
-  <message id="github-login-notice-username">GitHub صارف نام</message>
-  <message id="github-login-notice-tokens">ٹوکن کا استعمال</message>
-  <message id="github-login-notice-speed">جنریشن کی رفتار (TPS)</message>
-  <message id="github-login-notice-model">سب سے زیادہ استعمال ہونے والا ماڈل</message>
-  <message id="github-login-notice-harness">سب سے زیادہ استعمال ہونے والا Harness</message>
-  <message id="github-login-notice-logout">آپ کسی بھی وقت سائن آؤٹ کر سکتے ہیں۔ سائن آؤٹ کرنے کے بعد پلگ اِن آپ کا یہ ڈیٹا سرور کے ساتھ ہم آہنگ کرنا بند کر دے گا۔</message>
+  <message id="github-login-notice-consent">سائن اِن کرنے کے بعد پلگ اِن لیڈر بورڈ کی درجہ بندی کے لیے آپ کے ٹوکن کے اعداد و شمار بھیجتا ہے۔</message>
   <message id="github-authorize">براؤزر میں GitHub کی اجازت مکمل کریں۔ سائن اِن کے بعد درجہ بندی تازہ ہو جائے گی۔</message>
   <message id="cancel">منسوخ کریں</message>
   <message id="sign-out">سائن آؤٹ کریں</message>
@@ -147,8 +140,7 @@
   <message id="checking-login">سائن اِن کی جانچ جاری ہے…</message>
   <message id="period-rankings">لیڈر بورڈ کی درجہ بندی</message>
   <message id="ranking-toggle">لیڈر بورڈ کا ڈیٹا</message>
-  <message id="ranking-notice-consent">اگر آپ رضامند ہیں کہ پلگ اِن ہر ۱۰ سیکنڈ میں سرور سے دنیا بھر کے شرکا کی TPS درجہ بندی حاصل کرنے کی کوشش کرے تو لیڈر بورڈ کی درجہ بندی آن کریں۔</message>
-  <message id="ranking-notice-disable">آپ اسے کسی بھی وقت بند کر سکتے ہیں۔ اسے بند کرنے پر پلگ اِن لیڈر بورڈ کا ڈیٹا مانگنا بند کر دے گا۔</message>
+  <message id="ranking-notice-consent">درجہ بندی آن کرنے پر پلگ اِن باقاعدگی سے لیڈر بورڈ کی تازہ معلومات ڈاؤن لوڈ کرتا ہے۔</message>
   <message id="ranking-preference-failed">لیڈر بورڈ کی ترتیب محفوظ نہیں ہو سکی۔</message>
   <message id="empty-rankings">اس مدت میں کوئی اسکور نہیں۔</message>
   <message id="notice.no-conversation">کوئی گفتگو کھلی نہیں۔</message>
