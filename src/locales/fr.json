@@ -269,6 +269,7 @@
   "settings-color-unselected": "Non sélectionné",
   "settings-color-selected": "Sélectionné",
   "settings-color-reset": "Réinitialiser la couleur",
+  "settings-icon-color": "Couleur des icônes",
   "settings-bg-image": "Image d’arrière-plan",
   "settings-bg-image-hint": "Prend en charge SVG, JPG, PNG, WebP et GIF (2 Mo max).",
   "settings-bg-upload": "Importer une image",

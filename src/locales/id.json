@@ -269,6 +269,7 @@
   "settings-color-unselected": "Tidak dipilih",
   "settings-color-selected": "Dipilih",
   "settings-color-reset": "Atur ulang warna",
+  "settings-icon-color": "Warna ikon",
   "settings-bg-image": "Gambar latar",
   "settings-bg-image-hint": "Mendukung SVG, JPG, PNG, WebP, dan GIF (maks 2 MB).",
   "settings-bg-upload": "Unggah gambar",

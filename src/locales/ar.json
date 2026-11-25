@@ -269,6 +269,7 @@
   "settings-color-unselected": "غير محدد",
   "settings-color-selected": "محدد",
   "settings-color-reset": "إعادة ضبط اللون",
+  "settings-icon-color": "لون الأيقونات",
   "settings-bg-image": "صورة الخلفية",
   "settings-bg-image-hint": "يدعم SVG وJPG وPNG وWebP وGIF (بحد أقصى 2 ميجابايت).",
   "settings-bg-upload": "رفع صورة",

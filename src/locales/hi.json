@@ -269,6 +269,7 @@
   "settings-color-unselected": "अचयनित",
   "settings-color-selected": "चयनित",
   "settings-color-reset": "रंग रीसेट करें",
+  "settings-icon-color": "आइकन रंग",
   "settings-bg-image": "पृष्ठभूमि छवि",
   "settings-bg-image-hint": "SVG, JPG, PNG, WebP और GIF समर्थित (अधिकतम 2 MB)।",
   "settings-bg-upload": "छवि अपलोड करें",

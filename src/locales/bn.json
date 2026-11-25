@@ -269,6 +269,7 @@
   "settings-color-unselected": "অনির্বাচিত",
   "settings-color-selected": "নির্বাচিত",
   "settings-color-reset": "রঙ রিসেট করুন",
+  "settings-icon-color": "আইকনের রঙ",
   "settings-bg-image": "পটভূমির ছবি",
   "settings-bg-image-hint": "SVG, JPG, PNG, WebP এবং GIF সমর্থিত (সর্বোচ্চ ২ MB)।",
   "settings-bg-upload": "ছবি আপলোড করুন",

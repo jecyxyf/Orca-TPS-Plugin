@@ -617,11 +617,12 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(dialog, /id="settings-bg-edit"[\s\S]*?<svg\b/);
   assert.match(dialog, /id="settings-bg-reset"[\s\S]*?<svg\b/);
   assert.match(dialog, /id="settings-bg-input"[^>]*accept="[^"]*\.svg[^"]*\.jpg[^"]*\.png/);
-  assert.match(dialog, /class="settings-color-row"[\s\S]*?id="settings-color-unselected"[\s\S]*?id="settings-color-selected"/);
+  assert.match(dialog, /id="settings-color-card"[\s\S]*?<div class="settings-bg-row">[\s\S]*?data-i18n="settings-font-color"[\s\S]*?<div class="settings-color-row">[\s\S]*?id="settings-color-unselected"[\s\S]*?id="settings-color-selected"[\s\S]*?id="settings-color-reset"/);
   assert.match(dialog, /id="settings-color-unselected"[^>]*type="color"/);
   assert.match(dialog, /id="settings-color-selected"[^>]*type="color"/);
-  assert.match(dialog, /id="settings-color-unselected-reset"/);
-  assert.match(dialog, /id="settings-color-selected-reset"/);
+  assert.doesNotMatch(dialog, /settings-color-(?:un)?selected-reset/);
+  assert.match(dialog, /id="settings-color-icon"[^>]*type="color"/);
+  assert.match(dialog, /id="settings-color-icon-reset"/);
   assert.doesNotMatch(dialog, /id="language-picker"|settings-timezone|settings-bg-zoom|settings-bg-preview/);
 
   const editor = /<div[^>]*id="bg-editor"[^>]*role="dialog"[\s\S]*?(?=\n\s*<template id="ladder-avatar-fallback">)/.exec(html)?.[0] ?? '';
@@ -637,14 +638,20 @@ test('top-right header places language picker beside settings gear and modal off
   assert.equal(css.get('.panel-bg-img')['object-fit'], 'cover');
   assert.equal(css.get('html').background, 'var(--page)');
   assert.equal(css.get('.settings-toggle').background, 'transparent');
-  assert.equal(css.get('.settings-toggle').color, 'var(--tab-unselected, var(--muted))');
+  assert.equal(css.get('.settings-toggle').color, 'var(--icon-color, var(--tab-unselected, var(--muted)))');
   assert.equal(css.get('.settings-close').background, 'transparent');
-  assert.equal(css.get('.settings-close').color, 'var(--muted)');
+  assert.equal(css.get('.settings-close').color, 'var(--icon-color, var(--muted))');
   assert.equal(css.get('.settings-bg-btn').background, 'transparent');
-  assert.equal(css.get('.settings-bg-btn').color, 'var(--muted)');
+  assert.equal(css.get('.settings-bg-btn').color, 'var(--icon-color, var(--muted))');
   assert.match(html, /root\.setProperty\('--ink', value\)[\s\S]*?root\.setProperty\('--purple', value\)[\s\S]*?root\.setProperty\('--muted',[\s\S]*?root\.setProperty\('--tab-unselected', value\)/);
   assert.match(html, /root\.setProperty\('--blue', value\)[\s\S]*?root\.setProperty\('--tab-selected', value\)/);
+  assert.match(html, /setProperty\('--icon-color', value\)/);
   assert.equal(css.get('.settings-color-row')['justify-content'], 'flex-start');
+  assert.equal(css.get('.settings-sheet')['--surface'], '#262628');
+  assert.equal(css.get('.settings-sheet')['--ink'], '#ffffff');
+  assert.equal(css.get('.settings-sheet')['--icon-color'], '#ffffff');
+  assert.equal(css.get('.language-picker')['--ink'], '#1c1c1e');
+  assert.equal(css.get('html.dark .language-picker')['--ink'], '#ffffff');
 });
 
 test('panel title links to the repository and shows an animated star badge beside the version', async () => {

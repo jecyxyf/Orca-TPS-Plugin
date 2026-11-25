@@ -269,6 +269,7 @@
   "settings-color-unselected": "未选中",
   "settings-color-selected": "选中",
   "settings-color-reset": "恢复默认颜色",
+  "settings-icon-color": "图标颜色",
   "settings-bg-image": "背景图片",
   "settings-bg-image-hint": "支持 SVG、JPG、PNG、WebP、GIF（最大 2 MB）。",
   "settings-bg-upload": "上传图片",

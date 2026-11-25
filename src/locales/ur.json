@@ -269,6 +269,7 @@
   "settings-color-unselected": "غیر منتخب",
   "settings-color-selected": "منتخب",
   "settings-color-reset": "رنگ ری سیٹ کریں",
+  "settings-icon-color": "آئیکن کا رنگ",
   "settings-bg-image": "پس منظر تصویر",
   "settings-bg-image-hint": "SVG، JPG، PNG، WebP اور GIF کی سہولت (زیادہ سے زیادہ 2 MB)۔",
   "settings-bg-upload": "تصویر اپ لوڈ کریں",

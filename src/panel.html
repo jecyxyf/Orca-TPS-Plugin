@@ -128,10 +128,10 @@
       display: inline-grid; place-items: center; flex: none;
       width: 32px; height: 32px; padding: 0;
       border: 0; border-radius: 8px;
-      background: transparent; color: var(--muted); cursor: pointer;
+      background: transparent; color: var(--icon-color, var(--muted)); cursor: pointer;
       transition: color .15s ease, background-color .15s ease;
     }
-    .settings-toggle { color: var(--tab-unselected, var(--muted)); }
+    .settings-toggle { color: var(--icon-color, var(--tab-unselected, var(--muted))); }
     .settings-toggle svg, .settings-close svg { width: 16px; height: 16px; transition: transform .22s ease; }
     .settings-toggle:hover, .settings-toggle[aria-expanded="true"], .settings-close:hover {
       background: rgb(128 128 128 / 14%); color: var(--ink);
@@ -149,11 +149,21 @@
     }
     html.dark .settings-backdrop { background: rgb(0 0 0 / 56%); }
     .settings-sheet {
+      --surface: #262628;
+      --speed-bg: #303034;
+      --line: #3a3a3e;
+      --ink: #ffffff;
+      --muted: rgb(255 255 255 / 80%);
+      --blue: #64b0ff;
+      --error: #ff8fa5;
+      --icon-color: #ffffff;
+      color-scheme: dark;
       width: 100%; max-width: 420px; max-height: calc(100dvh - 32px);
       overflow-y: auto; scrollbar-width: thin;
       padding: 14px 16px 16px;
       border: 1px solid var(--line); border-radius: 20px;
-      background: var(--surface); box-shadow: 0 12px 36px rgb(0 0 0 / 18%);
+      background: var(--surface); color: var(--ink);
+      box-shadow: 0 12px 36px rgb(0 0 0 / 28%);
     }
     .settings-head {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -230,7 +240,7 @@
     .settings-bg-btn {
       display: inline-grid; place-items: center; flex: none;
       width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
-      background: transparent; color: var(--muted); cursor: pointer;
+      background: transparent; color: var(--icon-color, var(--muted)); cursor: pointer;
       transition: color .15s ease, background-color .15s ease;
     }
     .settings-bg-btn svg { width: 16px; height: 16px; }
@@ -240,11 +250,12 @@
     .settings-bg-hint, .settings-bg-error { margin: 0; font-size: 11px; overflow-wrap: anywhere; }
     .settings-bg-hint { color: var(--muted); }
     .settings-bg-error { color: var(--error); }
+    .settings-color-card .settings-bg-row { flex-wrap: wrap; gap: 8px 10px; }
     .settings-color-row {
-      display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px 18px;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 6px 12px; min-width: 0;
     }
     .settings-color-item {
-      display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+      display: inline-flex; align-items: center; gap: 5px; min-width: 0;
     }
     .settings-color-label {
       min-width: 0; margin: 0; color: var(--muted);
@@ -259,7 +270,13 @@
     .settings-color-input::-webkit-color-swatch { border: 0; border-radius: 5px; }
     .settings-color-input::-moz-color-swatch { border: 0; border-radius: 5px; }
     .settings-color-input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-    .language-picker { position: relative; flex: 0 1 140px; min-width: 0; }
+    .language-picker {
+      position: relative; flex: 0 1 140px; min-width: 0;
+      --ink: #1c1c1e; --muted: #6d6d75; --blue: #0066e6;
+    }
+    html.dark .language-picker {
+      --ink: #ffffff; --muted: #b4b4be; --blue: #64b0ff;
+    }
     .language-toggle, .language-option {
       display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 32px;
       padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px;
@@ -269,7 +286,7 @@
     .language-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .language-toggle .language-name { flex: 1; min-width: 0; text-align: start; }
     .language-flag { flex: none; width: 20px; height: 14px; object-fit: contain; }
-    .language-toggle svg { flex: none; width: 12px; height: 12px; color: var(--muted); }
+    .language-toggle svg { flex: none; width: 12px; height: 12px; color: var(--icon-color, var(--muted)); }
     .language-menu {
       position: absolute; z-index: 4; top: calc(100% + 5px); right: 0;
       width: min(216px, calc(100vw - 32px)); padding: 6px;
@@ -395,7 +412,7 @@
     }
     .ladder-toolbar-value { grid-area: last; font-size: var(--ladder-toolbar-label-size); }
     .ladder-transfer svg {
-      width: var(--ladder-toolbar-icon-size); height: var(--ladder-toolbar-icon-size); flex: none; color: var(--muted);
+      width: var(--ladder-toolbar-icon-size); height: var(--ladder-toolbar-icon-size); flex: none; color: var(--icon-color, var(--muted));
     }
     .ladder-actions .ladder-note { margin: 0; }
     .ladder-status { margin: 8px 0 0; font-size: 12px; overflow-wrap: anywhere; }
@@ -599,7 +616,7 @@
     .timestamp { overflow-wrap: anywhere; }
     .ttft { font-variant-numeric: tabular-nums; white-space: nowrap; }
     .speed { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-width: 0; padding: 6px 10px; border-radius: 15px; background: var(--speed-bg); color: var(--speed); white-space: nowrap; }
-    .rocket { width: 16px; height: 16px; flex-shrink: 0; align-self: center; }
+    .rocket { width: 16px; height: 16px; flex-shrink: 0; align-self: center; color: var(--icon-color, currentColor); }
     .speed-value { min-width: 0; font-size: 20px; font-weight: 750; line-height: 1.15; letter-spacing: -.6px; }
     .speed-unit { font-size: 11px; font-weight: 550; line-height: 1; }
     .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid var(--line); }
@@ -1019,24 +1036,34 @@
             <p class="settings-bg-hint" data-i18n="settings-bg-image-hint"></p>
             <p class="settings-bg-error" id="settings-bg-error" role="alert" data-localized-text hidden></p>
           </div>
-          <div class="settings-bg-card" id="settings-color-card">
-            <p class="settings-bg-title" data-i18n="settings-font-color"></p>
-            <div class="settings-color-row">
-              <div class="settings-color-item">
-                <label class="settings-color-label" for="settings-color-unselected" data-i18n="settings-color-unselected"></label>
-                <input class="settings-color-input" id="settings-color-unselected" data-testid="settings-color-unselected" type="color" value="#6d6d75">
-                <button class="settings-bg-btn" id="settings-color-unselected-reset" data-testid="settings-color-unselected-reset" type="button"
-                        data-i18n-title="settings-color-reset" data-i18n-aria-label="settings-color-reset" hidden>
+          <div class="settings-bg-card settings-color-card" id="settings-color-card">
+            <div class="settings-bg-row">
+              <p class="settings-bg-title" data-i18n="settings-font-color"></p>
+              <div class="settings-color-row">
+                <div class="settings-color-item">
+                  <label class="settings-color-label" for="settings-color-unselected" data-i18n="settings-color-unselected"></label>
+                  <input class="settings-color-input" id="settings-color-unselected" data-testid="settings-color-unselected" type="color" value="#6d6d75">
+                </div>
+                <div class="settings-color-item">
+                  <label class="settings-color-label" for="settings-color-selected" data-i18n="settings-color-selected"></label>
+                  <input class="settings-color-input" id="settings-color-selected" data-testid="settings-color-selected" type="color" value="#0066e6">
+                </div>
+                <button class="settings-bg-btn" id="settings-color-reset" data-testid="settings-color-reset" type="button"
+                        data-i18n-title="settings-color-reset" data-i18n-aria-label="settings-color-reset" disabled>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
                     <path d="M3 3v5h5"/>
                   </svg>
                 </button>
               </div>
-              <div class="settings-color-item">
-                <label class="settings-color-label" for="settings-color-selected" data-i18n="settings-color-selected"></label>
-                <input class="settings-color-input" id="settings-color-selected" data-testid="settings-color-selected" type="color" value="#0066e6">
-                <button class="settings-bg-btn" id="settings-color-selected-reset" data-testid="settings-color-selected-reset" type="button"
+            </div>
+          </div>
+          <div class="settings-bg-card" id="settings-icon-color-card">
+            <div class="settings-bg-row">
+              <label class="settings-bg-title" for="settings-color-icon" data-i18n="settings-icon-color"></label>
+              <div class="settings-bg-actions">
+                <input class="settings-color-input" id="settings-color-icon" data-testid="settings-color-icon" type="color" value="#6d6d75">
+                <button class="settings-bg-btn" id="settings-color-icon-reset" data-testid="settings-color-icon-reset" type="button"
                         data-i18n-title="settings-color-reset" data-i18n-aria-label="settings-color-reset" hidden>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
@@ -2756,6 +2783,7 @@
       const BG_TRANSFORM_KEY = 'tps:panel-bg-transform';
       const COLOR_UNSELECTED_KEY = 'tps:panel-color-unselected';
       const COLOR_SELECTED_KEY = 'tps:panel-color-selected';
+      const COLOR_ICON_KEY = 'tps:panel-color-icon';
       const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
       const DEFAULT_BG_TRANSFORM = { scale: 100, x: 0, y: 0 };
       const MAX_BG_BYTES = 2 * 1024 * 1024;
@@ -2784,9 +2812,11 @@
       const bgEditorResetPos = byId('bg-editor-reset-pos');
       const bgEditorCancel = byId('bg-editor-cancel');
       const bgEditorSave = byId('bg-editor-save');
+      const fontColorReset = byId('settings-color-reset');
       const colorInputs = [
         {
           key: COLOR_UNSELECTED_KEY,
+          group: 'font',
           apply: value => {
             const root = document.documentElement.style;
             root.setProperty('--ink', value);
@@ -2801,11 +2831,12 @@
             root.removeProperty('--muted');
             root.removeProperty('--tab-unselected');
           },
-          input: byId('settings-color-unselected'), reset: byId('settings-color-unselected-reset'),
+          input: byId('settings-color-unselected'),
           fallback: () => document.documentElement.classList.contains('dark') ? '#b4b4be' : '#6d6d75'
         },
         {
           key: COLOR_SELECTED_KEY,
+          group: 'font',
           apply: value => {
             const root = document.documentElement.style;
             root.setProperty('--blue', value);
@@ -2816,8 +2847,15 @@
             root.removeProperty('--blue');
             root.removeProperty('--tab-selected');
           },
-          input: byId('settings-color-selected'), reset: byId('settings-color-selected-reset'),
+          input: byId('settings-color-selected'),
           fallback: () => document.documentElement.classList.contains('dark') ? '#64b0ff' : '#0066e6'
+        },
+        {
+          key: COLOR_ICON_KEY,
+          apply: value => document.documentElement.style.setProperty('--icon-color', value),
+          clear: () => document.documentElement.style.removeProperty('--icon-color'),
+          input: byId('settings-color-icon'), reset: byId('settings-color-icon-reset'),
+          fallback: () => document.documentElement.classList.contains('dark') ? '#b4b4be' : '#6d6d75'
         }
       ];
       let hasBgImage = false;
@@ -2915,25 +2953,36 @@
       applyBackgroundTransform(loadTransform(), false);
       applyBackgroundImage(readStore(BG_IMAGE_KEY));
 
+      function updateFontReset() {
+        fontColorReset.disabled = !colorInputs.some(entry => entry.group === 'font' && entry.custom);
+      }
+
       function applyTextColor(entry, value, persist = false) {
         const valid = typeof value === 'string' && HEX_COLOR_RE.test(value);
+        entry.custom = valid;
         if (valid) entry.apply(value);
         else entry.clear();
         entry.input.value = valid ? value.toLowerCase() : entry.fallback();
-        entry.reset.hidden = !valid;
+        if (entry.reset) entry.reset.hidden = !valid;
         if (persist) writeStore(entry.key, valid ? value.toLowerCase() : null);
+        updateFontReset();
       }
 
       for (const entry of colorInputs) {
         applyTextColor(entry, readStore(entry.key), false);
         entry.input.addEventListener('input', () => applyTextColor(entry, entry.input.value, false));
         entry.input.addEventListener('change', () => applyTextColor(entry, entry.input.value, true));
-        entry.reset.addEventListener('click', () => applyTextColor(entry, null, true));
+        entry.reset?.addEventListener('click', () => applyTextColor(entry, null, true));
       }
+      fontColorReset.addEventListener('click', () => {
+        for (const entry of colorInputs) {
+          if (entry.group === 'font') applyTextColor(entry, null, true);
+        }
+      });
 
       const themeObserver = new MutationObserver(() => {
         for (const entry of colorInputs) {
-          if (entry.reset.hidden) entry.input.value = entry.fallback();
+          if (!entry.custom) entry.input.value = entry.fallback();
         }
       });
       themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });

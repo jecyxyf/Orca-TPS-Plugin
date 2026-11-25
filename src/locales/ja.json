@@ -269,6 +269,7 @@
   "settings-color-unselected": "未選択の色",
   "settings-color-selected": "選択中の色",
   "settings-color-reset": "色をリセット",
+  "settings-icon-color": "アイコンの色",
   "settings-bg-image": "背景画像",
   "settings-bg-image-hint": "SVG、JPG、PNG、WebP、GIF に対応（最大 2 MB）。",
   "settings-bg-upload": "画像をアップロード",
