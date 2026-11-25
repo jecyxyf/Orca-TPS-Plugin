@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { bridgeOrca, createManagerLinks, createOrcaConnection, createSnapshotSender, TOKENS_LEASE_MS, TOKENS_ROOT } from './orca_connection.mjs';
+import { bridgeOrca, createManagerLinks, createOrcaConnection, createSnapshotSender, MANAGER_PROTOCOL_VERSION, MESSAGE,
+  TOKENS_LEASE_MS, TOKENS_ROOT } from './orca_connection.mjs';
 import { channelProvider, openRemoteDeviceCache, openTokensManagerDb } from './database.mjs';
 import { enrichChannelRecords, HarnessParser, normalizeComparePath, readTargetSession } from './harness_parser.mjs';
 import { calendarFor, makePersonalPacket, mergePersonalPackets, RETENTION_DAYS } from './personal_stats.mjs';
@@ -29,7 +30,7 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
   const leaderboard = createLeaderboardReporter({ clock, fetcher, connection });
   const collection = createTokenCollection(root, {
     clock, scan, scanInterval: () => leaderboard.intervals.scanMs,
-    onProgress: progress => connection.broadcast({ type: 'progress', ...progress }),
+    onProgress: progress => connection.broadcast({ type: MESSAGE.progress, ...progress }),
     onReset() {
       personalPacket = personalSummary = undefined;
     },
@@ -38,7 +39,7 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
         ...makePersonalPacket(db, publishedAt),
         ranking: makeLeaderboardPacket(db, leaderboard.accountId, publishedAt)
       };
-      connection.broadcast({ type: 'personal', packet: personalPacket }, undefined, false);
+      connection.broadcast({ type: MESSAGE.personal, packet: personalPacket }, undefined, false);
       syncDevices();
       connection.markChannelsDirty();
       if (!roundTimer) publishRound();
@@ -56,12 +57,13 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
     const timeZone = collection.initialize(message);
     const db = collection.db;
     leaderboard.initialize(db, message.endpoint);
-    connection.reply(peer, { type: 'ready', deviceGuid: db.deviceGuid, timeZone, bundleVersion, intervals: leaderboard.intervals });
+    connection.reply(peer, { type: MESSAGE.ready, deviceGuid: db.deviceGuid, timeZone, bundleVersion,
+      protocolVersion: MANAGER_PROTOCOL_VERSION, intervals: leaderboard.intervals });
     if (peer.localClient) {
-      if (personalSummary) connection.reply(peer, { type: 'summary', summary: personalSummary });
-      else connection.reply(peer, { type: 'progress', ...collection.progress });
-    } else if (collection.ready && personalPacket) connection.reply(peer, { type: 'personal', packet: personalPacket });
-    else connection.reply(peer, { type: 'progress', ...collection.progress });
+      if (personalSummary) connection.reply(peer, { type: MESSAGE.summary, summary: personalSummary });
+      else connection.reply(peer, { type: MESSAGE.progress, ...collection.progress });
+    } else if (collection.ready && personalPacket) connection.reply(peer, { type: MESSAGE.personal, packet: personalPacket });
+    else connection.reply(peer, { type: MESSAGE.progress, ...collection.progress });
   }
 
   function onSyncHello(peer, message) {
@@ -72,27 +74,27 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
     }
     const { deviceGuid } = collection.db;
     if (message.deviceGuid === deviceGuid) return false;
-    connection.reply(peer, { type: 'sync-ready', deviceGuid });
+    connection.reply(peer, { type: MESSAGE.syncReady, deviceGuid, protocolVersion: MANAGER_PROTOCOL_VERSION });
     void sendSnapshot(peer.socket);
     return true;
   }
 
   function* devicePackets() {
     const ownDevice = collection.db.deviceGuid;
-    if (personalPacket) yield { type: 'device-personal', packet: personalPacket };
+    if (personalPacket) yield { type: MESSAGE.devicePersonal, packet: personalPacket };
     for (const [device, packet] of remoteDevices.personal) {
-      if (device !== ownDevice) yield { type: 'device-personal', packet };
+      if (device !== ownDevice) yield { type: MESSAGE.devicePersonal, packet };
     }
     for (const [device, accounts] of remoteDevices.relays) {
       if (device === ownDevice) continue;
-      for (const packet of accounts.values()) yield { type: 'device-leaderboard', packet };
+      for (const packet of accounts.values()) yield { type: MESSAGE.deviceLeaderboard, packet };
     }
   }
 
   function receiveDevicePacket(message) {
     const ownDevice = collection.db.deviceGuid;
     const { packet } = message;
-    const accepted = message.type === 'device-personal' ? remoteDevices.acceptPersonal(packet, ownDevice)
+    const accepted = message.type === MESSAGE.devicePersonal ? remoteDevices.acceptPersonal(packet, ownDevice)
       : remoteDevices.acceptLeaderboard(packet, ownDevice);
     if (accepted) syncDevices();
   }
@@ -103,14 +105,14 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
   }
 
   function onMessage(peer, message) {
-    if (peer.sync || (peer.localClient && message.type === 'device-personal')) receiveDevicePacket(message);
-    else if (message.type === 'sync-targets' && peer.localClient && Array.isArray(message.targets)) {
+    if (peer.sync || (peer.localClient && message.type === MESSAGE.devicePersonal)) receiveDevicePacket(message);
+    else if (message.type === MESSAGE.syncTargets && peer.localClient) {
       peer.syncTargets = message.targets;
-    } else if (message.type === 'timezone') collection.changeTimeZone(message.timeZone);
-    else if (message.type === 'credential') {
+    } else if (message.type === MESSAGE.timezone) collection.changeTimeZone(message.timeZone);
+    else if (message.type === MESSAGE.credential) {
       leaderboard.setCredential(peer, message, collection.db);
       if (peer.localClient && collection.ready) publishRound();
-    } else if (message.type === 'upload' && peer.localClient) {
+    } else if (message.type === MESSAGE.upload && peer.localClient) {
       publishRound();
     }
   }
@@ -142,7 +144,7 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
       return true;
     });
     personalSummary = mergePersonalPackets(personal, timeZone, clock());
-    connection.broadcast({ type: 'summary', summary: personalSummary }, undefined, true);
+    connection.broadcast({ type: MESSAGE.summary, summary: personalSummary }, undefined, true);
     if (accountId !== undefined) leaderboard.upload(reports);
   }
 
@@ -364,7 +366,7 @@ function createLeaderboardReporter({ clock, fetcher, connection }) {
         if (JSON.stringify(updated) !== JSON.stringify(intervals)) {
           intervals = updated;
           db.saveSetting('intervals', intervals);
-          connection.broadcast({ type: 'intervals', intervals });
+          connection.broadcast({ type: MESSAGE.intervals, intervals });
         }
       }).catch(() => {});
   }
@@ -374,7 +376,7 @@ function createLeaderboardReporter({ clock, fetcher, connection }) {
     const active = credential;
     const nextAt = clock() + intervals.personalMs;
     running = active;
-    uploadState = { type: 'upload-state', accountId: active.accountId, nextAt, pending: true };
+    uploadState = { type: MESSAGE.uploadState, accountId: active.accountId, nextAt, pending: true };
     connection.broadcast(uploadState, active.accountId);
     async function uploadPacket(item) {
       const body = extendedSpeedOrigin === active.origin ? item : {
@@ -400,9 +402,9 @@ function createLeaderboardReporter({ clock, fetcher, connection }) {
         if (stopped) break;
       }
       if (credential !== active || abort.signal.aborted) return;
-      uploadState = { type: 'upload-state', accountId: active.accountId, nextAt, pending: false, code, at: clock() };
+      uploadState = { type: MESSAGE.uploadState, accountId: active.accountId, nextAt, pending: false, code, at: clock() };
       connection.broadcast(uploadState, active.accountId);
-      if (code === 'accepted') connection.broadcast({ type: 'uploaded', at: uploadState.at, accountId: active.accountId }, active.accountId);
+      if (code === 'accepted') connection.broadcast({ type: MESSAGE.uploaded, at: uploadState.at, accountId: active.accountId }, active.accountId);
       if (code === 'login_required' || code === 'banned') clearCredential();
     } finally { running = undefined; }
   }

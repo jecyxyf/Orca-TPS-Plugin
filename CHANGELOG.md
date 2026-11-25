@@ -20,12 +20,14 @@ All notable changes to this project will be documented in this file.
 - The leaderboard runs on the new server. Rankings, usage totals, and speed samples stay in memory, while GitHub account and sign-in state is stored separately.
 - Simplified the leaderboard controls and sign-in notices. The sidebar now shows the plugin version, and both READMEs and Orca gallery images have been refreshed.
 - Simplified usage and leaderboard processing and removed an unused Windows executable from the plugin package.
+- Unified Tokens Manager messages and heartbeats with support for older managers, and simplified notification translation, SQLite access, and leaderboard routing.
 
 ### Fixed
 
 - Keep daily uploads moving when a conversation log is still being written, and retry leaderboard avatars after a failed load.
 - Keep the sidebar and status bar in sync with active conversation changes in Orca 1.4.255 and later.
 - Restore 7-day and 30-day leaderboard charts from the local cache and clear expired sessions when an HTTP 401 response has no JSON body.
+- Use one timeout for leaderboard avatar lookups and downloads, and let MiniMax Code and OpenClaw database reads wait briefly for SQLite locks.
 
 ## [1.6.4] - 2026-11-19
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createLocalePreferences, sourceMessage } from '../src/locales.mjs';
+import { createLocalePreferences } from '../src/locales.mjs';
 
 const codes = ['en', 'zh-CN', 'de', 'ja', 'hi', 'fr', 'ru', 'it', 'pt-BR', 'es', 'id', 'ar', 'bn', 'ur', 'pt-PT'];
 const storage = () => {
@@ -12,10 +12,10 @@ const storage = () => {
   };
 };
 
-test('every shipped locale has the same XML message IDs and placeholders', async () => {
+test('every shipped locale has the same message IDs and placeholders', async () => {
   const dictionaries = await Promise.all(codes.map(async code => {
-    const xml = await readFile(new URL(`../src/locales/${code}.xml`, import.meta.url), 'utf8');
-    return [...xml.matchAll(/<message id="([^"]+)">([^<]+)<\/message>/g)].map(([, id, text]) => [
+    const messages = JSON.parse(await readFile(new URL(`../src/locales/${code}.json`, import.meta.url), 'utf8'));
+    return Object.entries(messages).map(([id, text]) => [
       id, [...new Set(text.match(/\{\d+\}/g) ?? [])].sort()
     ]);
   }));
@@ -46,7 +46,7 @@ test('language preferences default to English and persist a selected language ac
   assert.equal(restored.t('personal-stats'), '个人统计');
 });
 
-test('failed storage writes preserve the active language and legacy notices can be translated', async () => {
+test('failed storage writes preserve the active language and notice IDs and nested arguments can be translated', async () => {
   const locale = await createLocalePreferences({
     get: async () => 'not-a-language',
     set: async () => { throw new Error('could not write'); }
@@ -55,7 +55,7 @@ test('failed storage writes preserve the active language and legacy notices can 
   await assert.rejects(locale.select('ar', () => assert.fail('unexpected language change')), /could not write/);
   assert.equal(locale.code, 'en');
   assert.equal(
-    locale.notice(sourceMessage('notice.partial-session-scan', 'codex', sourceMessage('notice.read-failed'))),
+    locale.notice(['notice.partial-session-scan', 'codex', ['notice.read-failed']]),
     'codex: Some session folders could not be read (Read failed).'
   );
 });

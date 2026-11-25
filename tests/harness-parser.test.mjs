@@ -7,10 +7,29 @@ import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import * as zlib from 'node:zlib';
-import { MANAGER_HARNESSES } from '../src/harness_parser.mjs';
+import { MANAGER_HARNESSES } from '../src/harnesses.mjs';
+import { openReadonlyDatabase } from '../src/sqlite.mjs';
 
 const run = promisify(execFile);
 const line = value => JSON.stringify(value) + '\n';
+
+test('harness database reads use the shared read-only settings', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'tps-readonly-'));
+  const file = path.join(directory, 'usage.sqlite');
+  const writable = new DatabaseSync(file);
+  writable.exec('CREATE TABLE usage (tokens INTEGER); INSERT INTO usage VALUES (100)');
+  writable.close();
+  const db = openReadonlyDatabase(file);
+  t.after(async () => {
+    db.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+  assert.equal(db.prepare('PRAGMA query_only').get().query_only, 1);
+  assert.equal(db.prepare('PRAGMA trusted_schema').get().trusted_schema, 0);
+  assert.equal(db.prepare('PRAGMA busy_timeout').get().timeout, 100);
+  assert.equal(db.prepare('SELECT tokens FROM usage').get().tokens, 100);
+  assert.throws(() => db.exec('DELETE FROM usage'), /readonly/i);
+});
 
 function zstdLog(rows) {
   const contents = Buffer.from(rows.map(line).join(''));

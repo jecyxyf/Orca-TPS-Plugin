@@ -321,87 +321,107 @@ export function createLeaderboardServer({
     redirect(res, '/admin?' + new URLSearchParams({ q: form.get('q')?.slice(0, 39) ?? '', feedback: changed ? 'updated' : 'rejected' }));
   }
 
-  async function handle(req, res) {
+  function setResponseHeaders(res) {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
     if (secure) res.setHeader('Strict-Transport-Security', 'max-age=604800');
-    const time = now();
+  }
+
+  function cleanExpiredLogins(time) {
     const currentMinute = Math.floor(time / 60000);
-    if (currentMinute !== minute) {
-      requests.clear();
-      for (const [key, login] of deviceLogins) if (login.expiresAt <= time) deviceLogins.delete(key);
-      for (const [key, login] of browserLogins) if (login.expiresAt <= time) browserLogins.delete(key);
-      minute = currentMinute;
+    if (currentMinute === minute) return;
+    requests.clear();
+    for (const logins of [deviceLogins, browserLogins]) {
+      for (const [key, login] of logins) if (login.expiresAt <= time) logins.delete(key);
     }
-    const url = new URL(req.url, base), route = url.pathname, method = req.method;
-    const address = normalizeIp(req.socket.remoteAddress) ?? req.socket.remoteAddress;
-    const forwarded = trustedProxies.has(address) ? normalizeIp(req.headers['x-real-ip']) : null;
-    const ip = forwarded ?? address;
-    const auth = route.startsWith('/auth/') || route.startsWith('/api/auth/');
-    const packetRoute = tokensJobs && method === 'POST' && route === TOKENS_LEADERBOARD + '/packets';
-    const publicRanking = tokensJobs && method === 'GET' &&
-      (route === TOKENS_LEADERBOARD + '/snapshot' || route === TOKENS_LEADERBOARD + '/config');
-    if (!packetRoute && !allowRequest((auth ? 'auth/' : publicRanking ? 'ranking/' : 'other/') + ip,
-      auth ? 120 : publicRanking ? 2400 : 240)) return rateLimited(res, time);
+    minute = currentMinute;
+  }
 
-    if (method === 'GET' && route === '/healthz') return send(res, 200, { ok: true, githubConfigured });
-    if (method === 'GET' && route === '/') return redirect(res, '/admin');
-    if (method === 'GET' && route === '/auth/github/start') return githubConfigured ? adminStart(res) : redirect(res, '/admin');
-    if (method === 'GET' && route === '/auth/plugin/start') return pluginStart(req, res, url, time);
-    if (method === 'GET' && route === '/auth/github/callback') {
-      if (!githubConfigured) return redirect(res, '/admin');
-      return url.searchParams.get('state')?.includes('.') ? pluginCallback(req, res, url, time) : adminCallback(req, res, url, time);
+  function githubCallback({ req, res, url, time }) {
+    if (!githubConfigured) return redirect(res, '/admin');
+    return url.searchParams.get('state')?.includes('.') ? pluginCallback(req, res, url, time) : adminCallback(req, res, url, time);
+  }
+
+  function readSnapshot({ res, url }) {
+    const mode = url.searchParams.get('mode') === 'calendar' ? 'calendar' : 'hourly';
+    const snapshot = tokensJobs.snapshot(mode);
+    if (!snapshot) return send(res, 503, { code: 'unavailable' });
+    if (snapshot instanceof Uint8Array) {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(snapshot);
     }
-    if (method === 'GET' && route === '/admin/local-time.js') return send(res, 200, localTimes, 'text/javascript; charset=utf-8');
-    if (route === '/admin' || route.startsWith('/admin/')) return admin(req, res, url, time);
-    if (method === 'POST' && route === '/api/auth/device/start') {
-      return githubConfigured ? deviceStart(res, time) : send(res, 503, { code: 'github_unavailable' });
-    }
-    if (method === 'POST' && route === '/api/auth/device/poll') {
-      return githubConfigured ? devicePoll(req, res, time) : send(res, 503, { code: 'github_unavailable' });
-    }
-    if (method === 'POST' && route === '/api/auth/plugin/poll') {
-      return githubConfigured ? pluginPoll(req, res, time) : send(res, 503, { code: 'github_unavailable' });
-    }
-    if (!route.startsWith('/api/')) return send(res, 404, { code: 'not_found' });
-    if (tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/config') {
-      res.setHeader('Cache-Control', 'no-store');
-      return send(res, 200, { intervals: tokensJobs.intervals, speedSampleWindowMs: SPEED_SAMPLE_WINDOW_MS });
-    }
-    if (tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/snapshot') {
-      res.setHeader('Cache-Control', 'no-store');
-      const mode = url.searchParams.get('mode') === 'calendar' ? 'calendar' : 'hourly';
-      const snapshot = tokensJobs.snapshot(mode);
-      if (!snapshot) return send(res, 503, { code: 'unavailable' });
-      if (snapshot instanceof Uint8Array) {
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        return res.end(snapshot);
+    const view = leaderboardSnapshotForMode(snapshot, mode);
+    return view ? send(res, 200, view) : send(res, 404, { code: 'server_update_required' });
+  }
+
+  function pluginSession(handler, { packet = false } = {}) {
+    return context => {
+      const { req, res, time, ip } = context;
+      const token = /^Bearer ([\w-]{43})$/.exec(req.headers.authorization ?? '')?.[1];
+      const sessionDigest = token ? digest(token) : null;
+      const account = sessionDigest ? store.session(sessionDigest, 'plugin', time) : null;
+      if (!account) {
+        if (packet && !allowRequest('invalid-packet/' + ip, 240)) return rateLimited(res, time);
+        return send(res, 401, { code: 'login_required' });
       }
-      const view = leaderboardSnapshotForMode(snapshot, mode);
-      return view ? send(res, 200, view) : send(res, 404, { code: 'server_update_required' });
-    }
-    const accountRoute = tokensJobs && method === 'GET' && route === TOKENS_LEADERBOARD + '/account';
-    const logoutRoute = method === 'POST' && route === '/api/auth/logout';
-    if (!accountRoute && !packetRoute && !logoutRoute) return send(res, 404, { code: 'not_found' });
+      return handler(context, account, sessionDigest);
+    };
+  }
 
-    const token = /^Bearer ([\w-]{43})$/.exec(req.headers.authorization ?? '')?.[1];
-    const sessionDigest = token ? digest(token) : null;
-    const account = sessionDigest ? store.session(sessionDigest, 'plugin', time) : null;
-    if (!account) {
-      if (packetRoute && !allowRequest('invalid-packet/' + ip, 240)) return rateLimited(res, time);
-      return send(res, 401, { code: 'login_required' });
-    }
-    if (accountRoute) return send(res, 200, { accountId: account.id, username: account.username, banned: Boolean(account.banned) });
-    if (logoutRoute) {
-      store.removeSession(sessionDigest, time);
-      return send(res, 200, { ok: true });
-    }
+  async function receivePacket({ req, res }, account) {
     if (account.banned) return send(res, 403, { code: 'banned', username: account.username });
     const raw = await readBody(req, 1024 * 1024);
     return raw && await tokensJobs.receive(account, raw)
       ? send(res, 202, { code: 'accepted' }) : send(res, 400, { code: 'invalid' });
+  }
+
+  const githubLogin = handler => context => githubConfigured ? handler(context)
+    : send(context.res, 503, { code: 'github_unavailable' });
+  const authRate = { bucket: 'auth/', limit: 120 };
+  const otherRate = { bucket: 'other/', limit: 240 };
+  const rankingRate = { bucket: 'ranking/', limit: 2400 };
+  const routes = new Map([
+    ['GET /healthz', { respond: ({ res }) => send(res, 200, { ok: true, githubConfigured }) }],
+    ['GET /', { respond: ({ res }) => redirect(res, '/admin') }],
+    ['GET /auth/github/start', { respond: ({ res }) => githubConfigured ? adminStart(res) : redirect(res, '/admin') }],
+    ['GET /auth/plugin/start', { respond: ({ req, res, url, time }) => pluginStart(req, res, url, time) }],
+    ['GET /auth/github/callback', { respond: githubCallback }],
+    ['GET /admin/local-time.js', { respond: ({ res }) => send(res, 200, localTimes, 'text/javascript; charset=utf-8') }],
+    ['POST /api/auth/device/start', { respond: githubLogin(({ res, time }) => deviceStart(res, time)) }],
+    ['POST /api/auth/device/poll', { respond: githubLogin(({ req, res, time }) => devicePoll(req, res, time)) }],
+    ['POST /api/auth/plugin/poll', { respond: githubLogin(({ req, res, time }) => pluginPoll(req, res, time)) }],
+    ['POST /api/auth/logout', { respond: pluginSession(({ res, time }, _account, sessionDigest) => {
+      store.removeSession(sessionDigest, time);
+      return send(res, 200, { ok: true });
+    }) }]
+  ]);
+  if (tokensJobs) {
+    routes.set('GET ' + TOKENS_LEADERBOARD + '/config', { rate: rankingRate, respond: ({ res }) => send(res, 200, {
+      intervals: tokensJobs.intervals, speedSampleWindowMs: SPEED_SAMPLE_WINDOW_MS
+    }) });
+    routes.set('GET ' + TOKENS_LEADERBOARD + '/snapshot', { rate: rankingRate, respond: readSnapshot });
+    routes.set('GET ' + TOKENS_LEADERBOARD + '/account', { respond: pluginSession(({ res }, account) =>
+      send(res, 200, { accountId: account.id, username: account.username, banned: Boolean(account.banned) })) });
+    routes.set('POST ' + TOKENS_LEADERBOARD + '/packets', { rate: false, respond: pluginSession(receivePacket, { packet: true }) });
+  }
+
+  async function handle(req, res) {
+    setResponseHeaders(res);
+    const time = now();
+    cleanExpiredLogins(time);
+    const url = new URL(req.url, base), pathname = url.pathname;
+    const route = routes.get(req.method + ' ' + pathname);
+    const address = normalizeIp(req.socket.remoteAddress) ?? req.socket.remoteAddress;
+    const forwarded = trustedProxies.has(address) ? normalizeIp(req.headers['x-real-ip']) : null;
+    const ip = forwarded ?? address;
+    const rate = route?.rate ?? (pathname.startsWith('/auth/') || pathname.startsWith('/api/auth/') ? authRate : otherRate);
+    if (rate && !allowRequest(rate.bucket + ip, rate.limit)) return rateLimited(res, time);
+
+    if (route) return route.respond({ req, res, url, time, ip });
+    if (pathname === '/admin' || pathname.startsWith('/admin/')) return admin(req, res, url, time);
+    return send(res, 404, { code: 'not_found' });
   }
 
   return createServer({ requestTimeout: 15_000, headersTimeout: 10_000, maxHeaderSize: 8192 }, (req, res) => {

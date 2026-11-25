@@ -5,6 +5,7 @@ import { HOUR_MS } from './leaderboard_stats.mjs';
 import { validInstallationId } from './leaderboard_stats.mjs';
 import { requestTokens } from './leaderboard_stats.mjs';
 import { HISTORY_DAYS, localHourStart, usageCutoffMs } from './personal_stats.mjs';
+import { withTransaction } from './sqlite.mjs';
 
 export const USAGE_RETENTION_MS = 720 * HOUR_MS;
 export function personalRecordsCutoff(now) {
@@ -103,17 +104,6 @@ export function openLocalUsageDb(filename) {
     throw error;
   }
 
-  function atomic(write) {
-    db.exec('BEGIN IMMEDIATE');
-    try {
-      const value = write();
-      db.exec('COMMIT');
-      return value;
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
-  }
   const selectLog = db.prepare(`SELECT ${recordSelect} FROM usage_records WHERE device_guid=? AND log_unit_key=?`);
   const readLogStamps = db.prepare(`SELECT substr(panel, length(?) + 1) AS log_key, current_snapshot
     FROM panel_cache WHERE panel GLOB ? AND current_scope=?`);
@@ -154,7 +144,7 @@ export function openLocalUsageDb(filename) {
   function replaceLog({ deviceGuid, logUnitKey, logStamp, records, complete, now }) {
     if (!complete) return [];
     const cutoff = personalRecordsCutoff(now);
-    return atomic(() => {
+    return withTransaction(db, () => {
       const logKey = `${LOG_PREFIX}${deviceGuid}/${logUnitKey}`;
       const old = new Map(selectLog.all(deviceGuid, logUnitKey).map(row => [row.id, shape(row)]));
       const incoming = new Map();
@@ -192,7 +182,7 @@ export function openLocalUsageDb(filename) {
       if (record && record.completedAt >= cutoff && record.completedAt <= now) incoming.push(record);
     }
     if (!incoming.length) return 0;
-    return atomic(() => {
+    return withTransaction(db, () => {
       let inserted = 0;
       for (const record of incoming) {
         if (!insertRecord.run(deviceGuid, logUnitKey, now, ...recordValues(record)).changes) continue;
@@ -228,7 +218,7 @@ export function openLocalUsageDb(filename) {
   }
 
   function loadCollection(now, deviceGuid) {
-    return atomic(() => {
+    return withTransaction(db, () => {
       const state = readCollection(now);
       if (validInstallationId(deviceGuid) && !validInstallationId(state.deviceGuid)) state.deviceGuid = deviceGuid;
       upsertState.run(COLLECTION_KEY, 'desktop', encode(state), now);
@@ -237,7 +227,7 @@ export function openLocalUsageDb(filename) {
   }
 
   function saveCollection(state, now) {
-    atomic(() => {
+    withTransaction(db, () => {
       upsertState.run(COLLECTION_KEY, 'desktop', encode({ ...readCollection(now), ...state }), now);
     });
   }
@@ -266,7 +256,7 @@ export function openLocalUsageDb(filename) {
       const row = nextPacket.get(origin, String(accountId), state);
       return row && { ...row, value: decode(row.value) };
     },
-    atomic,
+    atomic: operation => withTransaction(db, operation),
     prune: cutoff => pruneQueue.run(cutoff)
   };
 
@@ -279,7 +269,7 @@ export function openLocalUsageDb(filename) {
         .map(row => [row.log_key, decode(row.current_snapshot)]));
     },
     prune(now) {
-      return atomic(() => {
+      return withTransaction(db, () => {
         queue.prune(now - USAGE_RETENTION_MS);
         const removed = Number(expiredRecords.run(personalRecordsCutoff(now)).changes);
         if (removed) pruneLogStamps.run();

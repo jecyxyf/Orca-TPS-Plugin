@@ -1,4 +1,5 @@
 import { sourceMessage } from './locales.mjs';
+import { harnessFamily, isSessionHarness } from './harnesses.mjs';
 import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { defaultRoots } from './harness_parser.mjs';
@@ -9,9 +10,8 @@ const text = value => typeof value === 'string' && value.length > 0 && value.len
 const object = value => value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 const own = (value, key) => object(value) && Object.hasOwn(value, key) ? value[key] : undefined;
 const list = value => Array.isArray(value) ? value : [];
-const empty = message => ({ target: null, message });
-const providerName = value => ['codex', 'claude', 'opencode', 'opencode2', 'pi', 'antigravity', 'hermes'].includes(value) ? value : null;
-const family = value => value === 'opencode2' ? 'opencode' : value;
+const empty = id => ({ target: null, notice: [id] });
+const providerName = value => isSessionHarness(value) ? value : null;
 
 /** The packaged Orca default, also usable without APPDATA in a plugin worker. */
 export function activeProfileUserData(options = {}) {
@@ -55,12 +55,12 @@ function channelShortTitle(worktreePath) {
  */
 export function selectActiveConversation(state, options = {}) {
   const w = text(state?.activeWorktreeId);
-  if (!w) return empty(sourceMessage('notice.no-conversation'));
+  if (!w) return empty('notice.no-conversation');
   const host = state.activeWorkspaceExecutionHostId ?? 'local';
   const remote = typeof host === 'string' && /^(?:runtime|ssh):[^\s]+$/.test(host);
-  if (host !== 'local' && (!remote || !options.includeRemote)) return empty(sourceMessage('notice.remote-conversation'));
+  if (host !== 'local' && (!remote || !options.includeRemote)) return empty('notice.remote-conversation');
   const workspaceKey = text(state.activeWorkspaceKey);
-  if (workspaceKey && workspaceKey !== `worktree:${w}`) return empty(sourceMessage('notice.workspace-sync'));
+  if (workspaceKey && workspaceKey !== `worktree:${w}`) return empty('notice.workspace-sync');
 
   const pathApi = (options.platform || process.platform) === 'win32' ? path.win32 : path.posix;
   const sepIdx = w.indexOf('::');
@@ -102,7 +102,7 @@ export function selectActiveConversation(state, options = {}) {
       const titleMetadata = [tab.aiVaultTitle, unifiedTab?.aiVaultTitle].filter(object);
       if (leaves.length === 1 && titleMetadata.some(meta =>
         (text(meta.sessionId) && meta.sessionId !== sessionId) ||
-        (text(meta.agent) && family(meta.agent) !== family(provider))
+        (text(meta.agent) && harnessFamily(meta.agent) !== harnessFamily(provider))
       )) {
         continue;
       }
@@ -128,7 +128,7 @@ export function selectActiveConversation(state, options = {}) {
       if (transcriptPath && !absolute(transcriptPath)) continue;
       const entry = { provider, sessionId };
       if (transcriptPath) {
-        if (family(provider) === 'opencode' && /\.(?:db|sqlite|sqlite3)$/i.test(transcriptPath)) entry.dbPath = transcriptPath;
+        if (harnessFamily(provider) === 'opencode' && /\.(?:db|sqlite|sqlite3)$/i.test(transcriptPath)) entry.dbPath = transcriptPath;
         else if (/\.jsonl$/i.test(transcriptPath)) entry.transcriptPath = transcriptPath;
         else continue;
       }
@@ -146,7 +146,7 @@ export function selectActiveConversation(state, options = {}) {
   }
 
   if (!worktreePath && paneCwds.size === 1) worktreePath = [...paneCwds][0];
-  if (!remote && !worktreePath && !sessions.length) return empty(sourceMessage('notice.channel-empty'));
+  if (!remote && !worktreePath && !sessions.length) return empty('notice.channel-empty');
 
   const target = {
     key: JSON.stringify([options.userDataPath || '', options.profileId || '', w, worktreePath || '', ...(remote ? [host] : [])]),
@@ -247,6 +247,7 @@ const copyTarget = target => target && { ...target, sessions: target.sessions.ma
 const copySelection = result => ({
   ...result,
   target: copyTarget(result.target),
+  ...(result.notice ? { notice: [...result.notice] } : {}),
   ...(result.openTargets ? { openTargets: result.openTargets.map(copyTarget) } : {})
 });
 
@@ -267,15 +268,14 @@ export async function readOrcaProfile(options = {}) {
 /** Reads one committed SQLite snapshot per poll, including live WAL; never writes Orca state. */
 export async function readActiveConversation(options = {}) {
   const profile = await readOrcaProfile(options);
-  if (!profile) return empty(sourceMessage('notice.profile-unavailable'));
+  if (!profile) return empty('notice.profile-unavailable');
   const { userDataPath, profileId, stateFile } = profile;
-  let DatabaseSync;
-  try { ({ DatabaseSync } = await import('node:sqlite')); }
-  catch { return empty(sourceMessage('notice.conversation-sqlite-unavailable')); }
+  let openReadonlyDatabase;
+  try { ({ openReadonlyDatabase } = await import('./sqlite.mjs')); }
+  catch { return empty('notice.conversation-sqlite-unavailable'); }
   let db;
   try {
-    db = new DatabaseSync(stateFile, { readOnly: true, enableExtensionLoading: false });
-    db.exec('PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA busy_timeout=100;');
+    db = openReadonlyDatabase(stateFile);
     // One read transaction so the stamp, the legacy document and its parts come from the same commit.
     db.exec('BEGIN');
     const domains = options.includeOpen ? ['workspaceSession', 'workspaceSessionsByHostId'] : ['workspaceSession'];
@@ -284,8 +284,8 @@ export async function readActiveConversation(options = {}) {
       Boolean(options.includeRemote), Boolean(options.includeOpen), revision]);
     if (cacheKey && lastSelection?.key === cacheKey) return copySelection(lastSelection.result);
     const state = workspaceDocument(db, 'workspaceSession');
-    if (!state) return empty(sourceMessage('notice.workspace-unsaved'));
-    if (!object(state)) return empty(sourceMessage('notice.workspace-invalid'));
+    if (!state) return empty('notice.workspace-unsaved');
+    if (!object(state)) return empty('notice.workspace-invalid');
     const selectionOptions = { ...options, userDataPath, profileId };
     const result = selectActiveConversation(state, selectionOptions);
     if (options.includeOpen) {
@@ -295,7 +295,7 @@ export async function readActiveConversation(options = {}) {
     }
     lastSelection = cacheKey ? { key: cacheKey, result: copySelection(result) } : null;
     return result;
-  } catch { return empty(sourceMessage('notice.orca-read-failed')); }
+  } catch { return empty('notice.orca-read-failed'); }
   finally {
     try { if (db?.isTransaction) db.exec('COMMIT'); } catch { /* read-only snapshot */ }
     db?.close();

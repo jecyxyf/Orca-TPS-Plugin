@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { MANAGER_HARNESSES, recentRecords } from './harness_parser.mjs';
+import { recentRecords } from './harness_parser.mjs';
+import { isManagerHarness } from './harnesses.mjs';
 
-const PROVIDERS = new Set([...MANAGER_HARNESSES, 'opencode2']);
 const NUMBERS = [
   'completedAt', 'createdAtSec', 'freshInputTokens', 'outputTokens', 'cacheReadTokens', 'cacheCreationTokens',
   'durationMs', 'firstTokenMs', 'generationMs', 'tokensPerSecond', 'cacheHitRate'
@@ -10,7 +10,7 @@ const clean = value => typeof value === 'string' && value.length <= 4096 && !/[\
 const hermesModelId = /^[a-z\d][a-z\d._-]*\/[a-z\d][a-z\d._:-]*$/i;
 
 function panelRecord(record) {
-  if (!record || !PROVIDERS.has(record.provider) || !Number.isFinite(record.completedAt) || record.completedAt < 0 ||
+  if (!record || !isManagerHarness(record.provider) || !Number.isFinite(record.completedAt) || record.completedAt < 0 ||
     typeof record.id !== 'string' || !record.id) return null;
   const result = {
     id: createHash('sha256').update(record.id).digest('hex').slice(0, 24),
@@ -34,6 +34,13 @@ function panelRecord(record) {
 const PREFIX = 'tps:channel:v1:';
 const MEMORY_LIMIT = 64;
 const cleanRecords = records => recentRecords(records.map(panelRecord), 100);
+
+function sameRecords(before, after) {
+  return before.length === after.length && after.every((row, index) => {
+    const previous = before[index], keys = Object.keys(row);
+    return keys.length === Object.keys(previous).length && keys.every(key => row[key] === previous[key]);
+  });
+}
 
 // Persist only numeric/label data used by the panel, keyed by its opaque project ID.
 export function createChannelCache(storage, { now = Date.now, panels } = {}) {
@@ -60,33 +67,26 @@ export function createChannelCache(storage, { now = Date.now, panels } = {}) {
         const safe = panelRecord(row);
         return safe && /^[0-9a-f]{24}$/.test(row.id) ? [{ ...safe, id: row.id }] : [];
       });
-      return remember(key, { updatedAt: stored.updatedAt, records, stamp: JSON.stringify(records) });
+      return remember(key, { updatedAt: stored.updatedAt, records });
     })().finally(() => reads.delete(key));
     reads.set(key, pending);
     return pending;
   }
 
   function set(key, records, { display = true } = {}) {
-    const clean = cleanRecords(records), stamp = JSON.stringify(clean);
+    const normalized = cleanRecords(records);
     const previous = entries.get(key);
-    if (previous?.stamp === stamp) {
-      if (panels && display) {
-        try { panels.publishPanel('current-data', key, { records: previous.records, updatedAt: previous.updatedAt }, now()); }
-        catch { /* The live view still has its last successful result. */ }
-      }
-      return remember(key, previous);
+    const unchanged = previous && sameRecords(previous.records, normalized);
+    if (unchanged && !(panels && display)) return remember(key, previous);
+    const announcedAt = now();
+    const snapshot = remember(key, unchanged ? previous : { records: normalized, updatedAt: announcedAt });
+    if (panels && display) {
+      try { panels.publishPanel('current-data', key, snapshot, announcedAt); }
+      catch { /* The live view still has its last successful result. */ }
     }
-    const updatedAt = now();
-    const snapshot = remember(key, { records: clean, updatedAt, stamp });
-    if (panels) {
-      if (display) {
-        try { panels.publishPanel('current-data', key, { records: clean, updatedAt }, updatedAt); }
-        catch { /* The live view still has its last successful result. */ }
-      }
-      return snapshot;
-    }
+    if (panels) return snapshot;
     const write = (writes.get(key) ?? Promise.resolve())
-      .then(() => storage.set(PREFIX + key, { records: clean, updatedAt }))
+      .then(() => storage.set(PREFIX + key, snapshot))
       .catch(() => {})
       .finally(() => { if (writes.get(key) === write) writes.delete(key); });
     writes.set(key, write);

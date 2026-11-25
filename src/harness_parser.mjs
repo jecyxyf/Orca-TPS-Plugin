@@ -3,25 +3,22 @@ import { createReadStream } from 'node:fs';
 import { open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 import { setImmediate as yieldToRequests, setTimeout as delay } from 'node:timers/promises';
 import * as zlib from 'node:zlib';
 import { HISTORY_DAYS, accumulateRecords, dayKeyAgo, trimRecentRequests } from './personal_stats.mjs';
 import { RECENT_STATS_MS, leaderboardDayStart, leaderboardUsageTimesFrom } from './leaderboard_stats.mjs';
+import { harnessFamily, isSessionHarness, openCodeHarness, OPENCODE_V2, SESSION_HARNESSES } from './harnesses.mjs';
+import { openReadonlyDatabase } from './sqlite.mjs';
 
 const BACKFILL_BYTES = 16 * 1024 * 1024;
 
 const MAX_LINE = 8 * 1024 * 1024;
 const DESKTOP_MATCH_MS = 30_000;
-const EXISTING = ['claude', 'codex', 'opencode', 'pi', 'hermes', 'antigravity'];
-export const MANAGER_HARNESSES = Object.freeze([
-  ...EXISTING, 'gemini', 'grokbuild', 'mcode', 'kimi', 'omp', 'openclaw', 'claude-desktop', 'copilot', 'workbuddy', 'dsh'
-]);
-
 const object = value => value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 const string = value => typeof value === 'string' && value.trim() ? value.trim() : null;
+const shortText = value => typeof value === 'string' && value.length <= 256 ? string(value) : null;
 const token = value => Number.isSafeInteger(value) && value > 0 ? value : 0;
 const sha = text => createHash('sha256').update(text).digest('hex');
 
@@ -29,11 +26,22 @@ function json(text) {
   try { return object(JSON.parse(text)); } catch { return null; }
 }
 
-function timestamp(value) {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return Math.round(value < 1e11 ? value * 1000 : value);
+const EPOCH_UNIT_THRESHOLD = 100_000_000_000;
+
+function epochMilliseconds(value, unit, numericStrings = false) {
+  if (typeof value === 'string') {
+    const text = numericStrings ? value.trim() : value;
+    if (!numericStrings || !/^-?\d+(?:\.\d+)?$/.test(text)) return Date.parse(text);
+    value = Number(text);
   }
-  const parsed = typeof value === 'string' ? Date.parse(value) : NaN;
+  if (!Number.isFinite(value)) return NaN;
+  return unit === 'milliseconds' ? value
+    : Math.round(Math.abs(value) < EPOCH_UNIT_THRESHOLD ? value * 1000 : value);
+}
+
+function timestamp(value) {
+  if (typeof value === 'number' && value <= 0) return null;
+  const parsed = epochMilliseconds(value, 'auto');
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -60,18 +68,52 @@ async function list(directory) {
   });
 }
 
+async function* walkLogTree(root, {
+  maxDepth = Infinity, maxDirectories = Infinity, signal, onError, onLimit,
+  deduplicate = false, countCanonical = false, newestFirst = false, skip, matches
+} = {}) {
+  const pending = [[root, 0]], seen = new Set();
+  let visited = 0;
+  while (pending.length) {
+    if ((countCanonical ? seen.size : visited) >= maxDirectories) {
+      onLimit?.();
+      return;
+    }
+    signal?.throwIfAborted();
+    const [directory, depth] = pending.pop();
+    visited++;
+    let entries;
+    try {
+      if (deduplicate) {
+        const canonical = await realpath(directory);
+        if (seen.has(canonical)) continue;
+        seen.add(canonical);
+        entries = await readdir(directory, { withFileTypes: true });
+      } else entries = await list(directory);
+    } catch (error) {
+      if (!onError) throw error;
+      onError(error);
+      continue;
+    }
+
+    if (newestFirst) entries.sort((a, b) => b.name.localeCompare(a.name));
+    const children = [];
+    for (const entry of entries) {
+      const file = path.join(directory, entry.name);
+      if (entry.isFile() && matches(entry.name, file)) yield file;
+      else if (entry.isDirectory() && !skip?.(entry.name)) {
+        if (depth < maxDepth) children.push([file, depth + 1]);
+        else onLimit?.();
+      }
+    }
+    if (newestFirst) children.reverse();
+    for (const child of children) pending.push(child);
+  }
+}
+
 async function logFiles(directory, matches, depth, signal) {
   const files = [];
-  const pending = [[directory, depth]];
-  while (pending.length) {
-    signal?.throwIfAborted();
-    const [current, remaining] = pending.pop();
-    for (const entry of await list(current)) {
-      const file = path.join(current, entry.name);
-      if (entry.isDirectory() && remaining > 0) pending.push([file, remaining - 1]);
-      if (entry.isFile() && matches(entry.name, file)) files.push(file);
-    }
-  }
+  for await (const file of walkLogTree(directory, { maxDepth: depth, signal, matches })) files.push(file);
   return files.sort();
 }
 
@@ -491,7 +533,7 @@ async function readOpenClaw(file, bytes, signal) {
 }
 
 async function readHarnessDatabase(file, read, signal) {
-  const db = new DatabaseSync(file, { readOnly: true, enableExtensionLoading: false });
+  const db = openReadonlyDatabase(file);
   try {
     const records = [];
     let index = 0;
@@ -881,8 +923,7 @@ async function hermesSessionCatalogue(root) {
   if (cached?.version === version) return cached.rows;
   let db;
   try {
-    db = new DatabaseSync(file, { readOnly: true, enableExtensionLoading: false });
-    db.exec('PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA busy_timeout=100;');
+    db = openReadonlyDatabase(file);
     const columns = new Set(db.prepare('PRAGMA table_info(sessions)').all().map(row => row.name));
     if (!columns.has('id')) return [];
     const cwd = columns.has('cwd') ? 'cwd' : 'NULL AS cwd';
@@ -956,7 +997,7 @@ export class HarnessParser {
     const ompAgent = namedProfile
       ? path.join(ompConfig, 'profiles', namedProfile, 'agent') : path.resolve(env.PI_CODING_AGENT_DIR || path.join(ompConfig, 'agent'));
     const local = discoverUsageUnits(cutoff, {
-      providers: EXISTING, includeRecords: true, excludeOhMyPi: true,
+      providers: SESSION_HARNESSES, includeRecords: true, excludeOhMyPi: true,
       roots: sharedSessionDir && path.isAbsolute(sharedSessionDir) ? { pi: [sharedSessionDir] } : {}
     });
     const files = [], databases = [];
@@ -1052,7 +1093,7 @@ export function reportDiscoveryError(error, onUnavailable) {
 
 export async function configuredRoots(custom = {}, includeDefaults = true, onUnavailable) {
   const defaults = defaultRoots(), roots = {};
-  for (const provider of ['codex', 'claude', 'opencode', 'pi', 'antigravity', 'hermes']) {
+  for (const provider of SESSION_HARNESSES) {
     const values = Array.isArray(custom[provider]) ? custom[provider] : [];
     roots[provider] = [...new Set([...(includeDefaults ? defaults.roots[provider] : []), ...values]
       .filter(value => typeof value === 'string' && value.trim())
@@ -1163,37 +1204,20 @@ async function discover(provider, root, warnings, { maxAgeMs = 20_000 } = {}) {
     discoveryCache.set(key, result); trimCache(discoveryCache);
     return files;
   }
-  const files = [], queue = [{ directory: root, depth: 0 }], sourceWarnings = new ReadWarnings();
-  let visited = 0, limited = false;
+  const files = [], sourceWarnings = new ReadWarnings();
+  let limited = false;
   const matches = file => provider === 'opencode' ? /\.(?:db|sqlite|sqlite3)$/i.test(file) : /\.jsonl$/i.test(file);
   if (rootStat.isFile()) return matches(root) ? [root] : [];
-  const seen = new Set();
-  while (queue.length && files.length < MAX_FILES && visited < MAX_DIRECTORIES) {
-    const { directory, depth } = queue.pop();
-    visited++;
-    let entries;
-    try {
-      const canonical = await realpath(directory);
-      if (seen.has(canonical)) continue;
-      seen.add(canonical);
-      entries = await readdir(directory, { withFileTypes: true });
-    } catch (error) { sourceWarnings.add('notice.partial-session-scan', provider, shortError(error)); continue; }
-    entries.sort((a, b) => b.name.localeCompare(a.name));
-    const children = [];
-    for (const entry of entries) {
-      const file = path.join(directory, entry.name);
-      if (entry.isFile() && matches(entry.name)) {
-        files.push(file);
-        if (files.length >= MAX_FILES) { limited = true; break; }
-      } else if (entry.isDirectory() && !skippedDirectories.has(entry.name.toLowerCase())) {
-        if (depth < MAX_DEPTH) children.push({ directory: file, depth: depth + 1 });
-        else limited = true;
-      }
-    }
-    // The stack visits recent date-named folders before older history.
-    queue.push(...children.reverse());
+  const entries = walkLogTree(root, {
+    maxDepth: MAX_DEPTH, maxDirectories: MAX_DIRECTORIES, deduplicate: true, newestFirst: true, matches,
+    skip: name => skippedDirectories.has(name.toLowerCase()),
+    onLimit: () => { limited = true; },
+    onError: error => sourceWarnings.add('notice.partial-session-scan', provider, shortError(error))
+  });
+  for await (const file of entries) {
+    files.push(file);
+    if (files.length >= MAX_FILES) { limited = true; break; }
   }
-  limited ||= queue.length > 0;
   if (limited) sourceWarnings.add('notice.session-scan-limit', provider);
   const result = { at: Date.now(), files, warnings: [...sourceWarnings] };
   replayWarnings(warnings, result);
@@ -1227,9 +1251,7 @@ async function antigravityWorkspace(transcriptPath, platform) {
   if (cached?.stamp === stamp) return cached.workspace;
   let db;
   try {
-    const { DatabaseSync } = await import('node:sqlite');
-    db = new DatabaseSync(dbPath, { readOnly: true, enableExtensionLoading: false });
-    db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=100; PRAGMA trusted_schema=OFF;');
+    db = openReadonlyDatabase(dbPath);
     const row = tables(db).has('trajectory_metadata_blob')
       ? db.prepare("SELECT data FROM trajectory_metadata_blob WHERE id = 'main' AND length(data) <= 262144").get()
       : null;
@@ -1256,13 +1278,9 @@ async function readAntigravityTimings(transcriptPath, note) {
   const dbPath = antigravityNativeDbPath(transcriptPath);
   const database = dbPath ? await info(dbPath) : null;
   if (!database?.isFile()) return new Map();
-  let DatabaseSync;
-  try { ({ DatabaseSync } = await import('node:sqlite')); }
-  catch { note?.('notice.antigravity-no-sqlite'); return new Map(); }
   let db;
   try {
-    db = new DatabaseSync(dbPath, { readOnly: true, enableExtensionLoading: false });
-    db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=500; PRAGMA trusted_schema=OFF;');
+    db = openReadonlyDatabase(dbPath, 500);
     const steps = db.prepare('SELECT idx, metadata FROM steps WHERE step_type = 15').all();
     const generationQuery = db.prepare('SELECT data FROM gen_metadata WHERE idx = ?');
     const generations = new Map();
@@ -1530,16 +1548,13 @@ async function readDatabase(candidate, maxSessions, warnings, target) {
     : target ? JSON.stringify([candidate.path, target.provider, target.sessionId]) : candidate.path;
   const cached = databaseCache.get(cacheKey);
   if (cached?.stamp === stamp) { replayWarnings(warnings, cached); return cached.sessions; }
-  let DatabaseSync;
-  try { ({ DatabaseSync } = await import('node:sqlite')); }
-  catch { warnings.add('notice.opencode-no-sqlite'); return []; }
   let db;
   try {
-    db = new DatabaseSync(candidate.path, { readOnly: true, enableExtensionLoading: false });
-    db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=1000; PRAGMA trusted_schema=OFF; BEGIN;');
+    db = openReadonlyDatabase(candidate.path, 1000);
+    db.exec('BEGIN');
     const available = tables(db), sessions = [], seen = new Set(), sourceWarnings = new ReadWarnings();
     for (const v2 of [true, false]) {
-      if (target && !target.cwdFilter && (target.provider === 'opencode2') !== v2) continue;
+      if (target && !target.cwdFilter && (target.provider === OPENCODE_V2) !== v2) continue;
       const table = v2 ? 'session_v2' : 'session', messageTable = v2 ? 'session_message' : 'message';
       if (!available.has(table) || !available.has(messageTable)) continue;
       const sessionColumns = columns(db, table), messageColumns = columns(db, messageTable);
@@ -1567,7 +1582,7 @@ async function readDatabase(candidate, maxSessions, warnings, target) {
       for (const meta of metadata) {
         if (seen.has(meta.id)) continue;
         seen.add(meta.id);
-        const provider = v2 ? 'opencode2' : 'opencode';
+        const provider = openCodeHarness(v2);
         const { records, truncated } = readOpenCodeRecords(db, candidate, provider, messageTable, v2, messageColumns, meta.id);
         if (truncated) sourceWarnings.add('notice.opencode-message-limit');
         sessions.push({ id: `${provider}:${meta.id}`, title: safeTitle(meta.title) || `${provider} · ${String(meta.id).slice(-20)}`,
@@ -1599,12 +1614,9 @@ async function readCcSwitchProxyRows(dbPath, provider, sessionId, records) {
   const cached = ccSwitchCache.get(cacheKey);
   if (cached?.stamp === stamp) return cached.rows;
 
-  let DatabaseSync;
-  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { return []; }
   let db;
   try {
-    db = new DatabaseSync(canonical, { readOnly: true, enableExtensionLoading: false });
-    db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=500; PRAGMA trusted_schema=OFF;');
+    db = openReadonlyDatabase(canonical, 500);
     const available = tables(db);
     if (!available.has('proxy_request_logs')) {
       ccSwitchCache.set(cacheKey, { stamp, rows: [] }); trimCache(ccSwitchCache);
@@ -1616,7 +1628,7 @@ async function readCcSwitchProxyRows(dbPath, provider, sessionId, records) {
 
     const optCol = (col, fallback = 'NULL') => cols.has(col) ? `"${col}"` : `${fallback} AS "${col}"`;
     const sourceFilter = cols.has('data_source') ? "COALESCE(data_source, 'proxy') = 'proxy'" : '1 = 1';
-    const appFamily = provider === 'opencode2' ? 'opencode' : provider;
+    const appFamily = harnessFamily(provider);
     const appClause = appFamily === 'claude' ? "app_type IN ('claude', 'claude-desktop')" : 'app_type = ?';
     const params = appFamily === 'claude' ? [] : [appFamily];
 
@@ -1720,11 +1732,11 @@ function preferBetterSession(map, session) {
 
 async function readSingleTargetSession(target, options = {}) {
   const warnings = new ReadWarnings(), budget = { remaining: MAX_SCAN_BYTES };
-  if (!target || !['codex', 'claude', 'opencode', 'opencode2', 'pi', 'antigravity', 'hermes'].includes(target.provider)
+  if (!target || !isSessionHarness(target.provider)
       || typeof target.sessionId !== 'string' || !target.sessionId || target.sessionId.length > 256) {
     return { session: null, warnings: [['notice.session-unidentified']] };
   }
-  const isDatabase = target.provider === 'opencode' || target.provider === 'opencode2';
+  const isDatabase = harnessFamily(target.provider) === 'opencode';
   const rootProvider = isDatabase ? 'opencode' : target.provider;
   const explicitPath = isDatabase ? target.dbPath : target.transcriptPath;
   const ccSwitchDb = options.skipProxyMerge
@@ -1989,33 +2001,22 @@ const USAGE_MAX_FILE_BYTES = 256 * 1024 * 1024, USAGE_MAX_UNITS = 20_000, USAGE_
 async function walkRecentJsonl(root, cutoffMs, onUnavailable) {
   const rootStat = await info(root, onUnavailable);
   if (!rootStat?.isDirectory()) return [];
-  const found = [], queue = [root], seen = new Set();
-  while (queue.length && seen.size < USAGE_MAX_DIRECTORIES) {
-    const directory = queue.pop();
-    let canonical, entries;
-    try {
-      canonical = await realpath(directory);
-      if (seen.has(canonical)) continue;
-      seen.add(canonical);
-      entries = await readdir(directory, { withFileTypes: true });
-    } catch (error) { reportDiscoveryError(error, onUnavailable); continue; }
-    for (const entry of entries) {
-      const file = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        if (!skippedDirectories.has(entry.name.toLowerCase())) queue.push(file);
-      } else if (entry.isFile() && /\.jsonl$/i.test(entry.name)) {
-        const metadata = await info(file, onUnavailable);
-        if (metadata?.isFile() && metadata.mtimeMs >= cutoffMs) found.push({ path: file, size: metadata.size, mtimeMs: metadata.mtimeMs });
-      }
-    }
+  const found = [];
+  const entries = walkLogTree(root, {
+    maxDirectories: USAGE_MAX_DIRECTORIES, deduplicate: true, countCanonical: true,
+    matches: name => /\.jsonl$/i.test(name),
+    skip: name => skippedDirectories.has(name.toLowerCase()),
+    onError: error => reportDiscoveryError(error, onUnavailable)
+  });
+  for await (const file of entries) {
+    const metadata = await info(file, onUnavailable);
+    if (metadata?.isFile() && metadata.mtimeMs >= cutoffMs) found.push({ path: file, size: metadata.size, mtimeMs: metadata.mtimeMs });
   }
   return found;
 }
 
 const USAGE_STREAM_BATCH_ROWS = 2_000;
 const USAGE_CHUNK_BYTES = 1024 * 1024;
-const usageObject = value => value && typeof value === 'object' && !Array.isArray(value) ? value : null;
-const usageText = value => typeof value === 'string' && value.trim() && value.length <= 256 ? value.trim() : null;
 
 function readPacer() {
   let spent = 0;
@@ -2064,7 +2065,7 @@ async function streamJsonRows(file, onBatch, pace) {
 }
 
 function parsedRow(line) {
-  try { return usageObject(JSON.parse(line)); } catch { return null; }
+  try { return object(JSON.parse(line)); } catch { return null; }
 }
 
 /** Codex keeps its session id in the first session_meta row, as parseJsonl reads it. */
@@ -2075,7 +2076,7 @@ async function codexSessionId(file) {
     const buffer = Buffer.alloc(size), { bytesRead } = await handle.read(buffer, 0, size, 0);
     for (const line of buffer.subarray(0, bytesRead).toString('utf8').split('\n').slice(0, 30)) {
       const row = parsedRow(line);
-      if (row?.type === 'session_meta') return usageText(usageObject(row.payload)?.id);
+      if (row?.type === 'session_meta') return shortText(object(row.payload)?.id);
     }
     return null;
   } finally { await handle.close(); }
@@ -2173,10 +2174,8 @@ async function fileUsageUnit(provider, file, rankWindow, onUnavailable, excludeO
 }
 
 async function readOpenCodeSession(dbPath, v2, sessionId, rankWindow, cwd) {
-  const { DatabaseSync } = await import('node:sqlite');
-  const db = new DatabaseSync(dbPath, { readOnly: true, enableExtensionLoading: false });
+  const db = openReadonlyDatabase(dbPath);
   try {
-    db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=100; PRAGMA trusted_schema=OFF;');
     const messageTable = v2 ? 'session_message' : 'message', orderColumn = v2 ? 'seq' : 'rowid';
     const rows = db.prepare(`SELECT id,${v2 ? 'type' : 'NULL AS type'},time_created,${projectedData()}
       FROM ${messageTable} WHERE session_id=? ORDER BY ${orderColumn} ASC`).iterate(sessionId);
@@ -2195,7 +2194,7 @@ async function readOpenCodeSession(dbPath, v2, sessionId, rankWindow, cwd) {
     }
     collect();
     const entries = rank?.records ? [...records.values()].map(record => ({ ...record, sessionId, cwd })) : records.values();
-    accumulateRecords(days, v2 ? 'opencode2' : 'opencode', entries,
+    accumulateRecords(days, openCodeHarness(v2), entries,
       { minDay: dayKeyAgo(Date.now(), HISTORY_DAYS - 1), leaderboardDays: rank });
     return usageResult(days, rank);
   } finally { db.close(); }
@@ -2205,19 +2204,17 @@ async function readOpenCodeSession(dbPath, v2, sessionId, rankWindow, cwd) {
 async function openCodeUsageUnits(dbPath, cutoffMs, rankWindow, onUnavailable) {
   const database = await info(dbPath, onUnavailable);
   if (!database?.isFile()) return [];
-  const { DatabaseSync } = await import('node:sqlite');
   const units = [];
   let db;
   try {
-    db = new DatabaseSync(dbPath, { readOnly: true, enableExtensionLoading: false });
-    db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=100; PRAGMA trusted_schema=OFF;');
+    db = openReadonlyDatabase(dbPath);
     const available = tables(db);
     for (const v2 of [false, true]) {
       const table = v2 ? 'session_v2' : 'session', messageTable = v2 ? 'session_message' : 'message';
       if (!available.has(table) || !available.has(messageTable)) continue;
       const sessionColumns = columns(db, table);
       if (!sessionColumns.has('id') || !sessionColumns.has('time_updated')) continue;
-      const provider = v2 ? 'opencode2' : 'opencode';
+      const provider = openCodeHarness(v2);
       const directory = sessionColumns.has('directory') ? 'directory' : 'NULL AS directory';
       const rows = db.prepare(`SELECT id, time_updated, ${directory} FROM ${table} WHERE time_updated >= ?`).iterate(cutoffMs);
       const messageCount = db.prepare(`SELECT COUNT(*) AS n FROM ${messageTable} WHERE session_id=?`);
@@ -2368,11 +2365,8 @@ export async function scanSessions(options = {}) {
   return { sessions: [...unique.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, maxSessions), warnings: [...warnings] };
 }
 
-const record = value => value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
-const name = value => typeof value === 'string' && value.trim() && value.length <= 256 ? value.trim() : null;
-const time = value => typeof value === 'number' && Number.isFinite(value) ? value : typeof value === 'string' ? Date.parse(value) : NaN;
-const jsonValue = value => { try { return record(JSON.parse(value)); } catch { return null; } };
+const millisecondTimestamp = value => epochMilliseconds(value, 'milliseconds');
 
 export const SPEED_MIN_OUTPUT_TOKENS = 100;
 export const SPEED_MIN_GENERATION_MS = 100;
@@ -2433,7 +2427,7 @@ export function computeSpeedMetrics({ outputTokens, durationMs, firstTokenMs = n
 }
 
 export function normalizeCodexModel(value) {
-  const raw = name(value);
+  const raw = shortText(value);
   if (!raw) return null;
   const afterSlash = raw.slice(raw.lastIndexOf('/') + 1).trim().toLowerCase();
   if (!afterSlash) return null;
@@ -2466,7 +2460,7 @@ function buildRecord({
   const speed = computeSpeedMetrics({ outputTokens: outTok, durationMs: validDuration, firstTokenMs: validFirstToken, dataSource });
   const cacheHitRate = computeCacheHitRate(inTok, readTok, writeTok, cacheInclusive);
   const sec = Number.isFinite(createdAtSec) ? Math.floor(createdAtSec) : Math.floor(completedAt / 1000);
-  const cleanModel = name(model);
+  const cleanModel = shortText(model);
   return {
     id,
     ...(rawId ? { rawId } : {}),
@@ -2503,7 +2497,7 @@ export function recentRecords(records, limit = 100) {
 const maxOpt = (a, b) => a === null ? b : b === null ? a : Math.max(a, b);
 
 function parseCodexTokens(value) {
-  const obj = record(value);
+  const obj = object(value);
   if (!obj || !CODEX_USAGE_KEYS.some(key => count(obj[key]) !== null)) return null;
   return {
     input: count(obj.input_tokens) ?? 0,
@@ -2516,7 +2510,7 @@ function parseCodexTokens(value) {
 }
 
 function codexTokenSignature(info) {
-  const total = record(info?.total_token_usage), last = record(info?.last_token_usage);
+  const total = object(info?.total_token_usage), last = object(info?.last_token_usage);
   if (!parseCodexTokens(total) && !parseCodexTokens(last)) return null;
   const pick = src => src ? [
     count(src.input_tokens),
@@ -2578,11 +2572,11 @@ export function createCodexParser(sessionId, { truncated = false, limit = 100 } 
   const feed = batch => {
   for (const row of batch) {
     const i = rowIndex++;
-    const atRaw = time(row.timestamp), at = Number.isFinite(atRaw) ? atRaw : null;
-    const payload = record(row.payload);
+    const atRaw = millisecondTimestamp(row.timestamp), at = Number.isFinite(atRaw) ? atRaw : null;
+    const payload = object(row.payload);
 
     if (row.type === 'turn_context') {
-      const m = normalizeCodexModel(payload?.model ?? record(payload?.info)?.model);
+      const m = normalizeCodexModel(payload?.model ?? object(payload?.info)?.model);
       if (m) currentModel = m;
       if (at !== null) lastBoundaryMs = maxOpt(lastBoundaryMs, at);
       continue;
@@ -2617,7 +2611,7 @@ export function createCodexParser(sessionId, { truncated = false, limit = 100 } 
         pendingUsageRecord = {
           timestampMs: at,
           usage: parsedUsage,
-          key: name(payload.response_id) ?? `line-${i}`,
+          key: shortText(payload.response_id) ?? `line-${i}`,
           model: currentModel
         };
       }
@@ -2627,13 +2621,13 @@ export function createCodexParser(sessionId, { truncated = false, limit = 100 } 
     if (row.type !== 'event_msg' || !payload) continue;
 
     if (payload.type === 'thread_settings_applied') {
-      const m = normalizeCodexModel(record(payload.thread_settings)?.model);
+      const m = normalizeCodexModel(object(payload.thread_settings)?.model);
       if (m) currentModel = m;
       continue;
     }
 
     if (payload.type === 'item_completed') {
-      const itemType = record(payload.item)?.type;
+      const itemType = object(payload.item)?.type;
       if (itemType === 'Reasoning' || itemType === 'AgentMessage') {
         const startedAt = count(payload.started_at_ms);
         if (startedAt !== null && startedAt > 0) {
@@ -2649,7 +2643,7 @@ export function createCodexParser(sessionId, { truncated = false, limit = 100 } 
     }
 
     if (payload.type !== 'token_count') continue;
-    const info = record(payload.info);
+    const info = object(payload.info);
     if (!info) continue;
     const explicitModel = normalizeCodexModel(info.model ?? info.model_name ?? payload.model);
     if (explicitModel) currentModel = explicitModel;
@@ -2658,7 +2652,7 @@ export function createCodexParser(sessionId, { truncated = false, limit = 100 } 
     if (!signature) continue;
     const total = parseCodexTokens(info.total_token_usage);
     const last = parseCodexTokens(info.last_token_usage);
-    const limitId = name(record(payload.rate_limits)?.limit_id) ?? '';
+    const limitId = shortText(object(payload.rate_limits)?.limit_id) ?? '';
     const isDuplicate = total !== null && (
       lastSignatureBySource.get(limitId) === signature || previousTokenSignature === signature
     );
@@ -2768,28 +2762,28 @@ export function createClaudeParser({ isSubagent = false, limit = 100 } = {}) {
   const timings = new Map();
 
   function addRow(row) {
-    const uuid = name(row.uuid);
-    const atRaw = time(row.timestamp), at = Number.isFinite(atRaw) ? atRaw : null;
+    const uuid = shortText(row.uuid);
+    const atRaw = millisecondTimestamp(row.timestamp), at = Number.isFinite(atRaw) ? atRaw : null;
     if (uuid) {
       chain.set(uuid, {
-        parent: name(row.parentUuid),
+        parent: shortText(row.parentUuid),
         timestampMs: at,
         isAttachment: row.type === 'attachment'
       });
     }
     if (row.type !== 'assistant') return;
-    const message = record(row.message);
+    const message = object(row.message);
     if (!message) return;
-    const msgId = name(message.id) ?? uuid;
+    const msgId = shortText(message.id) ?? uuid;
     if (!msgId) return;
 
-    const usage = record(message.usage);
+    const usage = object(message.usage);
     const inputTokens = count(usage?.input_tokens) ?? 0;
     const outputTokens = count(usage?.output_tokens) ?? 0;
     const cacheReadTokens = count(usage?.cache_read_input_tokens) ?? 0;
     const cacheCreationTokens = count(usage?.cache_creation_input_tokens) ?? 0;
-    const stopReason = name(message.stop_reason);
-    const model = name(message.model);
+    const stopReason = shortText(message.stop_reason);
+    const model = shortText(message.model);
     const sidechain = Boolean(isSubagent || row.isSidechain === true);
 
     let timing = timings.get(msgId);
@@ -2797,11 +2791,11 @@ export function createClaudeParser({ isSubagent = false, limit = 100 } = {}) {
       const blockIndex = row.apiBlockIndex;
       const startsAtFirstBlock = blockIndex === undefined || blockIndex === null || blockIndex === 0;
       const thinkingDuration = count(row.thinkingDurationMs);
-      const firstBlock = Array.isArray(message.content) ? record(message.content[0]) : null;
+      const firstBlock = Array.isArray(message.content) ? object(message.content[0]) : null;
       const firstOutputMs = startsAtFirstBlock && at !== null && thinkingDuration !== null && thinkingDuration > 0 && firstBlock?.type === 'thinking'
         ? at - thinkingDuration : null;
       timing = {
-        firstParent: name(row.parentUuid),
+        firstParent: shortText(row.parentUuid),
         startsAtFirstBlock,
         endMs: at ?? -Infinity,
         firstOutputMs
@@ -2883,22 +2877,11 @@ export function createClaudeParser({ isSubagent = false, limit = 100 } = {}) {
 }
 
 function piTimestampMs(value) {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.abs(value) < 100_000_000_000 ? Math.round(value * 1000) : Math.round(value);
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
-      const numeric = Number(trimmed);
-      if (Number.isFinite(numeric)) return Math.abs(numeric) < 100_000_000_000 ? Math.round(numeric * 1000) : Math.round(numeric);
-    }
-    return Date.parse(trimmed);
-  }
-  return NaN;
+  return epochMilliseconds(value, 'auto', true);
 }
 
 function extractPiTokens(usageObj) {
-  const u = record(usageObj);
+  const u = object(usageObj);
   if (!u) return null;
   const input = count(u.input) ?? 0;
   const output = count(u.output) ?? 0;
@@ -2916,10 +2899,10 @@ function createPiParser({ limit = 100 } = {}) {
   function addRow(row) {
     const i = rowIndex++;
     if (row.type === 'model_change') {
-      currentModel = name(row.modelId) ?? name(row.model) ?? currentModel;
+      currentModel = shortText(row.modelId) ?? shortText(row.model) ?? currentModel;
       return;
     }
-    const entryId = name(row.id) ?? `line-${i}`;
+    const entryId = shortText(row.id) ?? `line-${i}`;
     const entryAt = piTimestampMs(row.timestamp);
 
     if (row.type === 'compaction' || row.type === 'branch_summary' || row.type === 'model_usage') {
@@ -2938,25 +2921,25 @@ function createPiParser({ limit = 100 } = {}) {
         cacheInclusive: false,
         outputTokens: tokens.output,
         durationMs: latencyMs,
-        model: name(row.model) ?? name(row.modelId) ?? currentModel
+        model: shortText(row.model) ?? shortText(row.modelId) ?? currentModel
       }));
       return;
     }
 
     if (row.type !== 'message') return;
-    const message = record(row.message);
+    const message = object(row.message);
     if (!message) return;
 
-    if (message.role === 'toolResult' && message.toolName === 'subagent' && !record(message.usage)) {
-      const details = record(message.details ?? row.details);
+    if (message.role === 'toolResult' && message.toolName === 'subagent' && !object(message.usage)) {
+      const details = object(message.details ?? row.details);
       if (details && ['single', 'parallel', 'chain'].includes(details.mode) && !details.sessionFile && Array.isArray(details.results)) {
         details.results.forEach((subResult, subIdx) => {
-          const sr = record(subResult);
+          const sr = object(subResult);
           if (!sr) return;
           let emittedChild = false;
           if (Array.isArray(sr.messages)) {
             sr.messages.forEach((child, childIdx) => {
-              const cm = record(child);
+              const cm = object(child);
               if (cm?.role !== 'assistant') return;
               const tokens = extractPiTokens(cm.usage);
               if (!tokens) return;
@@ -2974,7 +2957,7 @@ function createPiParser({ limit = 100 } = {}) {
                 cacheInclusive: false,
                 outputTokens: tokens.output,
                 durationMs: null,
-                model: name(cm.model) ?? currentModel,
+                model: shortText(cm.model) ?? currentModel,
                 isSubagent: true
               }));
             });
@@ -2992,7 +2975,7 @@ function createPiParser({ limit = 100 } = {}) {
                 cacheInclusive: false,
                 outputTokens: tokens.output,
                 durationMs: null,
-                model: name(sr.model) ?? currentModel,
+                model: shortText(sr.model) ?? currentModel,
                 isSubagent: true
               }));
             }
@@ -3028,7 +3011,7 @@ function createPiParser({ limit = 100 } = {}) {
       cacheInclusive: false,
       outputTokens: tokens.output,
       durationMs: latencyMs,
-      model: name(message.model) ?? currentModel
+      model: shortText(message.model) ?? currentModel
     }));
   }
   return {
@@ -3047,7 +3030,7 @@ export function antigravitySessionIdFromPath(file) {
   if (typeof file !== 'string') return null;
   const parts = file.split(/[\\/]+/).filter(Boolean);
   if (parts.length < 4 || parts.slice(-3).join('/') !== ANTIGRAVITY_TRANSCRIPT_TAIL.join('/')) return null;
-  return name(parts[parts.length - 4]);
+  return shortText(parts[parts.length - 4]);
 }
 
 // Antigravity's native store is protobuf. This wire reader keeps only the fields used here: no schema, no dependencies.
@@ -3202,7 +3185,7 @@ function createAntigravityParser({ limit = 100 } = {}) {
     const stepIndex = count(row.step_index);
     const inputTokens = count(row.input_tokens), outputTokens = count(row.output_tokens), cacheReadTokens = count(row.cache_read_tokens);
     if (stepIndex === null || (inputTokens === null && outputTokens === null && cacheReadTokens === null)) return;
-    steps.push([stepIndex, { inputTokens, outputTokens, cacheReadTokens, selectedModel, createdAt: time(row.created_at) }]);
+    steps.push([stepIndex, { inputTokens, outputTokens, cacheReadTokens, selectedModel, createdAt: millisecondTimestamp(row.created_at) }]);
   }
 
   function buildStep(stepIndex, step, native) {
@@ -3234,21 +3217,21 @@ function createAntigravityParser({ limit = 100 } = {}) {
   };
 }
 
-const jsonlRows = text => text.split('\n').map(jsonValue).filter(Boolean);
+const jsonlRows = text => text.split('\n').map(json).filter(Boolean);
 
 function jsonlMetadata(headers, provider, options = {}) {
   let sessionId = null, cwd = null;
   for (const row of headers.slice(0, 30)) {
     if (provider === 'codex' && row.type === 'session_meta') {
-      sessionId = name(row.payload?.id); cwd = name(row.payload?.cwd);
+      sessionId = shortText(row.payload?.id); cwd = shortText(row.payload?.cwd);
     } else if (provider === 'pi' && row.type === 'session') {
-      sessionId = name(row.id); cwd = name(row.cwd);
+      sessionId = shortText(row.id); cwd = shortText(row.cwd);
     } else if (provider === 'claude') {
-      sessionId ??= name(row.sessionId); cwd ??= name(row.cwd);
+      sessionId ??= shortText(row.sessionId); cwd ??= shortText(row.cwd);
     }
   }
   // Antigravity transcripts have no header; the conversation id comes from the directory path.
-  if (provider === 'antigravity') sessionId = name(options.sessionId);
+  if (provider === 'antigravity') sessionId = shortText(options.sessionId);
   return { sessionId, cwd };
 }
 
@@ -3285,13 +3268,13 @@ export function parseJsonl(text, provider, headerText = '', options = {}) {
 export function parseOpenCodeRows(rows, v2 = false, { limit = 100 } = {}) {
   const byId = new Map();
   for (const row of rows) {
-    const data = record(row.data) ?? jsonValue(row.data);
+    const data = object(row.data) ?? json(row.data);
     if (!data) continue;
-    const rowId = name(String(row.id ?? ''));
+    const rowId = shortText(String(row.id ?? ''));
     if (!rowId) continue;
     const type = row.type ?? data.role;
-    const timeObj = record(data.time);
-    const completedMs = time(timeObj?.completed);
+    const timeObj = object(data.time);
+    const completedMs = millisecondTimestamp(timeObj?.completed);
     if (v2) {
       if (type === 'assistant') {
         if (!Number.isFinite(completedMs) || completedMs <= 0) continue;
@@ -3302,12 +3285,12 @@ export function parseOpenCodeRows(rows, v2 = false, { limit = 100 } = {}) {
       if (type !== 'assistant' || !Number.isFinite(completedMs) || completedMs <= 0) continue;
     }
 
-    const tokens = record(data.tokens);
+    const tokens = object(data.tokens);
     if (!tokens) continue;
     const input = count(tokens.input) ?? 0;
     const output = count(tokens.output) ?? 0;
     const reasoning = count(tokens.reasoning) ?? 0;
-    const cache = record(tokens.cache);
+    const cache = object(tokens.cache);
     const cacheRead = count(cache?.read) ?? 0;
     const cacheWrite = count(cache?.write) ?? 0;
     if (input === 0 && output === 0 && reasoning === 0 && cacheRead === 0 && cacheWrite === 0) continue;
@@ -3315,18 +3298,18 @@ export function parseOpenCodeRows(rows, v2 = false, { limit = 100 } = {}) {
     const totalOutput = count(output + reasoning);
     if (totalOutput === null) continue;
 
-    const createdRaw = time(timeObj?.created);
-    const createdMs = Number.isFinite(createdRaw) && createdRaw > 0 ? createdRaw : time(row.time_created);
-    const streamedMs = time(timeObj?.streamed);
+    const createdRaw = millisecondTimestamp(timeObj?.created);
+    const createdMs = Number.isFinite(createdRaw) && createdRaw > 0 ? createdRaw : millisecondTimestamp(row.time_created);
+    const streamedMs = millisecondTimestamp(timeObj?.streamed);
     const endMs = Number.isFinite(streamedMs) && Number.isFinite(createdMs) && streamedMs > createdMs
       ? streamedMs : completedMs;
     const durationMs = Number.isFinite(createdMs) && createdMs > 0 && Number.isFinite(endMs) && endMs > createdMs
       ? Math.round(endMs - createdMs) : null;
 
-    const modelObject = record(data.model);
-    const model = name(data.modelID) ?? name(data.modelId) ?? name(data.model) ?? name(modelObject?.id) ?? name(modelObject?.modelID);
+    const modelObject = object(data.model);
+    const model = shortText(data.modelID) ?? shortText(data.modelId) ?? shortText(data.model) ?? shortText(modelObject?.id) ?? shortText(modelObject?.modelID);
     const completedAt = Number.isFinite(completedMs) && completedMs > 0 ? completedMs
-      : Number.isFinite(endMs) && endMs > 0 ? endMs : time(row.time_created);
+      : Number.isFinite(endMs) && endMs > 0 ? endMs : millisecondTimestamp(row.time_created);
     if (!Number.isFinite(completedAt)) continue;
 
     const entry = buildRecord({
@@ -3349,13 +3332,13 @@ export function parseOpenCodeRows(rows, v2 = false, { limit = 100 } = {}) {
 }
 
 export function buildProxyRecord(row) {
-  const r = record(row);
+  const r = object(row);
   if (!r) return null;
-  const requestId = name(r.request_id);
+  const requestId = shortText(r.request_id);
   const createdAtSec = typeof r.created_at === 'number' && Number.isFinite(r.created_at) ? Math.floor(r.created_at) : null;
   if (!requestId || createdAtSec === null) return null;
   const cacheInclusive = r.input_token_semantics === 1 || r.app_type === 'grokbuild';
-  const effectiveModel = name(r.pricing_model) ?? name(r.model) ?? name(r.request_model);
+  const effectiveModel = shortText(r.pricing_model) ?? shortText(r.model) ?? shortText(r.request_model);
   const entry = buildRecord({
     id: `proxy:${requestId}`,
     rawId: requestId,
@@ -3374,9 +3357,9 @@ export function buildProxyRecord(row) {
   if (!entry) return null;
   return {
     ...entry,
-    sessionId: name(r.session_id),
-    proxyModel: name(r.model),
-    proxyRequestModel: name(r.request_model)
+    sessionId: shortText(r.session_id),
+    proxyModel: shortText(r.model),
+    proxyRequestModel: shortText(r.request_model)
   };
 }
 
@@ -3486,7 +3469,7 @@ export function mergeChannelProxyRecords(entries) {
   // Copied/forked histories may contain the same real request in multiple sessions. Only alias
   // sources with their own exact proxy evidence in the same provider family, never token-only matches.
   const exactKey = source => JSON.stringify([
-    source.entry.provider === 'opencode2' ? 'opencode' : source.entry.provider, source.log.rawId
+    harnessFamily(source.entry.provider), source.log.rawId
   ]);
   const exactMatches = new Map();
   for (const source of sources.values()) {

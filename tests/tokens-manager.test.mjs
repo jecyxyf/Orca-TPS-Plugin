@@ -21,6 +21,7 @@ import { createPacketBuffer, openPacketBuffer } from '../server/tokens-manager-b
 import { createLeaderboardServer } from '../server/app.mjs';
 import { openLeaderboardStore } from '../server/store.mjs';
 import { runTokensManager } from '../src/token_manager.mjs';
+import { MANAGER_PROTOCOL_VERSION } from '../src/orca_connection.mjs';
 import { installTokensManagerBundle, readTokensManagerBundle } from '../src/tokens-manager-client.mjs';
 
 const at = Date.parse('2026-06-15T12:03:00Z');
@@ -30,14 +31,14 @@ const entry = (id, daysAgo, tokens = 100) => ({
   freshInputTokens: tokens, outputTokens: 200, tokensPerSecond: 30, isEstimatedSpeed: true
 });
 
-test('the manager installation keeps exactly six modules and preserves data in the parent directory', async t => {
+test('the manager installation keeps only the required modules and preserves data in the parent directory', async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'tps-manager-bundle-'));
   t.after(() => rm(root, { force: true, recursive: true }));
   const bin = path.join(root, 'bin');
   await mkdir(path.join(bin, 'locales'), { recursive: true });
   const bundle = await readTokensManagerBundle();
-  const expected = ['database.mjs', 'harness_parser.mjs', 'leaderboard_stats.mjs',
-    'orca_connection.mjs', 'personal_stats.mjs', 'token_manager.mjs'];
+  const expected = ['database.mjs', 'harness_parser.mjs', 'harnesses.mjs', 'leaderboard_stats.mjs',
+    'orca_connection.mjs', 'personal_stats.mjs', 'sqlite.mjs', 'token_manager.mjs'];
   assert.deepEqual(Object.keys(bundle.files).sort(), expected);
   for (const name of ['data.mjs', 'remote-collector.mjs', 'locales/zh-CN.xml', 'version', 'local-addon.mjs']) {
     await writeFile(path.join(bin, name), 'old copy');
@@ -628,7 +629,7 @@ test('keeps its lease across disconnects and drains before replacing the running
     await processJob;
     await rm(root, { recursive: true, force: true });
   });
-  function subscribe(bundleVersion = previousVersion) {
+  function subscribe(bundleVersion = previousVersion, protocolVersion) {
     const child = spawn(process.execPath, ['src/token_manager.mjs', '--connect'],
       { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, ORCA_TPS_TOKENS_ROOT: root } });
     const events = [];
@@ -647,13 +648,17 @@ test('keeps its lease across disconnects and drains before replacing the running
     const exit = new Promise(resolve => child.once('exit', resolve));
     const peer = { events, event, stop, send, exit };
     peers.add(peer);
-    send({ type: 'hello', timeZone: 'UTC', local: true, bundleVersion });
+    send({ type: 'hello', timeZone: 'UTC', local: true, bundleVersion, protocolVersion });
     return peer;
   }
-  const a = subscribe(), b = subscribe();
+  const a = subscribe(), b = subscribe(previousVersion, MANAGER_PROTOCOL_VERSION);
   const first = await a.event('ready');
   assert.equal(first.bundleVersion, previousVersion);
+  assert.equal(first.protocolVersion, MANAGER_PROTOCOL_VERSION);
   assert.equal((await b.event('ready')).deviceGuid, first.deviceGuid);
+  const unsupported = subscribe(previousVersion, MANAGER_PROTOCOL_VERSION + 1);
+  await unsupported.exit;
+  assert.equal(unsupported.events.some(event => event.type === 'ready'), false);
   await runTokensManager(root, { scan: () => assert.fail('second process acquired the socket') });
   await a.event('progress');
   assert.equal(a.events.some(event => event.type === 'summary'), false);
@@ -718,7 +723,7 @@ test('manager rounds use the same device versions for Personal Stats and every r
   }));
   const [hub, a, b] = devices;
   const bridges = new Set(), jobs = new Set(), dials = [];
-  let clock = at;
+  let clock = at, bannedDevice;
   t.after(async () => {
     for (const child of bridges) {
       if (child.stdin.writable) child.stdin.end(JSON.stringify({ type: 'unsubscribe' }) + '\n');
@@ -751,7 +756,11 @@ test('manager rounds use the same device versions for Personal Stats and every r
         db.finishScan(scannedAt);
       },
       async fetcher(url, options) {
-        if (!url.endsWith('/config')) device.uploads.push(JSON.parse(options.body));
+        if (!url.endsWith('/config')) {
+          const packet = JSON.parse(options.body);
+          device.uploads.push(packet);
+          if (packet.deviceGuid === bannedDevice) return Response.json({ code: 'banned' }, { status: 403 });
+        }
         return Response.json({});
       }
     });
@@ -801,7 +810,7 @@ test('manager rounds use the same device versions for Personal Stats and every r
   assert.equal(fromB.ranking.publishedAt, fromB.publishedAt);
   const injected = client(a);
   injected.send({ type: 'sync-hello', deviceGuid: b.id, timeZone: 'UTC' });
-  await injected.event('sync-ready');
+  assert.equal((await injected.event('sync-ready')).protocolVersion, MANAGER_PROTOCOL_VERSION);
   const prior = fromB.publishedAt - 1;
   injected.send({ type: 'device-personal', packet: { ...fromB, publishedAt: prior, ranking: { ...fromB.ranking, publishedAt: prior } } });
   injected.send({ type: 'heartbeat' });
@@ -853,6 +862,10 @@ test('manager rounds use the same device versions for Personal Stats and every r
     assert.equal(standings.calendar.boards[hours].rows[0].tokens, summary.windows[name].tokens);
     assert.equal(standings.boards[hours].rows[0].tokens, summary.hourly.windows[name].tokens);
   }
+  bannedDevice = a.uploads[1].deviceGuid;
+  clock += 1000;
+  home.send({ type: 'upload' });
+  await home.event('upload-state', event => event.at === clock && event.code === 'banned');
   home.close();
   right.close();
 });

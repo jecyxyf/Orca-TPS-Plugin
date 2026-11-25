@@ -1,9 +1,8 @@
 import { sourceMessage, sourceNotice } from './locales.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-
-const PROVIDERS = ['codex', 'claude', 'opencode', 'pi', 'antigravity', 'hermes'];
+import { harnessFamily, SESSION_HARNESSES } from './harnesses.mjs';
 const STORE_KEY = 'preferences-v1';
-const EMPTY_ROOTS = () => Object.fromEntries(PROVIDERS.map(key => [key, []]));
+const EMPTY_ROOTS = () => Object.fromEntries(SESSION_HARNESSES.map(key => [key, []]));
 const cleanText = (value, limit = 160) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, limit);
 const routineWarningCodes = ['notice.recent-files-limit', 'notice.codex-large-session'];
 const HIDDEN_ROUTINE_WARNINGS = new Set([...routineWarningCodes, ...routineWarningCodes.map(code => sourceMessage(code))]);
@@ -42,7 +41,7 @@ export function validateRoots(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(sourceMessage('notice.invalid-roots'));
   const roots = EMPTY_ROOTS();
   for (const key of Object.keys(value)) {
-    if (!PROVIDERS.includes(key)) throw new Error(sourceMessage('notice.unknown-root-type'));
+    if (!SESSION_HARNESSES.includes(key)) throw new Error(sourceMessage('notice.unknown-root-type'));
     if (!Array.isArray(value[key]) || value[key].length > 16) throw new Error(sourceMessage('notice.root-limit'));
     roots[key] = [...new Set(value[key].map(path => {
       if (typeof path !== 'string' || path.length > 4096 || /[\u0000\r\n]/.test(path)) throw new Error(sourceMessage('notice.invalid-path'));
@@ -71,13 +70,19 @@ const matchesTarget = (session, target) => {
   }
   return session.id === `${session.provider}:${target.sessionId}` &&
     (session.provider === target.provider ||
-      (['opencode', 'opencode2'].includes(session.provider) && ['opencode', 'opencode2'].includes(target.provider)));
+      (harnessFamily(session.provider) === 'opencode' && harnessFamily(target.provider) === 'opencode'));
 };
 // Transient unidentified-page reports while an agent runs (tab busy-state, capture lag).
-const TRANSIENT_PAGE_PATTERNS = [
-  sourceMessage('selector.not-terminal'), sourceMessage('selector.tab-unidentified'), sourceMessage('selector.sync-pending'), sourceMessage('selector.unidentified'),
-  sourceMessage('selector.waiting-for-orca'), sourceMessage('selector.updating'), sourceMessage('selector.later'), sourceMessage('selector.waiting')
+const TRANSIENT_PAGE_NOTICES = [
+  'selector.not-terminal', 'selector.tab-unidentified', 'selector.sync-pending', 'selector.unidentified',
+  'selector.waiting-for-orca', 'selector.updating', 'selector.later', 'selector.waiting'
 ];
+const TRANSIENT_PAGE_PATTERNS = TRANSIENT_PAGE_NOTICES.map(code => sourceMessage(code));
+
+function isTransientPage(notice) {
+  return Array.isArray(notice) ? TRANSIENT_PAGE_NOTICES.includes(notice[0])
+    : TRANSIENT_PAGE_PATTERNS.some(pattern => notice.includes(pattern));
+}
 
 export function createTpsController(orca, {
   readActive, readSession, now = Date.now, pollMs = 5000, focusPollMs = 250,
@@ -90,13 +95,13 @@ export function createTpsController(orca, {
   let target = null, key = null, sessionsSig = '', session = null;
   let roots = EMPTY_ROOTS(), warnings = [];
   let updatedAt = null, loading = true, generation = 0;
-  let emptyMessage = sourceMessage('notice.detecting-channel');
+  let emptyNotice = ['notice.detecting-channel'];
   let stopped = false, started = false;
   let contextPending = null, loadTask = null, timer = null;
   let contextDueAt = -Infinity, nextContext = false;
-  let lastReadAt = -Infinity, lastStatus = '', lastSnapshot = '', publishSequence = 0;
+  let lastReadAt = -Infinity;
   let holdUntil = -Infinity, dataStamp = '';
-  let statusQueue = Promise.resolve(), openTargets = [];
+  let openTargets = [];
   const projectReads = new Map(), channelReadAt = new Map(), backgroundReads = new Set();
   const registrations = [];
 
@@ -105,74 +110,32 @@ export function createTpsController(orca, {
       instanceId, generation,
       activeSession: target ? (isChannelTarget(target) ? {
         id: publicChannelId(target),
-        title: cleanText(target.title || session?.title || sourceMessage('current-channel')),
+        title: cleanText(target.title || session?.title || t('current-channel')),
         provider: 'channel'
       } : {
         id: `${target.provider}:${target.sessionId}`,
-        title: cleanText(target.title || session?.title || sourceMessage('current-conversation')),
+        title: cleanText(target.title || session?.title || t('current-conversation')),
         provider: target.provider
       }) : null,
       records: session?.records?.slice(0, 100) ?? [],
-      loading, updatedAt, warnings: warnings.map(value => cleanText(translateNotice(value), 500)).filter(Boolean), emptyMessage
+      loading, updatedAt,
+      warnings: warnings.map(value => cleanText(translateNotice(value), 500)).filter(Boolean),
+      emptyMessage: cleanText(translateNotice(emptyNotice), 300)
     };
   }
 
-  function panelState(snapshot = state()) {
-    if (!locales) return snapshot;
-    const activeSession = snapshot.activeSession;
-    return {
-      ...snapshot,
-      activeSession: activeSession && { ...activeSession, title: locales.notice(activeSession.title) },
-      emptyMessage: locales.notice(snapshot.emptyMessage)
-    };
+  function noteFreshRecords(records) {
+    if (!records.length) return;
+    const [latest] = records;
+    const stamp = JSON.stringify([records.length, latest.completedAt, latest.tokensPerSecond, latest.cacheHitRate]);
+    if (stamp === dataStamp) return;
+    dataStamp = stamp;
+    holdUntil = now() + holdActivityMs;
   }
 
-  function recordsStamp(records) {
-    const latest = records[0];
-    return JSON.stringify([
-      records.length,
-      latest?.completedAt ?? null,
-      latest?.tokensPerSecond ?? null,
-      latest?.cacheHitRate ?? null
-    ]);
-  }
-
-  function publish(force = false) {
-    if (stopped) return Promise.resolve();
-    const snapshot = panelState(), signature = JSON.stringify(snapshot);
-    if (!force && signature === lastSnapshot) return statusQueue;
-    lastSnapshot = signature;
-    const sequence = ++publishSequence;
-    try { orca.panels.post('tps.changed', snapshot); }
-    catch { orca.log(t('notice.panel-push-failed')); }
-    // Fresh data extends the retention window; stale-only snapshots do not.
-    const stamp = recordsStamp(snapshot.records);
-    if (snapshot.records.length && stamp !== dataStamp) {
-      dataStamp = stamp;
-      holdUntil = now() + holdActivityMs;
-    }
-    const latest = snapshot.records[0];
-    const speedText = formatSpeedDisplay(latest, locales?.code);
-    const cacheText = formatHitRatePercent(latest?.cacheHitRate, locales?.code);
-    const text = t('status.speed-and-cache', speedText, cacheText);
-    const tooltip = cleanText([
-      snapshot.activeSession
-        ? t('status.session-title', t(snapshot.activeSession.provider === 'channel' ? 'current-channel' : 'current-conversation'), snapshot.activeSession.title)
-        : snapshot.emptyMessage,
-      t('status.latest-speed-note'),
-      t(snapshot.loading ? 'status.refreshing' : snapshot.warnings.length ? 'status.partial-data' : 'status.click-refresh')
-    ].join('\n'), 256);
-    const status = JSON.stringify({ text, tooltip });
-    // Serialize host writes so an older asynchronous update cannot win after a switch.
-    statusQueue = statusQueue.then(async () => {
-      if (stopped || sequence !== publishSequence || status === lastStatus) return;
-      try {
-        await orca.host.call('statusBar.update', { id: 'speed', text, tooltip, tone: 'success', visible: true });
-        lastStatus = status;
-      } catch { orca.log(t('notice.status-unavailable')); }
-    });
-    return statusQueue;
-  }
+  const publish = createControllerPublisher(orca, {
+    state, t, locale: () => locales?.code, isStopped: () => stopped, noteFreshRecords
+  });
 
   function rememberOpenTargets(context, current) {
     if (!Array.isArray(context?.openTargets)) return;
@@ -189,28 +152,25 @@ export function createTpsController(orca, {
     const task = (async () => {
       let context;
       try { context = await readActive(); }
-      catch { context = { target: null, message: sourceMessage('notice.read-current-failed') }; }
+      catch { context = { target: null, notice: ['notice.read-current-failed'] }; }
       if (stopped) return;
       const next = context?.target ?? null, nextKey = targetKey(next), nextSessionsSig = sessionsSignature(next);
-      const rawMessage = context?.message || (next
-        ? (isChannelTarget(next) ? sourceMessage('notice.empty-channel-requests') : sourceMessage('notice.empty-conversation-requests'))
-        : sourceMessage('notice.empty-page-conversation'));
+      const notice = context?.notice ?? (context?.message || [next
+        ? (isChannelTarget(next) ? 'notice.empty-channel-requests' : 'notice.empty-conversation-requests')
+        : 'notice.empty-page-conversation']);
       const withinHold = Boolean(session?.records?.length) && now() < holdUntil;
-      // While retention holds, an unidentified-page report during an agent run is
-      // transient: change nothing (target/key/session stay on the last conversation,
-      // which keeps refreshing); only soften the status message.
-      if (!next && withinHold && TRANSIENT_PAGE_PATTERNS.some(pattern => rawMessage.includes(pattern))) {
+      // Keep refreshing the previous conversation while the host catches up.
+      if (!next && withinHold && isTransientPage(notice)) {
         rememberOpenTargets(context, target);
-        const message = cleanText(sourceMessage('notice.keep-recent-stats', rawMessage), 300);
-        if (message !== emptyMessage) {
-          emptyMessage = message;
+        const retained = ['notice.keep-recent-stats', notice];
+        if (JSON.stringify(retained) !== JSON.stringify(emptyNotice)) {
+          emptyNotice = retained;
           void publish();
         }
         return;
       }
-      const message = cleanText(rawMessage, 300);
       const changed = nextKey !== key;
-      const messageChanged = message !== emptyMessage;
+      const messageChanged = JSON.stringify(notice) !== JSON.stringify(emptyNotice);
       let loadingCleared = false;
       if (changed) {
         const saved = cache && isChannelTarget(next) ? await cache.get(publicChannelId(next)) : null;
@@ -236,7 +196,7 @@ export function createTpsController(orca, {
         }
       }
       target = next;
-      emptyMessage = message;
+      emptyNotice = notice;
       rememberOpenTargets(context, next);
       if (changed) onTargetChange(target);
       if (changed || messageChanged || loadingCleared) void publish();
@@ -322,7 +282,7 @@ export function createTpsController(orca, {
         if (stopped || requestedGeneration !== generation) return state();
         // Read failure: retain the last good records so a transient I/O error
         // does not blank the panel; only the warning changes.
-        warnings = [sourceMessage('notice.keep-last-request-data')];
+        warnings = [['notice.keep-last-request-data']];
         if (!cache && !requestedTarget.executionHostId) updatedAt = now();
       }
       loading = false;
@@ -364,8 +324,8 @@ export function createTpsController(orca, {
     } catch { orca.log(t('notice.path-settings-unavailable')); }
     if (stopped) return;
     registrations.push(
-      orca.panels.handle('tps.state', () => panelState()),
-      orca.panels.handle('tps.refresh', async () => panelState(await refresh())),
+      orca.panels.handle('tps.state', state),
+      orca.panels.handle('tps.refresh', refresh),
       orca.commands.register('tps.refresh', refresh)
     );
     const firstRefresh = refresh();
@@ -390,4 +350,39 @@ export function createTpsController(orca, {
     for (const entry of registrations) entry.dispose();
   }
   return { start, stop, refresh, checkActive, state, refreshLocale: () => publish(true) };
+}
+
+function createControllerPublisher(orca, { state, t, locale, isStopped, noteFreshRecords }) {
+  let lastSnapshot, lastStatus, sequence = 0, statusQueue = Promise.resolve();
+  return function publish(force = false) {
+    if (isStopped()) return Promise.resolve();
+    const snapshot = state(), signature = JSON.stringify(snapshot);
+    if (!force && signature === lastSnapshot) return statusQueue;
+    lastSnapshot = signature;
+    const published = ++sequence;
+    try { orca.panels.post('tps.changed', snapshot); }
+    catch { orca.log(t('notice.panel-push-failed')); }
+    noteFreshRecords(snapshot.records);
+
+    const [latest] = snapshot.records;
+    const speed = formatSpeedDisplay(latest, locale()), cache = formatHitRatePercent(latest?.cacheHitRate, locale());
+    const text = t('status.speed-and-cache', speed, cache);
+    const tooltip = cleanText([
+      snapshot.activeSession
+        ? t('status.session-title', t(snapshot.activeSession.provider === 'channel' ? 'current-channel' : 'current-conversation'), snapshot.activeSession.title)
+        : snapshot.emptyMessage,
+      t('status.latest-speed-note'),
+      t(snapshot.loading ? 'status.refreshing' : snapshot.warnings.length ? 'status.partial-data' : 'status.click-refresh')
+    ].join('\n'), 256);
+    const status = JSON.stringify({ text, tooltip });
+    // Serialize writes so an older asynchronous update cannot win after a switch.
+    statusQueue = statusQueue.then(async () => {
+      if (isStopped() || published !== sequence || status === lastStatus) return;
+      try {
+        await orca.host.call('statusBar.update', { id: 'speed', text, tooltip, tone: 'success', visible: true });
+        lastStatus = status;
+      } catch { orca.log(t('notice.status-unavailable')); }
+    });
+    return statusQueue;
+  };
 }

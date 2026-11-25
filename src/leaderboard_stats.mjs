@@ -59,6 +59,32 @@ export function tokensIntervals(input, previous = TOKENS_DEFAULT_INTERVALS) {
 
 export const usageCount = value => Number.isFinite(value) && value > 0 ? value : 0;
 
+// Stored counters and device packets use these positions across releases.
+export const USAGE_COUNTER = Object.freeze({
+  requests: 0, freshInput: 1, output: 2, cacheRead: 3, cacheWrite: 4,
+  speedSamples: 5, speedSum: 6, estimatedSpeedSamples: 7
+});
+const counterCount = Object.keys(USAGE_COUNTER).length;
+export const emptyUsageCounters = () => Array(counterCount).fill(0);
+
+export function countUsageRecord(counters, record) {
+  counters[USAGE_COUNTER.requests]++;
+  counters[USAGE_COUNTER.freshInput] += usageCount(record.freshInputTokens);
+  counters[USAGE_COUNTER.output] += usageCount(record.outputTokens);
+  counters[USAGE_COUNTER.cacheRead] += usageCount(record.cacheReadTokens);
+  counters[USAGE_COUNTER.cacheWrite] += usageCount(record.cacheCreationTokens);
+  const speed = usageCount(record.tokensPerSecond);
+  if (speed > 0) {
+    counters[USAGE_COUNTER.speedSamples]++;
+    counters[USAGE_COUNTER.speedSum] += speed;
+    if (record.isEstimatedSpeed) counters[USAGE_COUNTER.estimatedSpeedSamples]++;
+  }
+  return counters;
+}
+
+export const usageCounterTokens = counters => (counters[USAGE_COUNTER.freshInput] ?? 0) + (counters[USAGE_COUNTER.output] ?? 0) +
+  (counters[USAGE_COUNTER.cacheRead] ?? 0) + (counters[USAGE_COUNTER.cacheWrite] ?? 0);
+
 export function requestTokens(record) {
   return usageCount(record.freshInputTokens) + usageCount(record.outputTokens) +
     usageCount(record.cacheReadTokens) + usageCount(record.cacheCreationTokens);
@@ -108,7 +134,7 @@ export function leaderboardPacketFromPersonal(packet, accountId) {
     if (row.at < firstHour || row.at > cutoff) continue;
     // Older caches can have hour boundaries at a non-integral UTC offset.
     if (!isHourStart(row.at)) return;
-    const tokens = row.counters.slice(1, 5).reduce((total, count) => total + count, 0);
+    const tokens = usageCounterTokens(row.counters);
     add(hours, row.at, tokens);
     add(daily, row.day, tokens);
   }

@@ -16,11 +16,6 @@ export function createAvatarCache({ fetcher = fetch, now = Date.now, signal }) {
   const cached = new Map(), pending = new Map(), queue = [];
   let downloading = 0;
 
-  function requestSignal() {
-    const deadline = AbortSignal.timeout(DOWNLOAD_TIMEOUT);
-    return signal ? AbortSignal.any([signal, deadline]) : deadline;
-  }
-
   async function lookupId(login, signal) {
     const profile = await fetcher(new URL(`/${login}.png?size=64`, PROFILE_ORIGIN), {
       credentials: 'omit', redirect: 'manual', signal
@@ -37,10 +32,12 @@ export function createAvatarCache({ fetcher = fetch, now = Date.now, signal }) {
 
   async function download(login) {
     try {
-      const id = await lookupId(login, requestSignal());
+      const deadline = AbortSignal.timeout(DOWNLOAD_TIMEOUT);
+      const downloadSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+      const id = await lookupId(login, downloadSignal);
       if (!id) return null;
       const response = await fetcher(new URL(`/u/${id}?s=64`, AVATAR_ORIGIN), {
-        credentials: 'omit', redirect: 'error', signal: requestSignal()
+        credentials: 'omit', redirect: 'error', signal: downloadSignal
       });
       const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
       if (!response.ok || !IMAGE_TYPES.has(type) || Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES) {

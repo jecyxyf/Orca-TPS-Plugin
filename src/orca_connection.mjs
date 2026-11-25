@@ -14,6 +14,81 @@ export const TOKENS_ROOT = process.env.ORCA_TPS_TOKENS_ROOT || path.join(homedir
 export const TOKENS_RETRY_MS = 3000;
 export const TOKENS_HEARTBEAT_MS = 5000;
 export const TOKENS_LEASE_MS = 15000;
+export const TOKENS_HANDSHAKE_MS = 45_000;
+export const MANAGER_PROTOCOL_VERSION = 1;
+
+export const MESSAGE = Object.freeze({
+  authenticate: 'authenticate',
+  unsubscribe: 'unsubscribe',
+  heartbeat: 'heartbeat',
+  hello: 'hello',
+  ready: 'ready',
+  syncHello: 'sync-hello',
+  syncReady: 'sync-ready',
+  bootstrap: 'bootstrap',
+  installed: 'installed',
+  channels: 'channels',
+  channel: 'channel',
+  credential: 'credential',
+  devicePersonal: 'device-personal',
+  deviceLeaderboard: 'device-leaderboard',
+  personal: 'personal',
+  progress: 'progress',
+  summary: 'summary',
+  syncTargets: 'sync-targets',
+  intervals: 'intervals',
+  uploaded: 'uploaded',
+  uploadState: 'upload-state',
+  upload: 'upload',
+  timezone: 'timezone',
+});
+const object = value => value && typeof value === 'object' && !Array.isArray(value);
+const optionalText = value => value == null || typeof value === 'string';
+const accountId = value => Number.isSafeInteger(value) && value > 0;
+const devicePacket = message => object(message.packet) && validInstallationId(message.packet.deviceGuid);
+const validators = {
+  [MESSAGE.authenticate]: message => typeof message.key === 'string',
+  [MESSAGE.unsubscribe]: () => true,
+  [MESSAGE.heartbeat]: () => true,
+  [MESSAGE.hello]: message => optionalText(message.timeZone) && optionalText(message.bundleVersion),
+  [MESSAGE.ready]: message => validInstallationId(message.deviceGuid) && optionalText(message.bundleVersion),
+  [MESSAGE.syncHello]: message => validInstallationId(message.deviceGuid) && optionalText(message.timeZone),
+  [MESSAGE.syncReady]: message => validInstallationId(message.deviceGuid),
+  [MESSAGE.bootstrap]: message => typeof message.version === 'string',
+  [MESSAGE.installed]: () => true,
+  [MESSAGE.channels]: message => Array.isArray(message.channels),
+  [MESSAGE.channel]: message => validInstallationId(message.deviceGuid) && typeof message.channelId === 'string' && object(message.result),
+  [MESSAGE.credential]: message => message.token === null || (typeof message.token === 'string' && accountId(message.accountId)),
+  [MESSAGE.devicePersonal]: devicePacket,
+  [MESSAGE.deviceLeaderboard]: devicePacket,
+  [MESSAGE.personal]: devicePacket,
+  [MESSAGE.progress]: message => Number.isSafeInteger(message.done) && Number.isSafeInteger(message.total),
+  [MESSAGE.summary]: message => object(message.summary),
+  [MESSAGE.syncTargets]: message => Array.isArray(message.targets),
+  [MESSAGE.intervals]: message => object(message.intervals),
+  [MESSAGE.uploaded]: message => accountId(message.accountId) && Number.isFinite(message.at),
+  [MESSAGE.uploadState]: message => accountId(message.accountId) && typeof message.pending === 'boolean',
+  [MESSAGE.upload]: () => true,
+  [MESSAGE.timezone]: message => typeof message.timeZone === 'string'
+};
+
+export function decodeManagerMessage(line) {
+  const message = JSON.parse(line);
+  return object(message) && Object.hasOwn(validators, message.type) && validators[message.type](message) ? message : null;
+}
+
+// Version-less peers use the original wire format, which version 1 still speaks.
+export const compatibleManagerProtocol = message => message.protocolVersion === undefined ||
+  message.protocolVersion === MANAGER_PROTOCOL_VERSION;
+
+export function keepManagerLinkAlive(link, now, handshakeMs = TOKENS_LEASE_MS, heartbeatDuringHandshake = false) {
+  if (now - link.lastSeen >= (link.ready ? TOKENS_LEASE_MS : handshakeMs)) return false;
+  if ((link.ready || heartbeatDuringHandshake) && now >= link.nextHeartbeat && link.child.stdin.writable) {
+    link.nextHeartbeat = now + TOKENS_HEARTBEAT_MS;
+    link.child.stdin.write(tokensMessage({ type: MESSAGE.heartbeat }));
+  }
+  return true;
+}
 export const tokensMessage = message => JSON.stringify(message) + '\n';
 const send = (socket, message) => socket && !socket.destroyed && socket.write(tokensMessage(message));
 
@@ -50,10 +125,11 @@ export function createOrcaConnection(root, { clock, onHello, onSyncHello, onMess
       if (closing) return;
       if (line.length > (peer.sync || peer.localClient ? 32 : 4) * 1024 * 1024) return socket.destroy();
       try {
-        const message = JSON.parse(line);
+        const message = decodeManagerMessage(line);
+        if (!message) return;
         if (!peer.authenticated) {
           const provided = Buffer.from(typeof message.key === 'string' ? message.key : '', 'base64');
-          if (message.type !== 'authenticate' || provided.length !== secret.length || !timingSafeEqual(provided, secret)) {
+          if (message.type !== MESSAGE.authenticate || provided.length !== secret.length || !timingSafeEqual(provided, secret)) {
             return socket.destroy();
           }
           peer.authenticated = true;
@@ -67,31 +143,31 @@ export function createOrcaConnection(root, { clock, onHello, onSyncHello, onMess
 
   function receive(peer, message) {
     const { type } = message;
-    if (type === 'unsubscribe') {
+    if (type === MESSAGE.unsubscribe) {
       peers.delete(peer.socket);
       peer.socket.end();
       onUnsubscribe();
       return;
     }
     peer.expires = clock() + TOKENS_LEASE_MS;
-    if (type === 'sync-hello' && !peer.subscribed) {
-      if (!onSyncHello?.(peer, message)) return peer.socket.destroy();
+    if (type === MESSAGE.syncHello && !peer.subscribed) {
+      if (!compatibleManagerProtocol(message) || !onSyncHello?.(peer, message)) return peer.socket.destroy();
       peer.subscribed = peer.sync = true;
       return;
     }
     if (peer.sync) {
-      if (type === 'heartbeat') return reply(peer, { type: 'heartbeat' });
-      if (type === 'device-personal' || type === 'device-leaderboard') onMessage(peer, message);
+      if (type === MESSAGE.heartbeat) return reply(peer, { type: MESSAGE.heartbeat });
+      if (type === MESSAGE.devicePersonal || type === MESSAGE.deviceLeaderboard) onMessage(peer, message);
       return;
     }
-    if (type === 'hello') {
-      if (onHello(peer, message) === false) return peer.socket.destroy();
+    if (type === MESSAGE.hello) {
+      if (!compatibleManagerProtocol(message) || onHello(peer, message) === false) return peer.socket.destroy();
       peer.subscribed = true;
       return;
     }
     if (!peer.subscribed) return;
-    if (type === 'heartbeat') return reply(peer, { type: 'heartbeat' });
-    if (type === 'channels' && Array.isArray(message.channels)) {
+    if (type === MESSAGE.heartbeat) return reply(peer, { type: MESSAGE.heartbeat });
+    if (type === MESSAGE.channels && Array.isArray(message.channels)) {
       const channels = new Map();
       for (const channel of message.channels.slice(0, 100)) {
         if (typeof channel?.channelId === 'string' && typeof channel.target?.worktreePath === 'string') {
@@ -126,7 +202,7 @@ export function createOrcaConnection(root, { clock, onHello, onSyncHello, onMess
         if (!requests.has(key)) requests.set(key, readChannel(target));
         void requests.get(key).then(result => {
           if (peer.socket && peer.channels.get(channelId) === target && canPublish()) {
-            reply(peer, { type: 'channel', deviceGuid, channelId, result });
+            reply(peer, { type: MESSAGE.channel, deviceGuid, channelId, result });
           }
         }).catch(() => {});
       }
@@ -201,7 +277,7 @@ export async function bridgeOrca(root, entry) {
   socket.on('error', () => { socket.destroy(); });
   process.stdout.on('error', () => { socket.destroy(); });
   socket.pipe(process.stdout, { end: false });
-  send(socket, { type: 'authenticate', key: localSecret(root).toString('base64') });
+  send(socket, { type: MESSAGE.authenticate, key: localSecret(root).toString('base64') });
   process.stdin.pipe(socket);
   await new Promise(resolve => socket.once('close', resolve));
   process.stdin.destroy();
@@ -298,7 +374,7 @@ export function createManagerLinks({ clock, onPacket, sendSnapshot, openPeer = o
     if (links.get(link.key) !== link) return;
     links.delete(link.key);
     if (link.child.exitCode !== null) return;
-    if (graceful && link.child.stdin.writable) link.child.stdin.end(tokensMessage({ type: 'unsubscribe' }));
+    if (graceful && link.child.stdin.writable) link.child.stdin.end(tokensMessage({ type: MESSAGE.unsubscribe }));
     else link.child.kill();
   }
 
@@ -321,17 +397,18 @@ export function createManagerLinks({ clock, onPacket, sendSnapshot, openPeer = o
     lines.on('line', line => {
       if (links.get(key) !== link || line.length > 32 * 1024 * 1024) return;
       try {
-        const message = JSON.parse(line);
+        const message = decodeManagerMessage(line);
+        if (!message) return;
         if (!link.ready) {
-          if (message.type !== 'sync-ready') return;
-          if (message.deviceGuid !== target.deviceGuid) return disconnect();
+          if (message.type !== MESSAGE.syncReady) return;
+          if (!compatibleManagerProtocol(message) || message.deviceGuid !== target.deviceGuid) return disconnect();
           link.ready = true;
           void sendSnapshot(child.stdin);
-        } else if (message.type === 'device-personal' || message.type === 'device-leaderboard') onPacket(message);
+        } else if (message.type === MESSAGE.devicePersonal || message.type === MESSAGE.deviceLeaderboard) onPacket(message);
         link.lastSeen = clock();
       } catch {}
     });
-    child.stdin.write(tokensMessage({ type: 'sync-hello', ...hello }));
+    child.stdin.write(tokensMessage({ type: MESSAGE.syncHello, ...hello, protocolVersion: MANAGER_PROTOCOL_VERSION }));
   }
 
   return {
@@ -351,12 +428,9 @@ export function createManagerLinks({ clock, onPacket, sendSnapshot, openPeer = o
         const link = links.get(key);
         if (!link) {
           if ((retries.get(key) ?? 0) <= now) connectPeer(key, target, hello);
-        } else if (now - link.lastSeen >= TOKENS_LEASE_MS) {
+        } else if (!keepManagerLinkAlive(link, now, TOKENS_LEASE_MS, true)) {
           closeLink(link);
           retries.set(key, now + TOKENS_RETRY_MS);
-        } else if (now >= link.nextHeartbeat && link.child.stdin.writable) {
-          link.nextHeartbeat = now + TOKENS_HEARTBEAT_MS;
-          link.child.stdin.write(tokensMessage({ type: 'heartbeat' }));
         }
       }
     },

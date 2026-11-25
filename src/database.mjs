@@ -3,9 +3,12 @@ import { lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSy
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { HOUR_MS, usageCount, validInstallationId } from './leaderboard_stats.mjs';
+import { HOUR_MS, USAGE_COUNTER, countUsageRecord, emptyUsageCounters, validInstallationId } from './leaderboard_stats.mjs';
 import { normalizeComparePath } from './harness_parser.mjs';
-import { calendarFor, COUNTERS, RETENTION_DAYS } from './personal_stats.mjs';
+import { calendarFor, RETENTION_DAYS } from './personal_stats.mjs';
+import { harnessFamily as channelProvider } from './harnesses.mjs';
+import { openReadonlyDatabase, withTransaction } from './sqlite.mjs';
+export { channelProvider };
 
 export const DETAIL_DAYS = 32;
 const DATABASE_VERSION = 4;
@@ -14,10 +17,7 @@ const MERGED_DAILY_GENERATION = 'mergedDailyGeneration';
 const MAIN_DATABASE = 'tpslugin.db';
 const DAILY_DATABASE = 'daily.db';
 const DAY_MS = 24 * HOUR_MS;
-const EMPTY_COUNTERS = () => Array(COUNTERS).fill(0);
 const validTime = value => Number.isSafeInteger(value) && value >= 0 && value <= 8_640_000_000_000_000;
-const channelAliases = new Map([['agy', 'antigravity'], ['opencode2', 'opencode']]);
-export const channelProvider = provider => channelAliases.get(provider) ?? provider;
 const sessionKey = ({ provider, sessionId }) => provider && sessionId ? JSON.stringify([channelProvider(provider), sessionId]) : null;
 
 function openDatabase(filename) {
@@ -58,18 +58,6 @@ function migrateDatabases(root, directory) {
   for (const { source, target } of moves) renameSync(source, target);
 }
 
-function transaction(db, operation) {
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    const result = operation();
-    db.exec('COMMIT');
-    return result;
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
-}
-
 function readDeviceGuid(root, fallback) {
   const file = path.join(root, 'device-guid');
   try {
@@ -86,22 +74,27 @@ function prepare(store, sql) {
   return Object.fromEntries(Object.entries(sql).map(([name, query]) => [name, store.prepare(query)]));
 }
 
-function recordCounters(record) {
-  const speed = usageCount(record.tokensPerSecond);
-  return [1, usageCount(record.freshInputTokens), usageCount(record.outputTokens), usageCount(record.cacheReadTokens),
-    usageCount(record.cacheCreationTokens), Number(speed > 0), speed, Number(speed > 0 && !!record.isEstimatedSpeed)];
-}
-
 function addBucket(buckets, calendar, record, direction) {
   const day = calendar.day(record.completedAt);
-  const counters = recordCounters(record);
+  const counters = countUsageRecord(emptyUsageCounters(), record);
   for (const [kind, at] of [[0, 0], [1, calendar.hour(record.completedAt)]]) {
     const dimensions = [kind, day, at, record.cwd ?? record.project ?? '', record.provider, record.model ?? ''];
     const key = JSON.stringify(dimensions);
-    const values = buckets.get(key) ?? EMPTY_COUNTERS();
-    for (let i = 0; i < counters.length; i++) values[i] += direction * counters[i];
-    buckets.set(key, values);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { dimensions, counters: emptyUsageCounters() };
+      buckets.set(key, bucket);
+    }
+    for (let i = 0; i < counters.length; i++) bucket.counters[i] += direction * counters[i];
   }
+}
+
+function writeBucket(queries, dimensions, delta) {
+  const row = queries.bucket.get(...dimensions);
+  const before = row ? JSON.parse(row.counters) : emptyUsageCounters();
+  const counters = before.map((value, index) => value + delta[index]);
+  if (counters[USAGE_COUNTER.requests] > 0) queries.saveBucket.run(...dimensions, JSON.stringify(counters));
+  else queries.deleteBucket.run(...dimensions);
 }
 
 export function openTokensManagerDb(root, { deviceGuid, timeZone, now = Date.now } = {}) {
@@ -118,7 +111,7 @@ export function openTokensManagerDb(root, { deviceGuid, timeZone, now = Date.now
   }
 }
 
-function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
+function createSchema(main) {
   main.exec(`
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS scan_progress (source TEXT PRIMARY KEY, stamp TEXT NOT NULL, scanned_at INTEGER NOT NULL);
@@ -142,33 +135,85 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
       PRIMARY KEY (kind, day, at, project, provider, model)
     ) WITHOUT ROWID;
   `);
-  const m = prepare(main, {
-    setting: 'SELECT value FROM settings WHERE key = ?',
-    save: 'INSERT OR REPLACE INTO settings VALUES (?, ?)',
-    deleteSetting: 'DELETE FROM settings WHERE key = ?',
-    source: 'SELECT stamp FROM scan_progress WHERE source = ?',
-    cursor: 'INSERT OR REPLACE INTO scan_progress VALUES (?, ?, ?)',
-    seen: 'SELECT id FROM seen WHERE id = ?',
-    remember: 'INSERT OR REPLACE INTO seen VALUES (?, ?)',
-    detail: 'SELECT record FROM details WHERE id = ?',
-    addDetail: 'INSERT OR REPLACE INTO details VALUES (?, ?, ?, ?)',
-    channelDetail: 'INSERT INTO detail_channels VALUES (?, ?, ?, ?)',
-    channelBackfill: `SELECT d.id, d.at, d.record FROM details AS d
-      WHERE NOT EXISTS (SELECT 1 FROM detail_channels AS c WHERE c.id = d.id)`,
-    channelByCwd: `SELECT c.id, c.at, d.record FROM detail_channels AS c JOIN details AS d USING (id)
-      WHERE c.cwd = ? ORDER BY c.at DESC, c.id LIMIT 100`,
-    channelBySession: `SELECT c.id, c.at, d.record FROM detail_channels AS c JOIN details AS d USING (id)
-      WHERE c.session = ? ORDER BY c.at DESC, c.id LIMIT 100`,
-    details: 'SELECT record FROM details WHERE at >= ? ORDER BY at DESC, id',
-    pruneDetails: 'DELETE FROM details WHERE day < ?',
-    pruneSeen: 'DELETE FROM seen WHERE day < ?',
-    pruneProgress: 'DELETE FROM scan_progress WHERE scanned_at < ?',
-    bucket: 'SELECT counters FROM buckets WHERE kind=? AND day=? AND at=? AND project=? AND provider=? AND model=?',
-    saveBucket: 'INSERT OR REPLACE INTO buckets VALUES (?, ?, ?, ?, ?, ?, ?)',
-    deleteBucket: 'DELETE FROM buckets WHERE kind=? AND day=? AND at=? AND project=? AND provider=? AND model=?',
-    buckets: 'SELECT * FROM buckets WHERE kind=? AND day>=? ORDER BY day, at, project, provider, model',
-    pruneBuckets: 'DELETE FROM buckets WHERE day < ?'
-  });
+}
+
+const usageQueries = {
+  setting: 'SELECT value FROM settings WHERE key = ?',
+  save: 'INSERT OR REPLACE INTO settings VALUES (?, ?)',
+  deleteSetting: 'DELETE FROM settings WHERE key = ?',
+  source: 'SELECT stamp FROM scan_progress WHERE source = ?',
+  cursor: 'INSERT OR REPLACE INTO scan_progress VALUES (?, ?, ?)',
+  seen: 'SELECT id FROM seen WHERE id = ?',
+  remember: 'INSERT OR REPLACE INTO seen VALUES (?, ?)',
+  detail: 'SELECT record FROM details WHERE id = ?',
+  addDetail: 'INSERT OR REPLACE INTO details VALUES (?, ?, ?, ?)',
+  channelDetail: 'INSERT INTO detail_channels VALUES (?, ?, ?, ?)',
+  channelBackfill: `SELECT d.id, d.at, d.record FROM details AS d
+    WHERE NOT EXISTS (SELECT 1 FROM detail_channels AS c WHERE c.id = d.id)`,
+  channelByCwd: `SELECT c.id, c.at, d.record FROM detail_channels AS c JOIN details AS d USING (id)
+    WHERE c.cwd = ? ORDER BY c.at DESC, c.id LIMIT 100`,
+  channelBySession: `SELECT c.id, c.at, d.record FROM detail_channels AS c JOIN details AS d USING (id)
+    WHERE c.session = ? ORDER BY c.at DESC, c.id LIMIT 100`,
+  details: 'SELECT record FROM details WHERE at >= ? ORDER BY at DESC, id',
+  pruneDetails: 'DELETE FROM details WHERE day < ?',
+  pruneSeen: 'DELETE FROM seen WHERE day < ?',
+  pruneProgress: 'DELETE FROM scan_progress WHERE scanned_at < ?',
+  bucket: 'SELECT counters FROM buckets WHERE kind=? AND day=? AND at=? AND project=? AND provider=? AND model=?',
+  saveBucket: 'INSERT OR REPLACE INTO buckets VALUES (?, ?, ?, ?, ?, ?, ?)',
+  deleteBucket: 'DELETE FROM buckets WHERE kind=? AND day=? AND at=? AND project=? AND provider=? AND model=?',
+  buckets: 'SELECT * FROM buckets WHERE kind=? AND day>=? ORDER BY day, at, project, provider, model',
+  pruneBuckets: 'DELETE FROM buckets WHERE day < ?'
+};
+
+function mergeDaily(main, legacyDaily, m, saveSetting, generation) {
+  if (!lstatSync(legacyDaily, { throwIfNoEntry: false })?.isFile()) {
+    throw new Error('Missing legacy daily database');
+  }
+  const daily = openReadonlyDatabase(legacyDaily, 0);
+  try {
+    daily.exec('BEGIN');
+    const readSetting = daily.prepare('SELECT value FROM settings WHERE key = ?');
+    const applied = Number(readSetting.get('applied')?.value);
+    if (readSetting.get('generation')?.value !== generation || !Number.isSafeInteger(applied) || applied < 0) {
+      throw new Error('Invalid legacy daily database state');
+    }
+    const rows = daily.prepare('SELECT kind, day, at, project, provider, model, counters FROM buckets');
+    const pending = main.prepare('SELECT buckets FROM pending WHERE id > ? ORDER BY id');
+    withTransaction(main, () => {
+      for (const { kind, day, at, project, provider, model, counters } of rows.iterate()) {
+        m.saveBucket.run(kind, day, at, project, provider, model, counters);
+      }
+      // A batch can already be in the daily database even if the main database still lists it.
+      for (const row of pending.iterate(applied)) {
+        for (const [key, delta] of JSON.parse(row.buckets)) writeBucket(m, JSON.parse(key), delta);
+      }
+      main.exec('DROP TABLE pending');
+      saveSetting(MERGED_DAILY_GENERATION, generation);
+      saveSetting('version', DATABASE_VERSION);
+    });
+  } finally { daily.close(); }
+}
+
+function removeMergedDaily(legacyDaily, m, setting) {
+  const generation = setting(MERGED_DAILY_GENERATION);
+  if (!generation) return;
+  const file = lstatSync(legacyDaily, { throwIfNoEntry: false });
+  if (file) {
+    if (!file.isFile()) throw new Error('Invalid legacy daily database path');
+    const daily = new DatabaseSync(legacyDaily, { enableExtensionLoading: false });
+    try {
+      const previous = daily.prepare("SELECT value FROM settings WHERE key = 'generation'").get()?.value;
+      if (previous !== generation) throw new Error('Legacy daily database was replaced after merging');
+      checkpointDatabase(daily, DAILY_DATABASE);
+    } finally { daily.close(); }
+    unlinkSync(legacyDaily);
+  }
+  m.deleteSetting.run(MERGED_DAILY_GENERATION);
+}
+
+function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
+  createSchema(main);
+  const m = prepare(main, usageQueries);
   const setting = (key, fallback) => {
     const row = m.setting.get(key);
     return row ? JSON.parse(row.value) : fallback;
@@ -181,7 +226,7 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
   }
 
   function reset(next) {
-    transaction(main, () => {
+    withTransaction(main, () => {
       main.exec('DELETE FROM scan_progress; DELETE FROM seen; DELETE FROM details; DELETE FROM buckets;');
       saveSetting('timeZone', next.timeZone);
       saveSetting('generation', randomUUID());
@@ -191,73 +236,18 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
     calendar = next;
   }
 
-  function writeBuckets(changes) {
-    for (const [key, delta] of changes) {
-      const dimensions = JSON.parse(key);
-      const row = m.bucket.get(...dimensions);
-      const current = row ? JSON.parse(row.counters) : EMPTY_COUNTERS();
-      const counters = current.map((value, index) => value + delta[index]);
-      if (counters[0] > 0) m.saveBucket.run(...dimensions, JSON.stringify(counters));
-      else m.deleteBucket.run(...dimensions);
-    }
-  }
-
-  function mergeDaily(generation) {
-    if (!lstatSync(legacyDaily, { throwIfNoEntry: false })?.isFile()) {
-      throw new Error('Missing legacy daily database');
-    }
-    const daily = new DatabaseSync(legacyDaily, { readOnly: true, enableExtensionLoading: false });
-    try {
-      daily.exec('PRAGMA trusted_schema=OFF; BEGIN;');
-      const readSetting = daily.prepare('SELECT value FROM settings WHERE key = ?');
-      const applied = Number(readSetting.get('applied')?.value);
-      if (readSetting.get('generation')?.value !== generation || !Number.isSafeInteger(applied) || applied < 0) {
-        throw new Error('Invalid legacy daily database state');
-      }
-      const rows = daily.prepare('SELECT kind, day, at, project, provider, model, counters FROM buckets');
-      const pending = main.prepare('SELECT buckets FROM pending WHERE id > ? ORDER BY id');
-      transaction(main, () => {
-        for (const { kind, day, at, project, provider, model, counters } of rows.iterate()) {
-          m.saveBucket.run(kind, day, at, project, provider, model, counters);
-        }
-        // A batch can already be in the daily database even if the main database still lists it.
-        for (const row of pending.iterate(applied)) writeBuckets(JSON.parse(row.buckets));
-        main.exec('DROP TABLE pending');
-        saveSetting(MERGED_DAILY_GENERATION, generation);
-        saveSetting('version', DATABASE_VERSION);
-      });
-    } finally { daily.close(); }
-  }
-
-  function removeMergedDaily() {
-    const generation = setting(MERGED_DAILY_GENERATION);
-    if (!generation) return;
-    const file = lstatSync(legacyDaily, { throwIfNoEntry: false });
-    if (file) {
-      if (!file.isFile()) throw new Error('Invalid legacy daily database path');
-      const daily = new DatabaseSync(legacyDaily, { enableExtensionLoading: false });
-      try {
-        const previous = daily.prepare("SELECT value FROM settings WHERE key = 'generation'").get()?.value;
-        if (previous !== generation) throw new Error('Legacy daily database was replaced after merging');
-        checkpointDatabase(daily, DAILY_DATABASE);
-      } finally { daily.close(); }
-      unlinkSync(legacyDaily);
-    }
-    m.deleteSetting.run(MERGED_DAILY_GENERATION);
-  }
-
   const generation = setting('generation');
   const version = setting('version');
-  if (version === LEGACY_DATABASE_VERSION && generation) mergeDaily(generation);
+  if (version === LEGACY_DATABASE_VERSION && generation) mergeDaily(main, legacyDaily, m, saveSetting, generation);
   else if (version === undefined && !generation && !lstatSync(legacyDaily, { throwIfNoEntry: false })) {
     reset(calendar);
   } else if (version !== DATABASE_VERSION || !generation) throw new Error('Invalid Tokens manager database version');
 
   // The merged database is ready even if a reader is still holding the old file open.
   // Keep the marker to retry cleanup on the next startup.
-  try { removeMergedDaily(); } catch {}
+  try { removeMergedDaily(legacyDaily, m, setting); } catch {}
   saveSetting('deviceGuid', guid);
-  transaction(main, () => {
+  withTransaction(main, () => {
     for (const { id, at, record } of m.channelBackfill.iterate()) indexDetail(id, at, JSON.parse(record));
   });
 
@@ -271,7 +261,7 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
   function commitSource(source, stamp, records, at = now()) {
     const firstDay = calendar.dayAgo(at, RETENTION_DAYS - 1);
     const detailDay = calendar.dayAgo(at, DETAIL_DAYS - 1);
-    transaction(main, () => {
+    withTransaction(main, () => {
       const buckets = new Map();
       for (const sourceRecord of records) {
         let record = sourceRecord;
@@ -308,14 +298,14 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
         }
         addBucket(buckets, calendar, record, 1);
       }
-      writeBuckets(buckets);
+      for (const { dimensions, counters } of buckets.values()) writeBucket(m, dimensions, counters);
       if (stamp !== null) m.cursor.run(source, stamp, at);
     });
   }
 
   function finishScan(at = now()) {
     const firstDay = calendar.dayAgo(at, RETENTION_DAYS - 1);
-    transaction(main, () => {
+    withTransaction(main, () => {
       m.pruneBuckets.run(firstDay);
       m.pruneSeen.run(firstDay);
       m.pruneDetails.run(calendar.dayAgo(at, DETAIL_DAYS - 1));
