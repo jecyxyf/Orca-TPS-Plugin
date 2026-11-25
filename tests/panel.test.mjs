@@ -683,6 +683,13 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(template, /<dl class="metrics">[\s\S]*?data-testid="output-value"[\s\S]*?class="metric ttft" data-testid="ttft"[\s\S]*?data-testid="ttft-value"[\s\S]*?data-testid="duration-value"[\s\S]*?data-testid="cache-value"/);
   assert.equal((template.match(/class="metric-icon"/g) ?? []).length, 4);
   assert.doesNotMatch(template, /🤖|📦|⏳|🍪|metric-label/);
+  assert.equal(css.get('.record-card').position, 'relative');
+  assert.match(html, /@keyframes card-insert/);
+  assert.match(html, /@keyframes aurora-sweep/);
+  assert.match(html, /@keyframes aurora-flash/);
+  assert.match(html, /@keyframes star-float/);
+  assert.match(html, /function decorateNewCard\(card\)/);
+  assert.match(html, /function recordIdentity\(record\)/);
   assert.equal(css.get('.record-card .output').color, '#0066e6');
   assert.equal(css.get('html.dark .record-card .output').color, '#64b0ff');
   assert.equal(css.get('.settings-color-row')['justify-content'], 'flex-start');
