@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
-import { defaultRoots } from '../src/data-paths.mjs';
-import { discoverUsageUnits, readTargetSession } from '../src/data.mjs';
+import { defaultRoots } from '../src/harness_parser.mjs';
+import { discoverUsageUnits, readTargetSession } from '../src/harness_parser.mjs';
 import { leaderboardDay, leaderboardDayStart, localDayKey } from '../src/usage-summary.mjs';
 
 const options = root => ({ roots: { hermes: [root] }, includeDefaults: false, ccSwitchDb: null });
@@ -109,29 +109,24 @@ test('Hermes notices equal-size replacements and reads each complete appended re
   assert.equal((await read()).length, 2);
 });
 
-test('SSH usage preserves the Hermes host wall clock when the desktop uses another time zone', async t => {
+test('the harness parser reads Hermes timestamps in the source host time zone', async t => {
   const { root, file } = await fixture(t);
   const rankDay = leaderboardDay(Date.now()), start = leaderboardDayStart(rankDay);
   const timestamp = new Date(start + 60_000).toISOString().slice(0, 19).replace('T', ' ') + ',000';
   const row = call(1).replace(/^.{23}/, timestamp);
   await writeFile(file, row);
-  const collector = new URL('../src/remote-collector.mjs', import.meta.url).href;
-  const data = new URL('../src/data.mjs', import.meta.url).href;
+  const parser = new URL('../src/harness_parser.mjs', import.meta.url).href;
   const script = `
-    import { createRemoteUsageScan } from ${JSON.stringify(collector)};
-    import { discoverUsageUnits } from ${JSON.stringify(data)};
-    const scan = createRemoteUsageScan((cutoff, bounds) => discoverUsageUnits(cutoff, {
-      ...bounds, includeDefaults: false, roots: { hermes: [process.argv[1]] }
-    }));
-    const rankDay = process.argv[2];
-    const list = await scan({ type: 'list', offset: 0, cutoffMs: 0, timeZone: 'Pacific/Kiritimati', rankDay });
-    const read = await scan({ type: 'read', keys: list.items.map(item => item.key) });
-    console.log(JSON.stringify(Object.values(read.results)));
+    import { HarnessParser } from ${JSON.stringify(parser)};
+    for await (const source of new HarnessParser().readSince(Number(process.argv[1]))) {
+      const selected = source.records.filter(record => record.provider === 'hermes');
+      if (selected.length) console.log(JSON.stringify(selected[0]));
+    }
   `;
-  const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script, root, rankDay], {
-    env: { ...process.env, TZ: 'UTC' }, timeout: 10_000
+  const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script, String(start)], {
+    env: { ...process.env, HOME: root, USERPROFILE: root, HERMES_HOME: root, TZ: 'UTC' }, timeout: 10_000
   });
-  const results = JSON.parse(stdout);
-  assert.equal(results.length, 1);
-  assert.deepEqual(results[0].leaderboardDays, { [rankDay]: 556 });
+  const result = JSON.parse(stdout);
+  assert.equal(result.completedAt, start + 60_000);
+  assert.equal(result.freshInputTokens + result.outputTokens + result.cacheReadTokens + result.cacheCreationTokens, 556);
 });

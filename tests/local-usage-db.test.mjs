@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openLocalUsageDb, personalRecordsCutoff, USAGE_RETENTION_MS } from '../src/local-usage-db.mjs';
-import { HOUR_MS } from '../src/leaderboard-stats.mjs';
+import { HOUR_MS } from '../src/leaderboard_stats.mjs';
 import { createRecordUsageIndex } from '../src/record-usage-index.mjs';
+import { CC_SWITCH_APPS, combineCcSwitchUsage } from '../src/cc-switch-usage.mjs';
 import { HISTORY_DAYS } from '../src/usage-summary.mjs';
 import { createSourceUploader, createSqliteUploadStorage } from '../src/usage-upload.mjs';
 
@@ -14,6 +15,35 @@ const now = Date.UTC(2026, 10, 21, 12);
 const source = '7947c5c1-36a1-45fa-a8ad-91705080fb7f';
 const record = (id, completedAt, tokens = 10) => ({ id, completedAt, provider: 'codex', model: 'sample', freshInputTokens: tokens });
 const reading = (records, extra) => ({ deviceGuid: source, logUnitKey: 'log', logStamp: 'stamp', records, complete: true, now, ...extra });
+
+test('native Personal Stats replace covered local records and retain SSH and other sources', async () => {
+  const db = openLocalUsageDb(':memory:');
+  const at = new Date(2026, 10, 21, 12).getTime();
+  const west = '9147c5c1-36a1-45fa-a8ad-91705080fb7f';
+  try {
+    db.appendRecords(reading([
+      record('old-local', at - 2_000, 700),
+      { ...record('local-other', at - 2_000, 3), provider: 'hermes' }
+    ], { now: at }));
+    db.appendRecords(reading([record('ssh', at - 2_000, 5)], { now: at, deviceGuid: west }));
+    const index = createRecordUsageIndex({ db, deviceGuid: source, now: () => at, discover: async () => [] });
+    await index.ready();
+    const supplemental = index.supplementalSummary(at, CC_SWITCH_APPS);
+    assert.deepEqual([supplemental.windows.today.requests, supplemental.windows.today.tokens], [2, 8]);
+    const officialWindow = { requests: 1, freshInput: 11, output: 1, cacheRead: 0, cacheWrite: 0, tokens: 12,
+      rows: [{ provider: 'codex', model: 'sample', requests: 1, freshInput: 11, output: 1, cacheRead: 0, cacheWrite: 0, tokens: 12 }], hiddenRows: 0 };
+    const windows = Object.fromEntries(Object.keys(supplemental.windows).map(key => [key, officialWindow]));
+    const day = supplemental.daily[0].day;
+    const official = { windows, hourly: { windows }, daily: [{ day, requests: 1, tokens: 12 }] };
+    const combined = combineCcSwitchUsage(official, supplemental, index.summary());
+    assert.deepEqual([combined.windows.today.requests, combined.windows.today.tokens], [3, 20]);
+    assert.deepEqual(combined.windows.today.rows.map(row => [row.provider, row.tokens]), [['codex', 17], ['hermes', 3]]);
+    assert.deepEqual(combined.daily, [{ day, tokens: 20, requests: 3 }]);
+    assert.deepEqual(combined, JSON.parse(JSON.stringify(combined)));
+    db.publishPanel('usage-cc-switch', 'desktop', combined, at);
+    assert.equal(db.readPanel('usage-cc-switch', 'desktop').value.windows.today.tokens, 20);
+  } finally { db.close(); }
+});
 
 test('the local database keeps exactly three business tables and survives a large rebuild', async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'tps-local-db-'));

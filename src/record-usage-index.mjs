@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { personalRecordsCutoff, USAGE_RETENTION_MS } from './local-usage-db.mjs';
-import { HOUR_MS, MAX_RECENT_REQUESTS, RECENT_STATS_MS, hourStart, validStatsLabel } from './leaderboard-stats.mjs';
-import { validInstallationId } from './leaderboard-installation.mjs';
+import { HOUR_MS, MAX_RECENT_REQUESTS, RECENT_STATS_MS, hourStart, validStatsLabel } from './leaderboard_stats.mjs';
+import { validInstallationId } from './leaderboard_stats.mjs';
 import { sourceMessage } from './locales.mjs';
 import {
   accumulateRecords, dailySeries, HISTORY_DAYS, leaderboardDay, localHourStart, maxRequestSpeed,
@@ -203,8 +203,18 @@ export function createRecordUsageIndex({
 
   const initialized = () => collection != null && collection.importedAt !== null;
   const hasPendingHistory = () => (collection?.historyDays ?? 0) < HISTORY_DAYS;
+
+  function supplementalSummary(at, providers) {
+    const exclude = { deviceGuid, providers };
+    const days = Object.create(null);
+    accumulateRecords(days, undefined, db.iterateRecords({ from: usageCutoffMs(at), to: at + 1, exclude }));
+    const cutoffAt = localHourStart(at);
+    const hourly = db.iterateRecords({ from: cutoffAt - HISTORY_DAYS * 24 * HOUR_MS, to: cutoffAt, exclude });
+    return { windows: summarizeUsage([days], at), daily: dailySeries([days], at), hourly: summarizeHourlyUsage(hourly, cutoffAt) };
+  }
+
   return {
-    refresh, ready: initialize, observe, initialized, hasPendingHistory, summary: () => personal, leaderboardSources, leaderboardHours,
+    refresh, ready: initialize, observe, initialized, hasPendingHistory, summary: () => personal, supplementalSummary, leaderboardSources, leaderboardHours,
     canPublish: () => initialized() || progress.done > 0,
     leaderboardUsage() {
       const { day, daily } = dayTotals();

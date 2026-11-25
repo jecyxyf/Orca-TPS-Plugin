@@ -37,11 +37,21 @@ function format(text, values) {
   return text?.replace(argumentsIn, (_, index) => values[index] ?? '') ?? '';
 }
 
-// Readers and the remote collector use the original notice text internally.
-// Translate at the display boundary, including notices stored before a language switch.
+// Some plugin notices and older readers still supply the original text.
 const sourceStrings = await readLocale('zh-CN');
 export function sourceMessage(id, ...values) {
   return format(sourceStrings[id], values);
+}
+
+function formatNotice(value, t, depth = 0) {
+  if (!Array.isArray(value)) return value;
+  if (depth > 2) return '';
+  const [code, ...args] = value;
+  return t(code, ...args.map(arg => formatNotice(arg, t, depth + 1)));
+}
+
+export function sourceNotice(value) {
+  return formatNotice(value, sourceMessage);
 }
 
 let fixedNotices, parameterizedNotices;
@@ -81,6 +91,7 @@ export async function createLocalePreferences(storage) {
 
   const t = (id, ...values) => format(strings[id] ?? english[id], values);
   function notice(value, depth = 0) {
+    if (Array.isArray(value)) return formatNotice(value, t, depth);
     if (code === 'zh-CN' || typeof value !== 'string' || depth > 2) return value;
     if (!fixedNotices) indexNotices();
     const id = fixedNotices.get(value);

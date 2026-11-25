@@ -17,6 +17,7 @@
     "url": "https://github.com/jecyxyf/Orca-TPS-Plugin/issues"
   },
   "scripts": {
+    "build:cc-switch-usage": "node native/build-cc-switch-usage.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "engines": {

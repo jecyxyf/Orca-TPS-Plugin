@@ -5,12 +5,13 @@
 [![Orca 1.4.251+](https://img.shields.io/badge/Orca-%3E%3D1.4.251-blue.svg)](https://github.com/stablyai/orca)
 [![CI](https://github.com/jecyxyf/Orca-TPS-Plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/jecyxyf/Orca-TPS-Plugin/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/jecyxyf/Orca-TPS-Plugin?style=social)](https://github.com/jecyxyf/Orca-TPS-Plugin)
 
 ## 1. Project description
 
-TPS Plugin brings token usage and generation speed to the Orca sidebar. See what the current session is doing, review your usage over time, or join the leaderboard with a GitHub account.
+TPS Plugin shows AI request token usage and generation speed in the Orca sidebar. Inspect the current session, review your usage over time, or join the leaderboard with a GitHub account.
 
-The plugin supports local and SSH workspaces and remembers your choice of 15 interface languages. Conversation logs are read in place. The leaderboard receives usage totals.
+The plugin supports local and remote workspaces, offers 15 interface languages, and remembers your selection.
 
 ## 2. Interface overview
 
@@ -40,10 +41,9 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ### 3.2 Personal Stats
 
-- Review usage and request counts for today, the last 7 or 30 days, or the past year. Today's summary also shows the highest generation speed for a single request.
+- Review usage and requests for today, the last 7 or 30 days, this calendar year, or the past 365 days. Today's summary also shows the highest generation speed for a single request.
 - Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
-- See daily activity over the past 365 days in the heatmap. Request statistics, panel snapshots, and pending uploads are stored in a local SQLite database. The plugin keeps a year of personal usage and fills in older days from local logs that are still available.
-- Usage history is cached locally and restored when Orca restarts.
+- Personal Stats combines local and SSH usage without signing in. The heatmap covers the past 365 days. Set the statistics time zone in the TPS Plugin settings in Orca.
 
 <p align="center">
   <a href="./assets/readme/en/personal-stats.png" title="View full-size screenshot">
@@ -53,47 +53,55 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 
 ### 3.3 Leaderboard
 
-- Browse usage rankings for the last 24 hours, 7 days, and 30 days in M. All four boards refresh together at the top of the hour. Usage counts the completed hours before that cutoff. The top three get gold, silver, and bronze medals.
-- Use the switch next to Rankings to control leaderboard viewing. Turning it off hides the rankings and stops fetching them. The plugin remembers your choice. Guests can view rankings.
-- The 24-hour usage tab shows the five-minute waveform and average generation speed before the cutoff. The 7-day and 30-day tabs show one usage point per 24-hour period. All three show the most-used model, Harness, and latest upload time.
-- The Speed tab ranks up to 20 GitHub accounts by their best average generation speed from a qualifying upload in the past 24 hours. Each account appears once across all its devices. An upload qualifies with more than 500 new tokens and a valid speed. The winning upload supplies the time, most-used model, Harness, and full count of new tokens, such as `1,250,000 tokens`.
-- Each curve uses a continuous gradient from green at zero to red at the highest point. The fill uses the same gradient at 50% opacity.
-- Sign in with GitHub to participate. The leaderboard adds each computer's local usage and counts each SSH account once, even when several computers connect to it. The plugin fetches avatars directly from GitHub and shows a built-in black hat avatar until one loads. Missing avatars are retried after the next sync, and a loaded avatar is reused everywhere it appears.
-- While signed in, the plugin attempts to upload every 10 seconds. Manual uploads use the same interval. Each toolbar has a manual button on the left, with an hourglass countdown and a clock for the last successful upload or sync on the right. Upload failures appear below the account toolbar.
+- View token usage rankings and trends by day or hour.
+- Compare each account’s best average generation speed and see the model and Harness used for that result.
+- Turn on Rankings to get automatic updates. Sign in with GitHub to participate. Usage from multiple devices is combined under the same account.
 
 <p align="center">
   <a href="./assets/readme/en/leaderboard.png" title="View full-size screenshot">
-    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English leaderboard with a 30-day usage curve, the cutoff time, and the Speed tab">
+    <img src="./assets/readme/en/leaderboard.webp" width="266" alt="English leaderboard with a 30-day usage curve and the Speed tab">
   </a>
 </p>
 
 ## 4. Supported Harnesses
 
-- Codex CLI
-- Claude Code (including subagents)
-- OpenCode v1 and v2
-- Pi Agent
-- Antigravity CLI
-- Hermes Agent
+<p align="center">
+  <a href="./assets/readme/harnesses/supported-harnesses.svg" title="View full-size icon chart">
+    <img src="./assets/readme/harnesses/supported-harnesses.svg" width="100%" alt="Supported Harnesses · Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes Agent, Pi Agent, MiniMax Code, Kimi Code, Oh My Pi, Antigravity CLI, GitHub Copilot CLI, WorkBuddy, DeepSeek Harness">
+  </a>
+</p>
 
-## 5. Installation
+## 5. How it works
 
-Use **Orca 1.4.251 or later** on Windows or Linux. To collect usage from an SSH workspace, the remote host needs **Node.js 22.13 or later with SQLite support**.
+<p align="center">
+  <a href="./assets/readme/tokens-manager-architecture.png" title="View the full-size diagram">
+    <img src="./assets/readme/tokens-manager-architecture.webp" width="640" alt="Local and remote Tokens Managers exchange statistics over SSH. The local manager updates Personal Stats and submits summaries to the leaderboard.">
+  </a>
+</p>
 
-### Orca plugin directory
+- Each local or remote device collects and stores its own token usage.
+- Tokens Managers sync usage over SSH. Personal Stats and leaderboard submissions use the same totals.
+- The leaderboard server calculates rankings in memory and keeps usage and speed data in memory only. [Server guide](./server/README.md)
+- The leaderboard server runs without a database. Raw session logs stay on your devices, and GitHub account and sign-in data are stored in a file on the server.
 
-Open **Settings → Plugins**, search for **TPS**, and select the entry by **jecyxyf**. Click **Install** and review the requested permissions. Orca downloads the plugin for you. [View the plugin listing](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
+## 6. Installation
 
-### Local installation
+> [!IMPORTANT]
+> **Upgrading from 1.6.4 to 1.6.5**
+>
+> Version 1.6.5 substantially changes the plugin structure and moves the leaderboard to a new server. Uninstall the old TPS Plugin in Orca, then install **1.6.5**.
 
-Clone this repository.
+- **Requirements.** Use Orca 1.4.251 or later on Windows or Linux. For SSH workspace usage, the remote host needs Node.js 22.13 or later with SQLite support.
+- **Install from the plugin directory.** In Orca, open **Settings → Plugins**, search for **TPS** by **jecyxyf**, then install it and review the permissions. [View the plugin listing](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
+- **Install locally.** Clone this repository. In **Settings → Plugins → Development folders…**, add the folder containing `orca-plugin.json` and enable the plugin.
+- **Open the plugin.** Select **TPS Plugin** in Orca’s right sidebar.
 
-```sh
-git clone https://github.com/jecyxyf/Orca-TPS-Plugin.git
-```
+## 7. Known issues
 
-In Orca, open **Settings → Plugins → Development folders…** and add the cloned folder containing `orca-plugin.json`. Review the permissions and enable the plugin. Keep the cloned folder in place while using it.
+If a device submits to the leaderboard and shuts down before syncing, Personal Stats on other devices can lag behind. Stats catch up once the device reconnects and syncs. Future versions will keep the current sync approach.
 
-After installation, open **TPS Plugin** in Orca’s right sidebar.
+## 8. Next version
 
-[MIT License](./LICENSE) · [Third-party notices](./THIRD_PARTY_NOTICES.md) · [Leaderboard server guide](./server/README.md)
+Overhaul the plugin’s visual design and layout to make it feel more modern and fun.
+
+[MIT License](./LICENSE) · [Third-party notices](./THIRD_PARTY_NOTICES.md)

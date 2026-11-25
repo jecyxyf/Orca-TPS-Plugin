@@ -6,30 +6,22 @@ import { fileURLToPath } from 'node:url';
 
 const panelPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'panel.html');
 
-test('the upload notice names the failed part and clears when the rolling retry succeeds', async () => {
+test('upload failures keep an accessible reason without a visible notice', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const source = /function renderUploadResult\(snapshot\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
+  const source = /const successfulUploadCodes[^\n]*\n[\s\S]*?(?=\n      function renderTransferStatus)/.exec(html)?.[0];
   assert.ok(source);
-  const elements = { 'sync-result': {}, 'sync-error': {} };
-  const render = new Function('element', 'renderToolbarTime', 'shortClock', 'messageFor', 't',
-    `${source}\nreturn renderUploadResult;`)(
-    id => elements[id], (target, time) => { target.lastSyncAt = time; }, String, code => code,
-    (key, ...values) => [key, ...values].join(' ')
+  assert.doesNotMatch(html, /ladder-sync-error|boardProblem/);
+  const failure = new Function('shortClock', 'messageFor', 't', `${source}\nreturn uploadFailure;`)(
+    String, code => code, (key, ...values) => [key, ...values].join(' ')
   );
-
-  render({ lastSyncAt: 50, lastUpload: { at: 100, code: 'accepted', rollingCode: 'unavailable' }, rollingProblem: 'unavailable' });
-  assert.deepEqual(elements['sync-error'], { textContent: 'daily-upload-succeeded-rolling-failed unavailable', hidden: false });
-  assert.equal(elements['sync-result'].lastSyncAt, 50);
-
-  render({ lastSyncAt: 50, lastUpload: { at: 110, code: 'invalid', rollingCode: 'accepted' } });
-  assert.equal(elements['sync-error'].textContent, 'rolling-upload-succeeded-daily-failed invalid');
-
-  render({ lastSyncAt: 50, lastUpload: { at: 115, code: 'unavailable', rollingOnly: true }, rollingProblem: 'unavailable' });
-  assert.equal(elements['sync-error'].textContent, 'rolling-upload-failed unavailable');
-
-  render({ lastSyncAt: 120, lastUpload: { at: 120, code: 'accepted', rollingCode: 'accepted' }, rollingProblem: null });
-  assert.deepEqual(elements['sync-error'], { textContent: '', hidden: true });
-  assert.equal(elements['sync-result'].lastSyncAt, 120);
+  assert.equal(failure({ lastUpload: { at: 100, code: 'accepted', rollingCode: 'unavailable' }, rollingProblem: 'unavailable' }),
+    'daily-upload-succeeded-rolling-failed unavailable');
+  assert.equal(failure({ lastUpload: { at: 110, code: 'invalid', rollingCode: 'accepted' } }),
+    'rolling-upload-succeeded-daily-failed invalid');
+  assert.equal(failure({ lastUpload: { at: 115, code: 'unavailable', rollingOnly: true }, rollingProblem: 'unavailable' }),
+    'rolling-upload-failed unavailable');
+  assert.equal(failure({ lastUpload: { at: 118, code: 'unavailable' } }), 'last-sync-failed 118 unavailable');
+  assert.equal(failure({ lastUpload: { at: 120, code: 'accepted', rollingCode: 'accepted' }, rollingProblem: null }), '');
 });
 
 test('per-request output uses Tokens and aggregate usage uses millions without rounding small counts to zero', async () => {
@@ -157,19 +149,23 @@ test('the panel title has a logo and Current Data shows the update time beside a
   assert.doesNotMatch(html, /recent-requests|request-speed-note/);
 });
 
-test('Personal Stats opens with hourly updates as the first option above the period tabs', async () => {
+test('Personal Stats and the Leaderboard show calendar mode first and select it by default', async () => {
   const html = await readFile(panelPath, 'utf8');
   const toolbar = /<section\b[^>]*\bid="usage"[^>]*>\s*<div class="war-mode">([\s\S]*?)\n      <section class="war"/.exec(html)?.[1];
   assert.ok(toolbar);
+  const expectedModes = [['calendar', 'true'], ['hourly', 'false']];
   assert.deepEqual([...toolbar.matchAll(/data-usage-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
-    .map(match => match.slice(1)), [['hourly', 'true'], ['calendar', 'false']]);
-  assert.match(html, /usageMode = 'hourly'/);
-  assert.equal([...toolbar.matchAll(/<li data-i18n="usage-update-hint-/g)].length, 4);
+    .map(match => match.slice(1)), expectedModes);
+  assert.deepEqual([...html.matchAll(/data-ladder-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
+    .map(match => match.slice(1)), expectedModes);
+  assert.match(html, /usageMode = 'calendar'/);
+  assert.match(html, /rankingMode = 'calendar'/);
+  assert.doesNotMatch(html, /war-mode-help|war-mode-hint|usage-update-(?:help|hint)/);
 });
 
-test('today usage connects pulses at real timestamps and animates new points once', async () => {
+test('today usage draws a full zero line and animates real-time pulses once', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const source = /const chartVerticalPadding = 4;([\s\S]*?)\n      function usageCard/.exec(html)?.[0];
+  const source = /const chartVerticalPadding = 4;[\s\S]*?(?=\n      function renderRows)/.exec(html)?.[0];
   assert.ok(source);
   assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart').background, 'transparent');
   const frames = [], painters = new WeakMap(), paths = [], areas = [], stops = [];
@@ -197,14 +193,20 @@ test('today usage connects pulses at real timestamps and animates new points onc
   let width = 300;
   const chart = { width: 320, height: 60, isConnected: true,
     getBoundingClientRect: () => ({ width, height: 30 }), getContext: () => ctx };
-  const { draw, pulseX } = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
-    const RECENT_STATS_MS = 300000;
-    ${source.replace(/\n      function usageCard$/, '')}
-    return { draw: drawSubmissionPulses, pulseX };
+  function createElement(tag) {
+    return { ...(tag === 'canvas' ? chart : {}), children: [], setAttribute() {},
+      append(...children) { this.children.push(...children); } };
+  }
+  const { draw, pulseX, usageCard } = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
+    const RECENT_STATS_MS = 300000, rankDays = 1;
+    const usageChartLabel = () => 'Recent usage', toolText = () => '', t = key => key;
+    const formatMillionTokens = tokens => tokens + ' M', speedText = speed => speed + ' tokens/s';
+    ${source}
+    return { draw: drawSubmissionPulses, pulseX, usageCard };
   `)(painters, callback => frames.push(callback), { signal: { aborted: false } }, {
     devicePixelRatio: 2, matchMedia: () => ({ matches: false }),
     getComputedStyle: () => ({ getPropertyValue: name => name === '--usage-wave-low' ? '#60a589' : '#ff6b72' })
-  }, { documentElement: {} }, TestPath);
+  }, { documentElement: {}, createElement }, TestPath);
   assert.equal(pulseX({ submittedAt: 1_000 }, 1_000, width), 0);
   assert.equal(pulseX({ submittedAt: 301_000 }, 1_000, width), width);
   draw(chart, [{ submittedAt: 20_000, deltaTokens: 100 }, { submittedAt: 40_000, deltaTokens: 0 },
@@ -212,9 +214,10 @@ test('today usage connects pulses at real timestamps and animates new points onc
   frames.shift()(1000);
   assert.deepEqual([chart.width, chart.height], [600, 60]);
   assert.deepEqual(stops, [[0, '#60a589'], [1, '#ff6b72']]);
+  assert.deepEqual([paths[0][0], paths[0].at(-1)], [[0, 26], [300, 26]]);
   assert.deepEqual(paths[0].slice(2, 7), [[20, 15], [23.25, 26], [40, 26], [89.75, 26], [93, 26]]);
   assert.deepEqual(paths[1][0], [40, 26, 1.4]);
-  assert.deepEqual(areas[0].points, [...paths[0], [96.25, 26], [16.75, 26], 'closed']);
+  assert.deepEqual(areas[0].points, [...paths[0], [300, 26], [0, 26], 'closed']);
   assert.equal(areas[0].opacity, 0.5);
   assert.equal(areas[0].style, ctx.strokeStyle);
   assert.equal(ctx.globalAlpha, 1);
@@ -228,30 +231,198 @@ test('today usage connects pulses at real timestamps and animates new points onc
   assert.deepEqual([chart.width, chart.height], [300, 60]);
   assert.deepEqual(paths[0][6], [46.5, 4]);
   assert.equal(frames.length, 0);
+  const empty = usageCard({}, 301_000, Infinity);
+  const [emptyChart, emptyMeta] = empty.children;
+  assert.equal(emptyMeta.children.at(-1).textContent, '0 tokens/s');
+  assert.equal(emptyChart.title, 'Recent usage\n0 M · 0 tokens/s');
+  frames.shift()(1600);
+  assert.deepEqual(paths, [[[0, 26], [150, 26]]]);
+  assert.equal(frames.length, 0);
 });
 
-test('leaderboard countdown is shared across all periods of the snapshot', async () => {
+test('usage rankings omit the subtitle beneath the period selector', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const countdown = /function countdownText\([\s\S]*?\n      \}/.exec(html)?.[0];
-  const render = /function renderRankCountdown\([\s\S]*?\n      \}/.exec(html)?.[0];
-  assert.ok(countdown && render);
-  const showCountdown = new Function('state', 'time', `
-    const { nextRankRefresh, rankingPending } = state;
-    const note = { textContent: '' };
-    const element = () => note;
-    const locale = { number: (value, options) => new Intl.NumberFormat('en', options).format(value) };
-    const t = key => key;
-    ${countdown}
+  assert.doesNotMatch(html, /ladder-recent-caption|leaderboard-cutoff/);
+  assert.match(html, /chart\.setAttribute\('aria-label', usageChartLabel\(\)\)/);
+});
+
+test('the speed ranking uses S medals for the first three places', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const speed = /const speedPeriod = \{[^\n]*\};/.exec(html)?.[0];
+  const podium = /const podium = \[[^\n]*\];/.exec(html)?.[0];
+  const render = /function medal\(rank, period\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
+  const period = /const period = speedBoard \? speedPeriod : periods\.find\(entry => entry\.days === rankDays\);/.exec(html)?.[0];
+  assert.ok(speed && podium && render && period);
+  const document = { createElement() {
+    return {
+      attributes: {}, dataset: {}, children: [], style: { setProperty() {} },
+      setAttribute(key, value) { this.attributes[key] = value; },
+      append(...children) { this.children.push(...children); },
+      cloneNode() { return { ...this }; }
+    };
+  } };
+  const t = (key, ...args) => [key, ...args].join(' ');
+  const badgeFor = new Function('document', 't', `
+    ${speed}
+    ${podium}
     ${render}
-    renderRankCountdown(time);
-    return note.textContent;
+    const periods = [{ days: 30, mark: '30', title: 'thirty-day-period' }];
+    return (rank, rankDays) => {
+      const speedBoard = rankDays === 0;
+      ${period}
+      return medal(rank, period);
+    };
+  `)(document, t);
+  for (const [index, color] of ['gold', 'silver', 'bronze'].entries()) {
+    const badge = badgeFor(index + 1, 0);
+    assert.equal(badge.dataset.place, index + 1);
+    assert.equal(badge.children.at(-1).children[0].textContent, 'S');
+    assert.equal(badge.attributes['aria-label'], `medal-position leaderboard-speed-tab ${color}-medal`);
+  }
+  assert.equal(badgeFor(4, 0), null);
+  assert.equal(badgeFor(1, 30).children.at(-1).children[0].textContent, '30');
+  const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(css.get('.ladder-rows .ladder-speed-row:not(:has(.ladder-medal))')['--ladder-row-size'], '32px');
+});
+
+test('non-interactive transfer indicators sit beside the last successful times', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(css.get('.ladder-toolbar')['grid-template-areas'], '"title . action last"');
+  assert.equal(css.get('.ladder-rank-toolbar')['grid-template-areas'], '"title toggle action last"');
+  assert.equal(css.get('.ladder-transfer').background, 'transparent');
+  assert.equal(css.get('.ladder-transfer')['justify-content'], 'flex-end');
+  assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-action-width'], '40px');
+  assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-icon-size'], '16px');
+  assert.equal(css.get('.ladder-toolbar')['--ladder-toolbar-label-size'], '13px');
+  assert.equal(css.get('.ladder-toolbar-value')['font-size'], css.get('.ladder-toolbar .section-title')['font-size']);
+  assert.equal(css.get('.ladder-toolbar-value')['grid-area'], 'last');
+  assert.match(html, /\.ladder-rank-toolbar\.is-off :is\(\.ladder-transfer, \.ladder-toolbar-value\) \{ display: none; \}/);
+  assert.equal(css.get('.ladder-personal-data')['scrollbar-gutter'], 'stable');
+  assert.equal(css.get('.ladder-personal-data')['max-block-size'], '208px');
+  assert.equal(css.get('.ladder-personal-data')['padding-block-end'], '8px');
+  assert.equal(css.get('.ladder-rank-card')['scrollbar-gutter'], 'stable');
+  assert.equal(css.get('.ladder-transfer[aria-busy="true"] .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
+  assert.equal(css.get('.ladder-transfer.is-failed .ladder-transfer-error').color, 'var(--error)');
+  assert.doesNotMatch(html, /ladder-(?:sync|refresh)-countdown/);
+  assert.doesNotMatch(html, /id="ladder-(?:sync-now|update)"|request\('sync'\)/);
+  for (const [id, timeId, tooltip] of [
+    ['upload-state', 'sync-result', 'last-upload-time'],
+    ['download-state', 'refresh-time', 'last-sync-time']
+  ]) {
+    const pair = new RegExp(`(<span[^>]*id="ladder-${id}"[\\s\\S]*?<\\/span>)\\s*` +
+      `(<time[^>]*id="ladder-${timeId}"[^>]*>)`).exec(html);
+    assert.ok(pair, `${id} must sit directly beside its timestamp`);
+    const [, indicator, time] = pair;
+    assert.match(time, new RegExp(`data-i18n-title="${tooltip}"`));
+    assert.match(indicator, /role="img" aria-busy="false"/);
+    assert.doesNotMatch(indicator, /tabindex|onclick/);
+    assert.doesNotMatch(html, new RegExp(`element\\('${id}'\\)\\.addEventListener`));
+    assert.match(indicator, /class="ladder-transfer-icon"/);
+    assert.match(indicator, /class="ladder-transfer-spinner"/);
+    assert.match(indicator, /class="ladder-transfer-error"/);
+  }
+});
+
+test('leaderboard upload and download indicate active transfers independently', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /const successfulUploadCodes[\s\S]*?(?=\n      function scheduleUploadUnlock)/.exec(html)?.[0];
+  assert.ok(source);
+  const indicators = Object.fromEntries(['upload-state', 'download-state'].map(id => {
+    const attrs = new Map(), classes = new Set();
+    return [id, {
+      attrs, classes, classList: { toggle(name, active) { if (active) classes.add(name); else classes.delete(name); } },
+      setAttribute: (name, value) => attrs.set(name, value),
+      getAttribute: name => attrs.get(name)
+    }];
+  }));
+  const show = new Function('element', 'state', `
+    const { rankingPending, rankingProblem } = state;
+    const t = (key, ...args) => [key, ...args].join(' ');
+    const messageFor = t;
+    const shortClock = String;
+    ${source}
+    renderUploadStatus(state.snapshot, state.signedIn !== false, state.time ?? 1000);
+    renderDownloadStatus();
   `);
-  const state = { nextRankRefresh: 12_000 };
-  assert.equal(showCountdown(state, 2_100), '00:10');
-  assert.equal(showCountdown(state, 6_000), '00:06');
-  assert.equal(showCountdown({ ...state, rankingPending: true }, 6_000), 'sync-in-progress');
-  assert.equal(showCountdown(state, 12_000), 'sync-waiting');
-  assert.equal(showCountdown({}, 2_100), '—');
+  const upload = indicators['upload-state'], download = indicators['download-state'];
+  const state = indicator => [indicator.attrs.get('aria-busy'), indicator.title];
+  const isFailed = indicator => indicator.classes.has('is-failed');
+  const render = current => show(id => indicators[id], current);
+  render({ snapshot: { uploading: true } });
+  assert.deepEqual(state(upload), ['true', 'uploading']);
+  assert.deepEqual(state(download), ['false', 'period-rankings']);
+  render({ rankingPending: true });
+  assert.deepEqual(state(upload), ['false', 'data-upload']);
+  assert.deepEqual(state(download), ['true', 'sync-in-progress']);
+  const locked = { board: { lockedUntil: 1500 } };
+  render({ snapshot: locked });
+  assert.equal(isFailed(upload), true);
+  render({ snapshot: locked, time: 1500 });
+  assert.equal(isFailed(upload), false);
+  render({ signedIn: false, snapshot: { uploading: true } });
+  assert.deepEqual(state(upload), ['false', 'data-upload']);
+  assert.deepEqual(state(download), ['false', 'period-rankings']);
+
+  const lastUpload = { at: 1000, code: 'unavailable' };
+  render({ snapshot: { lastUpload } });
+  assert.equal(isFailed(upload), true);
+  assert.equal(isFailed(download), false);
+  assert.equal(upload.attrs.get('aria-label'), 'data-upload · last-sync-failed 1000 unavailable');
+
+  render({ snapshot: { uploading: true, lastUpload }, rankingProblem: 'unavailable' });
+  assert.equal(isFailed(upload), false);
+  assert.equal(isFailed(download), true);
+  assert.equal(download.attrs.get('aria-label'), 'period-rankings · unavailable');
+
+  render({ snapshot: { lastUpload }, rankingPending: true, rankingProblem: 'unavailable' });
+  assert.equal(isFailed(upload), true);
+  assert.equal(isFailed(download), false);
+  assert.deepEqual(state(download), ['true', 'sync-in-progress']);
+
+  render({ snapshot: { lastUpload: { at: 2000, code: 'accepted' } } });
+  assert.equal(isFailed(upload), false);
+  assert.equal(isFailed(download), false);
+});
+
+test('upload lock expiry uses one timer outside the periodic ranking check', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const source = /function scheduleUploadUnlock\([\s\S]*?\n      \}/.exec(html)?.[0];
+  const interval = /const interval = setInterval\(\(\) => \{[\s\S]*?\n      \}, 1000\);/.exec(html)?.[0];
+  assert.ok(source && interval);
+  assert.doesNotMatch(interval, /renderUploadStatus|scheduleUploadUnlock/);
+
+  const timers = new Map();
+  let issued = 0, renders = 0;
+  const schedule = new Function('setTimeout', 'clearTimeout', 'render', `
+    let uploadUnlockAt, uploadUnlockWake;
+    ${source}
+    return scheduleUploadUnlock;
+  `)((callback, delay) => {
+    timers.set(++issued, { callback, delay });
+    return issued;
+  }, id => timers.delete(id), () => { renders++; });
+
+  schedule(undefined, 1000);
+  assert.equal(timers.size, 0);
+  schedule(1500, 1000);
+  schedule(1500, 1200);
+  assert.equal(issued, 1);
+  assert.equal(timers.get(1).delay, 500);
+
+  schedule(1800, 1200);
+  assert.deepEqual([...timers.keys()], [2]);
+  assert.equal(timers.get(2).delay, 600);
+  const wake = timers.get(2).callback;
+  timers.delete(2);
+  wake();
+  schedule(1800, 1800);
+  assert.equal(renders, 1);
+  assert.equal(timers.size, 0);
+
+  schedule(1990, 1800);
+  schedule(undefined, 1850);
+  assert.equal(timers.size, 0);
 });
 
 test('daily usage fills missing dates with zero across the entire selected window', async () => {

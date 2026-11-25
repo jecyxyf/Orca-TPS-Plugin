@@ -1,16 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { formatHitRatePercent, formatSpeedDisplay, formatTokensPerSecond } from '../src/controller.mjs';
 import {
   computeSpeedMetrics,
-  formatHitRatePercent,
-  formatSpeedDisplay,
-  formatTokensPerSecond,
   mergeChannelProxyRecords,
   mergeProxyRecords,
   normalizeCodexModel,
   parseJsonl,
   parseOpenCodeRows
-} from '../src/parsers.mjs';
+} from '../src/harness_parser.mjs';
 
 const epoch = 1700000000000;
 const iso = msOffset => new Date(epoch + msOffset).toISOString();

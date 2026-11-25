@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { RECENT_STATS_MS, validRecentRequest, validSubmissionStats } from './leaderboard-stats.mjs';
+import { RECENT_STATS_MS, validRecentRequest, validSubmissionStats } from './leaderboard_stats.mjs';
 
 const STORAGE_KEY = 'leaderboard:submission-stats';
 

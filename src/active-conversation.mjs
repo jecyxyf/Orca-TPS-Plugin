@@ -1,7 +1,7 @@
 import { sourceMessage } from './locales.mjs';
 import { open } from 'node:fs/promises';
 import path from 'node:path';
-import { defaultRoots } from './data-paths.mjs';
+import { defaultRoots } from './harness_parser.mjs';
 
 const observations = new Map();
 const PROFILE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;

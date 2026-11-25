@@ -1,15 +1,42 @@
-import { sourceMessage } from './locales.mjs';
+import { sourceMessage, sourceNotice } from './locales.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { formatHitRatePercent, formatSpeedDisplay } from './parsers.mjs';
 
 const PROVIDERS = ['codex', 'claude', 'opencode', 'pi', 'antigravity', 'hermes'];
 const STORE_KEY = 'preferences-v1';
 const EMPTY_ROOTS = () => Object.fromEntries(PROVIDERS.map(key => [key, []]));
 const cleanText = (value, limit = 160) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, limit);
-const HIDDEN_ROUTINE_WARNINGS = new Set([
-  sourceMessage('notice.recent-files-limit'),
-  sourceMessage('notice.codex-large-session')
-]);
+const routineWarningCodes = ['notice.recent-files-limit', 'notice.codex-large-session'];
+const HIDDEN_ROUTINE_WARNINGS = new Set([...routineWarningCodes, ...routineWarningCodes.map(code => sourceMessage(code))]);
+function isRoutineWarning(value) {
+  if (!Array.isArray(value)) return HIDDEN_ROUTINE_WARNINGS.has(value);
+  const [code, arg] = value;
+  return HIDDEN_ROUTINE_WARNINGS.has(code) ||
+    (code === 'notice.large-session' && arg === 'codex') ||
+    (code === 'notice.scan-files-limit' && arg === 100);
+}
+
+export function formatTokensPerSecond(tps) {
+  if (typeof tps !== 'number' || !Number.isFinite(tps) || tps <= 0) return null;
+  return tps >= 1 ? String(Math.round(tps)) : tps.toFixed(1);
+}
+
+export function formatSpeedDisplay(entry, locale) {
+  const tps = entry?.tokensPerSecond;
+  let formatted = formatTokensPerSecond(tps);
+  if (!formatted) return '—';
+  if (locale) formatted = Number(formatted).toLocaleString(locale, { minimumFractionDigits: tps < 1 ? 1 : 0 });
+  return entry?.isEstimatedSpeed ? `≈${formatted}` : formatted;
+}
+
+export function formatHitRatePercent(rate, locale) {
+  if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 1) return '—';
+  const percent = Math.max(0, Math.min(100, rate * 100));
+  if (locale) {
+    const digits = percent >= 99.95 ? 0 : 1;
+    return rate.toLocaleString(locale, { style: 'percent', minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+  return `${percent.toFixed(percent >= 99.95 ? 0 : 1)}%`;
+}
 
 export function validateRoots(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(sourceMessage('notice.invalid-roots'));
@@ -35,7 +62,7 @@ const targetKey = target => {
   return JSON.stringify([target.key, target.provider, target.sessionId, target.transcriptPath, target.dbPath]);
 };
 // Channel keys contain profile and worktree paths; expose only an opaque identity to the panel.
-const publicChannelId = target => `channel:${createHash('sha256').update(targetKey(target)).digest('hex').slice(0, 24)}`;
+export const publicChannelId = target => `channel:${createHash('sha256').update(targetKey(target)).digest('hex').slice(0, 24)}`;
 const sessionsSignature = target => isChannelTarget(target) ? JSON.stringify(target.sessions ?? []) : '';
 const matchesTarget = (session, target) => {
   if (!session || !target) return false;
@@ -58,6 +85,7 @@ export function createTpsController(orca, {
   holdActivityMs = 120_000, onTargetChange = () => {}, onOpenTargets = () => {}, onSessionRead, cache, locales
 } = {}) {
   const t = locales?.t ?? sourceMessage;
+  const translateNotice = locales?.notice ?? sourceNotice;
   const instanceId = randomUUID();
   let target = null, key = null, sessionsSig = '', session = null;
   let roots = EMPTY_ROOTS(), warnings = [];
@@ -85,7 +113,7 @@ export function createTpsController(orca, {
         provider: target.provider
       }) : null,
       records: session?.records?.slice(0, 100) ?? [],
-      loading, updatedAt, warnings: [...warnings], emptyMessage
+      loading, updatedAt, warnings: warnings.map(value => cleanText(translateNotice(value), 500)).filter(Boolean), emptyMessage
     };
   }
 
@@ -95,7 +123,6 @@ export function createTpsController(orca, {
     return {
       ...snapshot,
       activeSession: activeSession && { ...activeSession, title: locales.notice(activeSession.title) },
-      warnings: snapshot.warnings.map(text => locales.notice(text)),
       emptyMessage: locales.notice(snapshot.emptyMessage)
     };
   }
@@ -282,13 +309,12 @@ export function createTpsController(orca, {
         const loaded = matchesTarget(result.session, requestedTarget) ? result.session : null;
         if (loaded) {
           session = loaded;
-          warnings = (result.warnings ?? []).map(text => cleanText(text, 500))
-            .filter(text => !HIDDEN_ROUTINE_WARNINGS.has(text)).slice(0, 20);
+          warnings = (result.warnings ?? []).filter(value => !isRoutineWarning(value)).slice(0, 20);
           updatedAt = result.cachedAt ?? now();
         } else {
           // Miss (file truncated, parse hiccup, capture lag): keep the previous records
           // instead of wiping the panel; surface the reason as a warning.
-          const missWarning = cleanText((result.warnings ?? [])[0], 500);
+          const missWarning = result.warnings?.[0];
           warnings = missWarning ? [missWarning] : warnings;
           if (!cache && !requestedTarget.executionHostId) updatedAt = now();
         }

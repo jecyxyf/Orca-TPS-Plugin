@@ -1,6 +1,6 @@
 # Token 天梯榜服务
 
-榜单和管理后台运行在同一个 Node.js 服务。Orca 插件使用 HTTPS 提交统计，SQLite 存在服务端磁盘。
+榜单和管理后台运行在同一个 Node.js 服务。Tokens 管家通过 HTTPS 提交汇总，实时榜单保存在内存。GitHub 账号、登录和管理状态保存在 `leaderboard.bin`。该文件用 UTF-8 字节保存一个 JSON 对象。
 
 ## GitHub 登录配置
 
@@ -13,7 +13,7 @@
 
 未登录用户和被封禁的账号都可以查看榜单。提交需要有效的 GitHub 登录，封禁后服务端会拒绝提交。
 
-同一账号每 10 秒最多成功写入一批用量。连续 4 次上传间隔不足 5 秒会自动封禁，间隔达到 5 秒会重新计数。10 分钟内累计 5 次错误会锁定当天的上传权限。管理员手动封禁时须填写原因，自动封禁和当天禁传的原因可在管理页查看。
+管理员封禁账号时须填写原因。管理页支持查询账号、封禁、解封以及查看最近 25 条账号管理操作。
 
 在服务器配置以下环境变量。将包含应用密钥的文件设为仅所有者可读。仓库内的 `server/.env` 已忽略。
 
@@ -25,7 +25,7 @@
 | `LEADERBOARD_BASE_URL` | 使用上表的服务地址。默认 `http://127.0.0.1:8787` |
 | `LEADERBOARD_HOST` | 监听地址，默认 `127.0.0.1`。Compose 在容器内设为 `0.0.0.0` |
 | `LEADERBOARD_PORT` | 监听端口，默认 `8787` |
-| `LEADERBOARD_DB` | SQLite 路径。Compose 使用 `/data/leaderboard.sqlite` |
+| `LEADERBOARD_STATE_FILE` | 状态文件路径。默认 `server/.data/leaderboard.bin`。Compose 使用 `/data/leaderboard.bin`。 |
 | `LEADERBOARD_MAX_TOKENS` | 可选。设置允许提交的 Token 上限，默认使用接口支持的最大整数 |
 | `LEADERBOARD_TRUSTED_PROXY_IPS` | 可选。额外信任的转发 IP，多个地址用逗号分隔。默认信任 `127.0.0.1` 和 `::1`。 |
 
@@ -35,16 +35,39 @@
 
 ## 用量榜和速度榜
 
-| 接口 | 用途 |
+| 管家接口 | 用途 |
 | --- | --- |
-| `POST /api/leaderboard/uploads` | 登录后每 10 秒提交用量和速度。默认每 2 秒批量写入。Kafka 模式持续取包写入。SQLite 提交成功后才确认。 |
-| `GET /api/leaderboard/snapshot` | 下载完整榜单。每个整点生成共享截止时间的 24 小时、7 天、30 天和速度榜，并保存最新和上一份结果。 |
+| `GET /api/tokens-manager/config` | 公开读取扫描、个人统计、上传、榜单发布和读取间隔 |
+| `GET /api/tokens-manager/account` | 用 GitHub 登录凭证获取绑定的账号 ID |
+| `POST /api/tokens-manager/packets` | 上传一台来源设备的小时、每日用量和速度样本 |
+| `GET /api/tokens-manager/snapshot` | 公开读取近 24、168、720 个完整小时的用量榜和近 24 个完整小时的速度榜 |
+| `GET /api/tokens-manager/snapshot?mode=calendar` | 公开读取北京时间今日、近 7 天、近 30 天用量榜和当日速度榜 |
 
-先部署服务端，再更新插件。SQLite 会自动增加按来源上传所需的表。新版插件分别提交本机和 SSH 用量，服务端在同一个 GitHub 账号下只计算一次同一个 SSH 来源。远端编号保存在远端用户的数据目录中。上报电脑断线 60 秒后，其他连接同一来源的电脑可以接手。
+默认 8 个接收线程并行校验上报。每个线程等到 100 毫秒或攒到 32 个包就批量写入共享内存，写入后回执。一个算榜线程每 3 秒切换缓冲区，只更新收到有效上报的账号。上一轮还在算时，最多保留一个待算任务。
 
-小时格式的上传包包含 `username`、`deviceGuid` 和 `data`，每包一个来源且最多 64 KiB。`data.format` 为 4，每个有变化的小时带 Token 小计、更新时间和覆盖终点。写入线程一次读取当批相关来源和小时的数据，合并后每个小时只写一行。插件在本机 SQLite 中保存待确认的包，断线后沿用原编号和内容。服务端通过 `GET /api/today/status` 的 `hourlySourceUploads` 公布可切换到小时格式的账号。
+六张用量榜各留前 1 万名，两张速度榜各留前 100 名。速度成绩超出所在榜单的时间范围后让出名次。每轮裁榜后，掉出全部榜单的账号会从内存移除。漏报沿用最近一次用量成绩，曲线按实际日期和时间展示，缺失点补零。每账号最多合计最近成功上报的 4 台设备，同一设备的代报只算一次。算榜后只保留所需的用量汇总、显示字段和上榜速度记录。插件接口每榜返回前 100 名，按小时和按天的响应各生成一次，供该轮所有读取请求复用。管家启动后每分钟检查一次配置。服务重启后由管家重新上报。
 
-已有混合上报记录的账号先用旧数据出榜。相关电脑用格式 3 补齐来源并核对用量后，服务端在首次小时格式上传时把已有时间点汇总为小时。若旧日志已丢失，相关记录移出 30 天统计范围后可以继续切换。完成切换的账号使用小时格式上传，旧客户端仍可查询榜单。上线前在测试服副本按同一整点核对四张榜，用两个客户端验证 SSH 断线接手。保留切换前的数据库备份和服务版本供回退。
+| 环境变量 | 默认值 | 用途 |
+| --- | ---: | --- |
+| `LEADERBOARD_TOKENS_RECEIVERS` | 8 | 并行接收线程数 |
+| `LEADERBOARD_TOKENS_FLUSH_MS` | 100 | 单个线程的批次最长等待，单位为毫秒 |
+| `LEADERBOARD_TOKENS_PUBLISH_MS` | 3000 | 榜单发布间隔，单位为毫秒 |
+| `LEADERBOARD_TOKENS_SCAN_MS` | 2000 | 管家扫描和互传间隔，单位为毫秒 |
+| `LEADERBOARD_TOKENS_PERSONAL_MS` | 3000 | 本机管家更新个人统计和上报榜单的间隔，单位为毫秒 |
+| `LEADERBOARD_TOKENS_UPLOAD_MS` | 3000 | 旧版管家独立上报间隔，支持 1000–7500 毫秒 |
+| `LEADERBOARD_TOKENS_READ_MS` | 3000 | 榜单读取间隔，单位为毫秒 |
+
+## 从 SQLite 迁移
+
+从旧服务升级时先停止旧服务，在新版代码目录用服务账号运行一次迁移。下面用测试服的路径举例。Docker 部署在挂载的数据目录中使用 `/data/leaderboard.sqlite` 和 `/data/leaderboard.bin`。
+
+```sh
+node server/migrate-leaderboard-state.mjs \
+  --from /var/lib/orca-tps-test/leaderboard.sqlite \
+  --to /var/lib/orca-tps-test/leaderboard.bin
+```
+
+迁移会保留账号、管理员、封禁、有效会话和最近的账号管理操作。已有目标文件时迁移会报错并保留其内容。设置 `LEADERBOARD_STATE_FILE` 后启动新版，检查登录、上报、榜单和重启。验证成功后清理旧库及其 SQLite 临时文件。
 
 ## 正式版（Docker Compose）
 
@@ -55,7 +78,7 @@ sudo LEADERBOARD_ENV_FILE=/etc/orca-tps/prod.env docker compose \
   -p orca-tps-prod -f /opt/orca-tps/prod/server/compose.yml up -d --build --wait
 ```
 
-SQLite 保存在 Compose 的 `leaderboard-data` 数据卷。更新容器时沿用同一个 Compose 项目名和数据卷。定期在线备份 SQLite，并验证备份可以恢复。[SQLite 备份说明](https://sqlite.org/backup.html)
+`leaderboard.bin` 保存在 Compose 的 `leaderboard-data` 数据卷。更新容器时沿用同一个 Compose 项目名和数据卷。
 
 公网放行 80 和 443，在主机上配置 Caddy，转发到 Compose 绑定的本机端口。Caddy 自动申请和续期域名证书。[Caddy 自动 HTTPS](https://caddyserver.com/docs/automatic-https)
 
@@ -107,7 +130,14 @@ WantedBy=multi-user.target
 ```dotenv
 LEADERBOARD_BASE_URL=https://test.itps8.com
 LEADERBOARD_PORT=8788
-LEADERBOARD_DB=/var/lib/orca-tps-test/leaderboard.sqlite
+LEADERBOARD_STATE_FILE=/var/lib/orca-tps-test/leaderboard.bin
+LEADERBOARD_TOKENS_RECEIVERS=8
+LEADERBOARD_TOKENS_FLUSH_MS=100
+LEADERBOARD_TOKENS_PUBLISH_MS=3000
+LEADERBOARD_TOKENS_SCAN_MS=2000
+LEADERBOARD_TOKENS_PERSONAL_MS=3000
+LEADERBOARD_TOKENS_UPLOAD_MS=3000
+LEADERBOARD_TOKENS_READ_MS=3000
 ```
 
 将 `test.itps8.com` 的 A 记录指向硅谷服务器。在主机上的 Caddy 配置中加入测试站点，共用公网 80 和 443。
@@ -123,27 +153,3 @@ test.itps8.com {
 访问 `https://test.itps8.com/admin` 测试网页登录，或给开发版 Orca 设置 `ORCA_TPS_LEADERBOARD_URL=https://test.itps8.com`。
 
 部署后分别请求两个环境的 `/healthz`，确认响应正常且 `githubConfigured` 为 `true`。再各验证一次登录、提交、榜单查询和重启后的数据读取。
-
-### 测试版 Kafka 写入模式
-
-为测试服准备独立的 Kafka。测试服从同一主机的私有端口连接 Kafka。回归验证使用 Kafka 4.2.2 与 KafkaJS 2.2.4。安装服务端依赖 `npm ci --prefix server --omit=dev`，再创建四分区主题。[Apache Kafka 快速入门](https://kafka.apache.org/42/getting-started/quickstart/)
-
-```sh
-bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --create \
-  --topic orca-tps-test-uploads --partitions 4 --replication-factor 1 \
-  --config retention.ms=259200000
-```
-
-在测试服环境文件加上三项，再重启测试服务。一个榜单服务进程负责发送整点标记，并启动同一个消费组的四个线程。重启时沿用主题、消费组和 SQLite 路径。
-
-```dotenv
-LEADERBOARD_KAFKA_BROKERS=127.0.0.1:9092
-LEADERBOARD_KAFKA_TOPIC=orca-tps-test-uploads
-LEADERBOARD_KAFKA_GROUP_ID=orca-tps-test-writers
-```
-
-Kafka 接通前，上传会收到可重试的响应，已有榜单可以继续读取。取到数据的线程直接写 SQLite。整点时，等四个分区都写完截止前的数据，再由一个线程生成四张榜。
-
-用独立 Kafka 验证时，设置 `ORCA_TPS_KAFKA_TEST_BROKERS` 后运行 `node --test tests/leaderboard-kafka.test.mjs`。测试会建立独立主题、消费组及临时 SQLite。请为该实例预留测试主题空间。
-
-回退时先在测试入口暂停新上传，保持榜单服务运行。用 `kafka-consumer-groups.sh --bootstrap-server 127.0.0.1:9092 --describe --group orca-tps-test-writers` 核对四个分区的消费积压都为零。然后移除上面三项配置，沿用当前 SQLite 重启测试服务，再恢复上传。保留 Kafka 中的数据和消费组进度。

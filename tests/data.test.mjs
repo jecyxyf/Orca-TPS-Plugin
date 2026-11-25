@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, rm, readFile, appendFile, utimes } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
-import { scanSessions, readTargetSession } from '../src/data.mjs';
-import { defaultRoots } from '../src/data-paths.mjs';
+import { scanSessions, readTargetSession } from '../src/harness_parser.mjs';
+import { defaultRoots } from '../src/harness_parser.mjs';
 import { createTpsController } from '../src/controller.mjs';
+import { readManagerChannel } from '../src/token_manager.mjs';
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import('node:sqlite')); }
@@ -162,6 +163,19 @@ test('readTargetSession merges 2xx proxy rows from cc-switch.db in read-only mod
   assert.equal(res.session.records[0].dataSource, 'proxy');
   assert.equal(res.session.records[0].isEstimatedSpeed, false);
   assert.equal(res.session.records[0].tokensPerSecond, 50);
+
+  const previousProxyPath = process.env.CC_SWITCH_DB_PATH;
+  t.after(() => {
+    if (previousProxyPath === undefined) delete process.env.CC_SWITCH_DB_PATH;
+    else process.env.CC_SWITCH_DB_PATH = previousProxyPath;
+  });
+  process.env.CC_SWITCH_DB_PATH = ccDbFile;
+  const channel = await readManagerChannel({ channelDetails: () => [] },
+    { provider: 'claude', sessionId: sid, transcriptPath: mainFile });
+  assert.equal(channel.session.records.length, 1);
+  assert.equal(channel.session.records[0].dataSource, 'proxy');
+  assert.equal(channel.session.records[0].tokensPerSecond, 50);
+  assert.equal(channel.session.records[0].firstTokenMs, 2000);
 });
 
 test('targeted SQLite lookup reads old IDs, separates v1/v2 and never falls back', sqliteTestOptions, async t => {
@@ -305,11 +319,9 @@ test('JSONL cache preserves truncation warnings without retaining another source
   ]));
   await writeFile(small, jsonl(codexRows('small-session')));
   const first = await scanSessions({ roots: { codex: [homedir(), large, small] }, includeDefaults: false });
-  assert.ok(first.warnings.some(value => value.includes('16 MiB')));
-  assert.ok(first.warnings.some(value => value.includes('用户主目录')));
+  assert.deepEqual(first.warnings, [['notice.invalid-session-folder', 'codex'], ['notice.large-session', 'codex']]);
   const cachedLarge = await scanSessions({ roots: { codex: [large] }, includeDefaults: false });
-  assert.ok(cachedLarge.warnings.some(value => value.includes('16 MiB')));
-  assert.ok(!cachedLarge.warnings.some(value => value.includes('用户主目录')));
+  assert.deepEqual(cachedLarge.warnings, [['notice.large-session', 'codex']]);
   const cachedSmall = await scanSessions({ roots: { codex: [small] }, includeDefaults: false });
   assert.deepEqual(cachedSmall.warnings, []);
 });
@@ -348,7 +360,7 @@ test('unsupported database and missing roots return warnings or empty data, neve
   const bytes = await readFile(file);
   const result = await scanSessions({ roots: { opencode: [file], pi: [path.join(root, 'missing')] }, includeDefaults: false });
   assert.deepEqual(result.sessions, []);
-  assert.ok(result.warnings.some(value => value.includes('受支持')));
+  assert.ok(result.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
   const cached = await scanSessions({ roots: { opencode: [file] }, includeDefaults: false });
   assert.deepEqual(cached.warnings, result.warnings);
   assert.deepEqual(await readFile(file), bytes);
@@ -367,14 +379,12 @@ test('SQLite cache retains row truncation without copying warnings from another 
   const other = new DatabaseSync(unsupported);
   try { other.exec('CREATE TABLE unrelated (id TEXT)'); } finally { other.close(); }
   const first = await scanSessions({ roots: { opencode: [unsupported, large] }, includeDefaults: false });
-  assert.ok(first.warnings.some(value => value.includes('10000')));
-  assert.ok(first.warnings.some(value => value.includes('受支持')));
+  assert.ok(first.warnings.some(([code]) => code === 'notice.opencode-message-limit'));
+  assert.ok(first.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
   const cachedLarge = await scanSessions({ roots: { opencode: [large] }, includeDefaults: false });
-  assert.ok(cachedLarge.warnings.some(value => value.includes('10000')));
-  assert.ok(!cachedLarge.warnings.some(value => value.includes('受支持')));
+  assert.deepEqual(cachedLarge.warnings, [['notice.opencode-message-limit']]);
   const cachedOther = await scanSessions({ roots: { opencode: [unsupported] }, includeDefaults: false });
-  assert.ok(cachedOther.warnings.some(value => value.includes('受支持')));
-  assert.ok(!cachedOther.warnings.some(value => value.includes('10000')));
+  assert.deepEqual(cachedOther.warnings, [['notice.opencode-schema-unavailable']]);
 });
 
 test('channel target merges registered panes and unregistered CWD sessions across providers while isolating parent worktree', sqliteTestOptions, async t => {
