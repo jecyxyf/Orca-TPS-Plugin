@@ -17,6 +17,78 @@
       ],
       "releases": [
         {
+          "version": "1.6.6",
+          "commit": "fb9b65953822d9be7020c4ef818f840f9dec31a8",
+          "contentHash": "bd93512f04593eb23b5353f3ffaad3ff6a342af85fc9097880ead8deabe0ccec",
+          "execution": "trusted-worker",
+          "minimumOrca": "1.4.251",
+          "name": "TPS Plugin",
+          "contributes": [
+            {
+              "kind": "panels",
+              "name": "TPS Plugin"
+            },
+            {
+              "kind": "commands",
+              "name": "Refresh TPS Data"
+            },
+            {
+              "kind": "events",
+              "name": "workspace.changed"
+            },
+            {
+              "kind": "statusBarItems",
+              "name": "🚀 — tokens/s · 🍪 Cache hit —"
+            }
+          ],
+          "capabilities": [
+            "storage:own",
+            "workspace:read",
+            "secrets:own",
+            "settings:own"
+          ],
+          "images": {
+            "icon": {
+              "path": "assets/1.6.3/icon.png",
+              "alt": "TPS Plugin",
+              "sha256": "1472b8516e267e29fa651aa50c600eb1f7739610463137237cbd9f147abac353",
+              "width": 128,
+              "height": 128
+            },
+            "cover": {
+              "path": "assets/1.6.5/cover.jpg",
+              "alt": "TPS Plugin overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar",
+              "sha256": "77999dced2f09656195ea5dd9a5dde1b3415688a3bacb9e0e1c9ee2e68673472",
+              "width": 800,
+              "height": 500
+            },
+            "screenshots": [
+              {
+                "path": "assets/1.6.5/current-data.jpg",
+                "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
+                "sha256": "51415592e2341b83d190955dd4761a20edf746b85c9749cae38889fdb424ab9a",
+                "width": 1280,
+                "height": 800
+              },
+              {
+                "path": "assets/1.6.5/personal-stats.jpg",
+                "alt": "Personal Stats shows usage by model, average generation speeds, and a usage heatmap",
+                "sha256": "4c3fe106f93e57c7e4977c8dbf3b75379b50e441dd61a16033b251f6c681922e",
+                "width": 1280,
+                "height": 800
+              },
+              {
+                "path": "assets/1.6.5/leaderboard.jpg",
+                "alt": "Orca sidebar showing 30-day usage trends and the Speed tab with Day and Hour modes",
+                "sha256": "85938a558dc9fab5207c0fd5e74e67b490db4412a25c7ca721617553376e6f7e",
+                "width": 1280,
+                "height": 800
+              }
+            ]
+          },
+          "changelog": "Reduces the plugin package to about 1.85 MiB by removing old previews, using compact JPEGs, and shrinking icons."
+        },
+        {
           "version": "1.6.5",
           "commit": "57aff1a57ca370f0dba9351dad379dbf1479451c",
           "contentHash": "76a75fbd96398d47383718ddd5f67db25080f6275e4695207b18dd35a0a6c632",
