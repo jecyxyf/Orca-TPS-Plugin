@@ -18,8 +18,8 @@
       "releases": [
         {
           "version": "1.6.5",
-          "commit": "3b92d986e1479390963b45f5839b91b80d2d6d80",
-          "contentHash": "08964b03ec4f4e1c4beb99331dbcef537b10b828c7acebcdd8bffc41e7585605",
+          "commit": "57aff1a57ca370f0dba9351dad379dbf1479451c",
+          "contentHash": "76a75fbd96398d47383718ddd5f67db25080f6275e4695207b18dd35a0a6c632",
           "execution": "trusted-worker",
           "minimumOrca": "1.4.251",
           "name": "TPS Plugin",
@@ -86,7 +86,7 @@
               }
             ]
           },
-          "changelog": "Unifies cross-device usage with Tokens Managers, adds separate usage and speed rankings, restores cached ranking charts and removes the unused Windows executable."
+          "changelog": "Unifies cross-device statistics, simplifies Tokens Manager and leaderboard processing, and improves cached charts, avatar downloads, and SQLite reads."
         },
         {
           "version": "1.6.4",
