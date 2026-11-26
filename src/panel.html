@@ -105,17 +105,19 @@
     .panel-star-svg .star-core {
       fill: currentColor; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round;
       transform-box: fill-box; transform-origin: center;
-      animation: star-pulse 2.8s ease-in-out infinite;
+      animation: star-pulse 2.8s ease-in-out 3 both;
     }
     .panel-star-svg .star-spark {
       fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round;
       transform-box: fill-box; transform-origin: center;
-      animation: star-sparkle 2.8s ease-in-out infinite;
+      animation: star-sparkle 2.8s ease-in-out 3 both;
     }
     .panel-star-svg .star-spark-b { animation-delay: 1.4s; }
+    .panel-star-link:hover .star-core, .panel-star-link:hover .star-spark,
+    .panel-star-link:focus-visible .star-core, .panel-star-link:focus-visible .star-spark { animation-iteration-count: infinite; }
     @keyframes star-pulse {
-      0%, 60%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); }
-      20% { transform: scale(1.14) rotate(-6deg); filter: drop-shadow(0 0 4px rgb(245 183 0 / 48%)); }
+      0%, 60%, 100% { transform: scale(1); }
+      20% { transform: scale(1.14) rotate(-6deg); }
       38% { transform: scale(.98) rotate(3deg); }
     }
     @keyframes star-sparkle {
@@ -140,14 +142,13 @@
     .settings-toggle:focus-visible, .settings-close:focus-visible {
       outline: 2px solid var(--blue); outline-offset: 2px;
     }
+    /* No blur or dimming behind the settings sheet, so theme changes can be judged live on the panel. */
     .settings-backdrop {
       position: fixed; inset: 0; z-index: 20;
       display: grid; align-items: start; justify-items: center;
       padding: 16px; overflow-y: auto;
-      background: rgb(18 18 22 / 34%);
-      backdrop-filter: blur(4px);
+      background: transparent;
     }
-    html.dark .settings-backdrop { background: rgb(0 0 0 / 56%); }
     .settings-sheet {
       --surface: #262628;
       --speed-bg: #303034;
@@ -274,6 +275,10 @@
     }
     .settings-card-range { width: 100%; min-width: 0; margin: 0; accent-color: var(--blue); cursor: pointer; }
     .settings-card-range:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .settings-star-grid {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) 3.2em;
+      align-items: center; gap: 8px; margin-top: 2px;
+    }
     .settings-color-value {
       text-align: end; font-size: 11px; font-weight: 600;
       font-variant-numeric: tabular-nums; color: var(--ink);
@@ -547,7 +552,7 @@
     .ladder-medal-emblem::before {
       content: ""; position: absolute; inset-block: 0; left: 0; width: 48%; pointer-events: none;
       background: linear-gradient(90deg, transparent, var(--medal-sheen) 45%, var(--medal-light) 52%, transparent);
-      animation: medal-sweep 3.6s ease-in-out var(--medal-phase, 0s) infinite;
+      animation: medal-sweep 3.6s ease-in-out var(--medal-phase, 0s) 3 both;
     }
     .ladder-medal-mark {
       position: relative; display: grid; place-items: center; border-radius: 50%;
@@ -560,12 +565,24 @@
       content: ""; position: absolute; z-index: 1; opacity: 0; pointer-events: none;
       clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
       background: radial-gradient(circle, var(--medal-light), var(--medal-sheen));
-      animation: medal-twinkle 3.6s ease-in-out var(--medal-phase, 0s) infinite;
+      animation: medal-twinkle 3.6s ease-in-out var(--medal-phase, 0s) 3 both;
     }
     .ladder-medal::before { left: 9px; top: 13px; width: 10px; height: 10px; }
     .ladder-medal::after {
       right: 8px; top: 31px; width: 8px; height: 8px;
       animation-delay: calc(var(--medal-phase, 0s) + .55s);
+    }
+    /* A medal that already shimmered for this rank stays still when its row is redrawn. */
+    .ladder-medal.is-settled::before, .ladder-medal.is-settled::after { animation: none; }
+    .ladder-medal.is-settled .ladder-medal-emblem::before { animation: none; transform: translateX(280%) skewX(-22deg); }
+    @media (prefers-reduced-motion: no-preference) {
+      .ladder-medal:hover::before, .ladder-medal:hover::after {
+        animation: medal-twinkle 3.6s ease-in-out var(--medal-phase, 0s) infinite;
+      }
+      .ladder-medal:hover::after { animation-delay: calc(var(--medal-phase, 0s) + .55s); }
+      .ladder-medal:hover .ladder-medal-emblem::before {
+        animation: medal-sweep 3.6s ease-in-out var(--medal-phase, 0s) infinite;
+      }
     }
     @keyframes medal-sweep {
       0%, 34% { transform: translateX(-160%) skewX(-22deg); }
@@ -635,10 +652,10 @@
     .ladder-recent-speed { flex: none; color: var(--speed); font-weight: 700; white-space: nowrap; }
     .ladder-transfer .ladder-transfer-spinner,
     .ladder-transfer .ladder-transfer-error,
-    .ladder-transfer[aria-busy="true"] .ladder-transfer-icon,
+    .ladder-transfer.is-spinning .ladder-transfer-icon,
     .ladder-transfer.is-failed .ladder-transfer-icon { display: none; }
     .ladder-transfer.is-failed .ladder-transfer-error { display: block; color: var(--error); }
-    .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner {
+    .ladder-transfer.is-spinning .ladder-transfer-spinner {
       display: block; animation: spin 1s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -869,16 +886,17 @@
     .heat-cell.lv1 { background: #2d4c7c; }
     .heat-cell.lv2 {
       background: #3b82f6; box-shadow: 0 0 3px rgb(59 130 246 / 45%);
-      animation: star-twinkle var(--star-dur, 3.6s) ease-in-out var(--star-delay, 0s) infinite;
+      animation: star-twinkle calc(var(--star-dur, 3.6s) / var(--star-speed, 1)) ease-in-out calc(var(--star-delay, 0s) / var(--star-speed, 1)) infinite;
     }
     .heat-cell.lv3 {
       background: #60a5fa; box-shadow: 0 0 5px rgb(96 165 250 / 75%);
-      animation: star-twinkle var(--star-dur, 3.2s) ease-in-out var(--star-delay, 0s) infinite;
+      animation: star-twinkle calc(var(--star-dur, 3.2s) / var(--star-speed, 1)) ease-in-out calc(var(--star-delay, 0s) / var(--star-speed, 1)) infinite;
     }
     .heat-cell.lv4 {
       background: #dbeafe; box-shadow: 0 0 7px rgb(125 211 252 / 95%), 0 0 12px rgb(56 189 248 / 50%);
-      animation: star-twinkle-bright var(--star-dur, 2.8s) ease-in-out var(--star-delay, 0s) infinite;
+      animation: star-twinkle-bright calc(var(--star-dur, 2.8s) / var(--star-speed, 1)) ease-in-out calc(var(--star-delay, 0s) / var(--star-speed, 1)) infinite;
     }
+    .heat-cell.is-still { animation: none; }
     html:not(.dark) .heat-cell { background: var(--heat-0); }
     html:not(.dark) .heat-cell.lv1 { background: var(--heat-1); }
     html:not(.dark) .heat-cell.lv2 { background: var(--heat-2); box-shadow: none; }
@@ -974,8 +992,11 @@
       .war-period-tabs { grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.15fr); gap: 2px; }
       .war-period-tabs .war-tab { padding-inline: 1px; font-size: 10px; }
     }
+    html.is-motion-paused *, html.is-motion-paused *::before, html.is-motion-paused *::after {
+      animation-play-state: paused !important;
+    }
     @media (prefers-reduced-motion: reduce) {
-      .ladder-transfer[aria-busy="true"] .ladder-transfer-spinner, .current-updated-icon.is-spinning svg { animation: none; }
+      .ladder-transfer.is-spinning .ladder-transfer-spinner, .current-updated-icon.is-spinning svg { animation: none; }
       .record-card.is-entering { animation: none; opacity: 1; }
       .card-aurora, .card-aurora::before, .card-aurora-glow, .card-star, .card-dust { animation: none; opacity: 0; }
       .refresh:active:not(:disabled) { transform: none; }
@@ -1568,6 +1589,26 @@
               <label class="settings-color-label" for="settings-card-opacity" data-i18n="settings-card-opacity"></label>
               <input class="settings-card-range" id="settings-card-opacity" data-testid="settings-card-opacity" type="range" min="0" max="100" step="1" value="100">
               <span class="settings-color-value" id="settings-card-opacity-value">100%</span>
+            </div>
+          </div>
+          <div class="settings-bg-card" id="settings-star-twinkle">
+            <div class="settings-bg-row">
+              <p class="settings-bg-title" data-i18n="settings-star-twinkle"></p>
+              <button class="settings-bg-btn" id="settings-star-reset" data-testid="settings-star-reset" type="button"
+                      data-i18n-title="settings-star-reset" data-i18n-aria-label="settings-star-reset" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+              </button>
+            </div>
+            <div class="settings-star-grid">
+              <label class="settings-color-label" for="settings-star-ratio" data-i18n="settings-star-ratio"></label>
+              <input class="settings-card-range" id="settings-star-ratio" data-testid="settings-star-ratio" type="range" min="0" max="100" step="10" value="100">
+              <span class="settings-color-value" id="settings-star-ratio-value">100%</span>
+              <label class="settings-color-label" for="settings-star-speed" data-i18n="settings-star-speed"></label>
+              <input class="settings-card-range" id="settings-star-speed" data-testid="settings-star-speed" type="range" min="0" max="2" step="0.1" value="1">
+              <span class="settings-color-value" id="settings-star-speed-value">1.0×</span>
             </div>
           </div>
         </section>
@@ -2465,7 +2506,22 @@
           grid.replaceChildren(...cells);
         }
         byId('heat-total').textContent = usageSummary ? t('heatmap-active-days', number(activeDays)) : t('calculating-usage');
+        applyStarRatio();
       }
+      // Theme setting "twinkle ratio": its base is the lit stars, i.e. levels 2–4, the only stars that twinkle
+      // (empty days and level 1 never do). ratio% of those lit stars twinkle; the rest stay lit but still.
+      // Lit stars are picked in a fixed spread order, so the same stars stay chosen between redraws.
+      function applyStarRatio() {
+        const value = Number(document.documentElement.dataset.starRatio ?? 100);
+        const ratio = Number.isFinite(value) ? value : 100;
+        const lit = heatCells.map((cell, offset) => ({ cell, order: (offset * 149) % HEAT_DAYS }))
+          .filter(({ cell }) => /\blv[2-4]\b/.test(cell.className))
+          .sort((a, b) => a.order - b.order);
+        const twinkling = Math.round(lit.length * ratio / 100);
+        for (const cell of heatCells) cell.classList.remove('is-still');
+        lit.forEach(({ cell }, index) => cell.classList.toggle('is-still', index >= twinkling));
+      }
+      document.addEventListener('tps-star-twinkle-changed', applyStarRatio, { signal: lifetime.signal });
       const heatTip = byId('heat-tip');
       function showHeatTip(cell) {
         heatTip.textContent = Number(cell.dataset.tokens) > 0
@@ -2831,11 +2887,15 @@
       });
       const setAvatar = (avatar, username, options) => avatarView.set(avatar, username, options);
 
-      function medal(rank, period) {
+      const playedMedals = new Set();
+      function medal(rank, period, owner = '') {
         const place = podium[rank - 1];
         if (!place) return null;
         const badge = document.createElement('span');
         badge.className = 'ladder-medal ladder-medal-' + period.days;
+        const playedKey = JSON.stringify([period.days, rank, owner]);
+        if (playedMedals.has(playedKey)) badge.classList.add('is-settled');
+        else playedMedals.add(playedKey);
         badge.dataset.place = rank;
         badge.title = t('medal-position', t(period.title), t(place));
         badge.setAttribute('role', 'img');
@@ -3122,7 +3182,7 @@
           avatar.className = 'ladder-avatar';
           avatar.setAttribute('aria-hidden', 'true');
           setAvatar(avatar, row.username);
-          const badge = period && medal(row.rank, period);
+          const badge = period && medal(row.rank, period, row.username);
           if (badge) user.append(badge);
           user.append(avatar, name);
           total.textContent = speedBoard ? speedText(row.avgTps) : formatMillionTokens(row.tokens);
@@ -3183,7 +3243,7 @@
           if (Number(slot.dataset.place ?? 0) === place) continue;
           slot.dataset.place = place;
           slot.querySelector('.ladder-medal')?.remove();
-          if (place) slot.append(medal(place, period));
+          if (place) slot.append(medal(place, period, ':self'));
         }
       }
 
@@ -3203,8 +3263,20 @@
         return '';
       }
 
+      // Short transfers keep the static icon; the spinner appears only after a transfer runs for a second.
+      const transferSpinTimers = new WeakMap();
       function renderTransferStatus(indicator, active, label, problem) {
         indicator.setAttribute('aria-busy', String(active));
+        if (!active) {
+          clearTimeout(transferSpinTimers.get(indicator));
+          transferSpinTimers.delete(indicator);
+          indicator.classList.remove('is-spinning');
+        } else if (!indicator.classList.contains('is-spinning') && !transferSpinTimers.has(indicator)) {
+          transferSpinTimers.set(indicator, setTimeout(() => {
+            transferSpinTimers.delete(indicator);
+            if (indicator.getAttribute('aria-busy') === 'true') indicator.classList.add('is-spinning');
+          }, 1000));
+        }
         const failed = !active && Boolean(problem);
         indicator.classList.toggle('is-failed', failed);
         const text = t(label);
@@ -3677,8 +3749,7 @@
       ];
       let hasBgImage = false;
       let croppedBgUrl = '';
-      let originalBgUrl = null;
-      let originalBgLoaded = false;
+      let originalBgFallback = null;
       let activeImgSize = { w: 0, h: 0 };
       let bgTransform = { ...DEFAULT_BG_TRANSFORM };
       let beforeEdit = null;
@@ -3721,53 +3792,52 @@
       }
 
       async function readOriginalBg() {
-        if (originalBgLoaded) return originalBgUrl;
         const db = await openBgDb();
-        if (!db) {
-          originalBgLoaded = true;
-          return originalBgUrl;
-        }
+        if (!db) return originalBgFallback;
         return new Promise(resolve => {
           try {
             const tx = db.transaction(BG_ORIG_STORE, 'readonly');
             const req = tx.objectStore(BG_ORIG_STORE).get(BG_ORIG_KEY);
             req.onsuccess = () => {
               const val = typeof req.result === 'string' && DATA_IMAGE_RE.test(req.result) ? req.result : null;
-              if (!originalBgLoaded) originalBgUrl = val;
-              originalBgLoaded = true;
               db.close();
-              resolve(originalBgUrl);
+              resolve(val ?? originalBgFallback);
             };
             req.onerror = () => {
-              originalBgLoaded = true;
               db.close();
-              resolve(originalBgUrl);
+              resolve(originalBgFallback);
             };
           } catch {
-            originalBgLoaded = true;
             try { db.close(); } catch {}
-            resolve(originalBgUrl);
+            resolve(originalBgFallback);
           }
         });
       }
 
       async function writeOriginalBg(dataUrl) {
-        originalBgUrl = typeof dataUrl === 'string' && DATA_IMAGE_RE.test(dataUrl) ? dataUrl : null;
-        originalBgLoaded = true;
+        const value = typeof dataUrl === 'string' && DATA_IMAGE_RE.test(dataUrl) ? dataUrl : null;
+        originalBgFallback = null;
         const db = await openBgDb();
-        if (!db) return false;
+        if (!db) {
+          originalBgFallback = value;
+          return false;
+        }
         return new Promise(resolve => {
+          const fail = () => {
+            originalBgFallback = value;
+            try { db.close(); } catch {}
+            resolve(false);
+          };
           try {
             const tx = db.transaction(BG_ORIG_STORE, 'readwrite');
             const store = tx.objectStore(BG_ORIG_STORE);
-            if (originalBgUrl) store.put(originalBgUrl, BG_ORIG_KEY);
+            if (value) store.put(value, BG_ORIG_KEY);
             else store.delete(BG_ORIG_KEY);
             tx.oncomplete = () => { db.close(); resolve(true); };
-            tx.onerror = () => { db.close(); resolve(false); };
-            tx.onabort = () => { db.close(); resolve(false); };
+            tx.onerror = fail;
+            tx.onabort = fail;
           } catch {
-            try { db.close(); } catch {}
-            resolve(false);
+            fail();
           }
         });
       }
@@ -3969,7 +4039,6 @@
 
       bgTransform = loadTransform();
       applyBackgroundImage(readStore(BG_IMAGE_KEY));
-      if (hasBgImage) void readOriginalBg();
 
       function updateFontReset() {
         fontColorReset.disabled = !colorInputs.some(entry => entry.group === 'font' && entry.custom);
@@ -4058,6 +4127,47 @@
         color: cardCustomColor ? cardColorInput.value : null, opacity: cardOpacityInput.value
       }, true));
       cardReset.addEventListener('click', () => applyCardStyle({ color: null, opacity: 100 }, true));
+
+      const STAR_RATIO_KEY = 'tps:panel-star-ratio';
+      const STAR_SPEED_KEY = 'tps:panel-star-speed';
+      const starRatioInput = byId('settings-star-ratio');
+      const starRatioValue = byId('settings-star-ratio-value');
+      const starSpeedInput = byId('settings-star-speed');
+      const starSpeedValue = byId('settings-star-speed-value');
+      const starReset = byId('settings-star-reset');
+      let starRatio = 100;
+      let starSpeed = 1;
+
+      function applyStarTwinkle({ ratio, speed }, persist = false) {
+        starRatio = Math.round(clampInt(ratio, 0, 100, 100) / 10) * 10;
+        const rawSpeed = Number(speed);
+        starSpeed = Number.isFinite(rawSpeed) ? Math.round(Math.min(2, Math.max(0, rawSpeed)) * 10) / 10 : 1;
+        const root = document.documentElement;
+        // Speed 0 turns twinkling off, so every star stays still.
+        root.dataset.starRatio = String(starSpeed === 0 ? 0 : starRatio);
+        if (starSpeed === 1 || starSpeed === 0) root.style.removeProperty('--star-speed');
+        else root.style.setProperty('--star-speed', String(starSpeed));
+        starRatioInput.value = String(starRatio);
+        starRatioValue.textContent = `${starRatio}%`;
+        starSpeedInput.value = String(starSpeed);
+        starSpeedValue.textContent = `${starSpeed.toFixed(1)}×`;
+        starReset.disabled = starRatio === 100 && starSpeed === 1;
+        if (persist) {
+          writeStore(STAR_RATIO_KEY, starRatio === 100 ? null : String(starRatio));
+          writeStore(STAR_SPEED_KEY, starSpeed === 1 ? null : String(starSpeed));
+        }
+        document.dispatchEvent(new Event('tps-star-twinkle-changed'));
+      }
+
+      applyStarTwinkle({
+        ratio: readStore(STAR_RATIO_KEY) ?? 100,
+        speed: readStore(STAR_SPEED_KEY) ?? 1
+      }, false);
+      starRatioInput.addEventListener('input', () => applyStarTwinkle({ ratio: starRatioInput.value, speed: starSpeed }, false));
+      starRatioInput.addEventListener('change', () => applyStarTwinkle({ ratio: starRatioInput.value, speed: starSpeed }, true));
+      starSpeedInput.addEventListener('input', () => applyStarTwinkle({ ratio: starRatio, speed: starSpeedInput.value }, false));
+      starSpeedInput.addEventListener('change', () => applyStarTwinkle({ ratio: starRatio, speed: starSpeedInput.value }, true));
+      starReset.addEventListener('click', () => applyStarTwinkle({ ratio: 100, speed: 1 }, true));
 
       function setOpen(open, restoreFocus = false) {
         dialog.hidden = !open;
@@ -4317,7 +4427,22 @@
         }, { signal: lifetime.signal });
       }
 
+      let panelInView = true;
+      function updateMotionPause() {
+        document.documentElement.classList.toggle('is-motion-paused', document.hidden || !panelInView);
+      }
+      document.addEventListener('visibilitychange', updateMotionPause, { signal: lifetime.signal });
+      const motionObserver = typeof IntersectionObserver === 'function'
+        ? new IntersectionObserver(entries => {
+            panelInView = entries.some(entry => entry.isIntersecting);
+            updateMotionPause();
+          })
+        : null;
+      motionObserver?.observe(document.documentElement);
+      updateMotionPause();
+
       window.addEventListener('pagehide', () => {
+        motionObserver?.disconnect();
         bgResizeObserver?.disconnect();
         themeObserver.disconnect();
         lifetime.abort();

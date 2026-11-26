@@ -219,6 +219,13 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.match(html, /function playStarMapIntro\(\)/);
   assert.match(html, /clearTimeout\(starIntroTimer\)/);
   assert.match(css.get('.heat-cell.lv2').animation, /star-twinkle/);
+  for (const level of ['.heat-cell.lv2', '.heat-cell.lv3', '.heat-cell.lv4']) {
+    assert.match(css.get(level).animation, /calc\(var\(--star-dur, [\d.]+s\) \/ var\(--star-speed, 1\)\)/);
+  }
+  assert.equal(css.get('.heat-cell.is-still').animation, 'none');
+  assert.match(html, /html\.is-motion-paused \*[\s\S]*?animation-play-state: paused !important;/);
+  assert.match(html, /classList\.toggle\('is-motion-paused', document\.hidden \|\| !panelInView\)/);
+  assert.match(html, /new IntersectionObserver\(/);
   assert.match(css.get('.heat-cell:hover::after').animation, /star-ripple/);
   assert.match(html, /class="ladder-controls-head"/);
   assert.equal(css.get('.ladder-total').background, 'transparent');
@@ -328,17 +335,20 @@ test('the speed ranking uses S medals for the first three places', async () => {
   const html = await readFile(panelPath, 'utf8');
   const speed = /const speedPeriod = \{[^\n]*\};/.exec(html)?.[0];
   const podium = /const podium = \[[^\n]*\];/.exec(html)?.[0];
-  const render = /function medal\(rank, period\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
+  const render = /const playedMedals = new Set\(\);\s*function medal\(rank, period, owner = ''\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
   const period = /const period = speedBoard \? speedPeriod : periods\.find\(entry => entry\.days === rankDays\);/.exec(html)?.[0];
   assert.ok(speed && podium && render && period);
   const document = { createElement() {
     return {
-      attributes: {}, dataset: {}, children: [], style: { setProperty() {} },
+      attributes: {}, dataset: {}, children: [], style: { setProperty() {} }, classes: new Set(),
+      classList: { add(name) { this.owner.classes.add(name); } },
       setAttribute(key, value) { this.attributes[key] = value; },
       append(...children) { this.children.push(...children); },
       cloneNode() { return { ...this }; }
     };
   } };
+  const createElement = document.createElement;
+  document.createElement = () => { const node = createElement(); node.classList.owner = node; return node; };
   const t = (key, ...args) => [key, ...args].join(' ');
   const badgeFor = new Function('document', 't', `
     ${speed}
@@ -358,8 +368,13 @@ test('the speed ranking uses S medals for the first three places', async () => {
     assert.equal(badge.attributes['aria-label'], `medal-position leaderboard-speed-tab ${color}-medal`);
   }
   assert.equal(badgeFor(4, 0), null);
+  assert.equal(badgeFor(1, 0).classes.has('is-settled'), true, 'a redrawn medal for the same rank stays still');
   assert.equal(badgeFor(1, 30).children.at(-1).children[0].textContent, '30');
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.match(css.get('.ladder-medal::before').animation, / 3 both$/);
+  assert.match(css.get('.ladder-medal-emblem::before').animation, / 3 both$/);
+  assert.equal(css.get('.ladder-medal.is-settled::before').animation, 'none');
+  assert.match(html, /prefers-reduced-motion: no-preference\) \{\s*\.ladder-medal:hover::before, \.ladder-medal:hover::after \{\s*animation: medal-twinkle[^;]*infinite;/);
   assert.equal(css.get('.ladder-rows .ladder-speed-row:not(:has(.ladder-medal))')['--ladder-row-size'], '32px');
 });
 
@@ -380,7 +395,8 @@ test('non-interactive transfer indicators sit beside the last successful times',
   assert.equal(css.get('.ladder-personal-data')['max-block-size'], '208px');
   assert.equal(css.get('.ladder-personal-data')['padding-block-end'], '8px');
   assert.equal(css.get('.ladder-rank-card')['scrollbar-gutter'], 'stable');
-  assert.equal(css.get('.ladder-transfer[aria-busy="true"] .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
+  assert.equal(css.get('.ladder-transfer.is-spinning .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
+  assert.match(html, /transferSpinTimers\.set\(indicator, setTimeout\([\s\S]*?classList\.add\('is-spinning'\)[\s\S]*?\}, 1000\)\)/);
   assert.equal(css.get('.ladder-transfer.is-failed .ladder-transfer-error').color, 'var(--error)');
   assert.doesNotMatch(html, /ladder-(?:sync|refresh)-countdown/);
   assert.doesNotMatch(html, /id="ladder-(?:sync-now|update)"|request\('sync'\)/);
@@ -409,7 +425,10 @@ test('leaderboard upload and download indicate active transfers independently', 
   const indicators = Object.fromEntries(['upload-state', 'download-state'].map(id => {
     const attrs = new Map(), classes = new Set();
     return [id, {
-      attrs, classes, classList: { toggle(name, active) { if (active) classes.add(name); else classes.delete(name); } },
+      attrs, classes, classList: {
+        toggle(name, active) { if (active) classes.add(name); else classes.delete(name); },
+        add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name)
+      },
       setAttribute: (name, value) => attrs.set(name, value),
       getAttribute: name => attrs.get(name)
     }];
@@ -429,9 +448,11 @@ test('leaderboard upload and download indicate active transfers independently', 
   const render = current => show(id => indicators[id], current);
   render({ snapshot: { uploading: true } });
   assert.deepEqual(state(upload), ['true', 'uploading']);
+  assert.equal(upload.classes.has('is-spinning'), false, 'short transfers keep the static icon');
   assert.deepEqual(state(download), ['false', 'period-rankings']);
   render({ rankingPending: true });
   assert.deepEqual(state(upload), ['false', 'data-upload']);
+  assert.equal(upload.classes.has('is-spinning'), false);
   assert.deepEqual(state(download), ['true', 'sync-in-progress']);
   const locked = { board: { lockedUntil: 1500 } };
   render({ snapshot: locked });
@@ -706,6 +727,16 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(dialog, /id="settings-color-icon"[^>]*type="color"/);
   assert.match(dialog, /id="settings-color-icon-reset"/);
   assert.match(dialog, /id="settings-record-card-style"[\s\S]*?id="settings-card-color"[^>]*type="color"[\s\S]*?id="settings-card-reset"[\s\S]*?id="settings-card-opacity"[^>]*type="range"[^>]*min="0"[^>]*max="100"/);
+  assert.match(dialog, /id="settings-record-card-style"[\s\S]*?id="settings-star-twinkle"[\s\S]*?data-i18n="settings-star-twinkle"[\s\S]*?id="settings-star-reset"[^>]*disabled[\s\S]*?class="settings-star-grid"/);
+  assert.match(dialog, /id="settings-star-ratio"[^>]*type="range" min="0" max="100" step="10" value="100"/);
+  assert.match(dialog, /id="settings-star-speed"[^>]*type="range" min="0" max="2" step="0\.1" value="1"/);
+  assert.match(dialog, /id="settings-star-ratio-value">100%</);
+  assert.match(dialog, /id="settings-star-speed-value">1\.0×</);
+  assert.match(html, /const STAR_RATIO_KEY = 'tps:panel-star-ratio';\s*const STAR_SPEED_KEY = 'tps:panel-star-speed';/);
+  assert.match(html, /function applyStarTwinkle\(\{ ratio, speed \}, persist = false\)[\s\S]*?Math\.max\(0, rawSpeed\)[\s\S]*?root\.dataset\.starRatio = String\(starSpeed === 0 \? 0 : starRatio\)[\s\S]*?setProperty\('--star-speed'[\s\S]*?dispatchEvent\(new Event\('tps-star-twinkle-changed'\)\)/);
+  assert.match(html, /starReset\.addEventListener\('click', \(\) => applyStarTwinkle\(\{ ratio: 100, speed: 1 \}, true\)\)/);
+  assert.match(html, /function applyStarRatio\(\)[\s\S]*?\.filter\(\(\{ cell \}\) => \/\\blv\[2-4\]\\b\/\.test\(cell\.className\)\)[\s\S]*?const twinkling = Math\.round\(lit\.length \* ratio \/ 100\);[\s\S]*?cell\.classList\.toggle\('is-still', index >= twinkling\)/);
+  assert.match(html, /addEventListener\('tps-star-twinkle-changed', applyStarRatio/);
   assert.doesNotMatch(dialog, /id="language-picker"|settings-timezone|settings-bg-zoom|settings-bg-preview/);
 
   const editor = /<div[^>]*id="bg-editor"[^>]*role="dialog"[\s\S]*?(?=\n\s*<template id="ladder-avatar-fallback">)/.exec(html)?.[0] ?? '';
@@ -719,9 +750,13 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(html, /async function saveCroppedBgToStore\(/);
   assert.match(html, /function computeBgLayout\(/);
   assert.match(html, /const sourceUrl = useOriginal \? origUrl : croppedBgUrl;/);
+  assert.doesNotMatch(html, /if \(hasBgImage\) void readOriginalBg\(\)/, 'original image loads only when editing');
 
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
   assert.equal(css.get('.settings-backdrop').position, 'fixed');
+  assert.equal(css.get('.settings-backdrop').background, 'transparent');
+  assert.equal(css.get('.settings-backdrop')['backdrop-filter'], undefined, 'the panel behind settings stays sharp');
+  assert.doesNotMatch(html, /html\.dark \.settings-backdrop/);
   assert.equal(css.get('.bg-editor').position, 'fixed');
   assert.equal(css.get('.panel-bg-layer').position, 'fixed');
   assert.equal(css.get('.panel-bg-img')['object-fit'], 'cover');
@@ -809,6 +844,11 @@ test('panel title links to the repository and shows an animated star badge besid
   assert.match(brand, new RegExp(`id="panel-version"[\\s\\S]*?<a[^>]*id="panel-star-link"[^>]*href="${repoUrl}"[^>]*target="_blank"`));
   assert.match(brand, /<svg[^>]*class="panel-star-svg"[\s\S]*?star-core[\s\S]*?star-spark/);
   assert.match(html, /@keyframes star-pulse/);
+  assert.doesNotMatch(/@keyframes star-pulse \{[\s\S]*?\n    \}/.exec(html)?.[0] ?? '', /filter/);
+  const brandCss = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(brandCss.get('.panel-star-svg .star-core').animation, 'star-pulse 2.8s ease-in-out 3 both');
+  assert.equal(brandCss.get('.panel-star-svg .star-spark').animation, 'star-sparkle 2.8s ease-in-out 3 both');
+  assert.match(html, /\.panel-star-link:hover \.star-core[^{]*\{ animation-iteration-count: infinite; \}/);
   assert.match(html, /@keyframes star-sparkle/);
 });
 
