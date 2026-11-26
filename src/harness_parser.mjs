@@ -2118,16 +2118,19 @@ async function addCodexStreamRecords(days, file, minDay, leaderboardDays, pace =
     ? records.map(record => ({ ...record, sessionId, cwd: metadata?.cwd })) : records, { minDay, leaderboardDays });
 }
 
-async function addFileRecords(days, provider, file, minDay, isSubagent, leaderboardDays, pace) {
+async function addFileRecords(days, provider, file, minDay, isSubagent, leaderboardDays, pace, fallback = {}) {
   const metadata = await stat(file);
   if (!metadata.isFile()) throw new Error('not_a_regular_file');
   if (metadata.size > USAGE_MAX_FILE_BYTES) throw Object.assign(new Error('session_file_too_large'), { code: 'too_large' });
   const cursor = createJsonlCursor('', provider, '', { isSubagent, limit: Infinity });
   const complete = await streamCompleteText(file, text => cursor.feed(text), pace);
   if (leaderboardDays?.records && !complete) leaderboardDays.complete = false;
+  const sessionId = cursor.sessionId ?? fallback.sessionId ?? null;
+  const cwd = cursor.cwd ?? fallback.cwd ?? null;
   const records = cursor.finish();
   accumulateRecords(days, provider, leaderboardDays?.records
-    ? records.map(record => ({ ...record, sessionId: cursor.sessionId, cwd: cursor.cwd })) : records, { minDay, leaderboardDays });
+    ? records.map(record => ({ ...record, sessionId, cwd })) : records, { minDay, leaderboardDays });
+  return { sessionId, cwd };
 }
 
 async function fileUsageUnit(provider, file, rankWindow, onUnavailable, excludeOhMyPi = false) {
@@ -2141,7 +2144,11 @@ async function fileUsageUnit(provider, file, rankWindow, onUnavailable, excludeO
     onUnavailable?.();
     return null;
   }
-  const stamp = [identity(file.path), file.size, file.mtimeMs, ...subagents.map(item => `${item.size}:${item.mtimeMs}`)].join(':');
+  const stamp = [
+    identity(file.path), file.size, file.mtimeMs,
+    ...(provider === 'codex' ? [] : ['meta2']),
+    ...subagents.map(item => `${item.size}:${item.mtimeMs}`)
+  ].join(':');
   return {
     // A switch between mirrored files replaces the same logical unit, including its retained counts.
     key: identity(`${provider}|${path.basename(file.path)}`),
@@ -2160,8 +2167,11 @@ async function fileUsageUnit(provider, file, rankWindow, onUnavailable, excludeO
       }
       const pace = readPacer();
       if (provider === 'codex') await addCodexStreamRecords(days, file.path, minDay, rank, pace);
-      else await addFileRecords(days, provider, file.path, minDay, false, rank, pace);
-      for (const item of subagents) await addFileRecords(days, 'claude', item.path, minDay, true, rank, pace);
+      else {
+        const parent = await addFileRecords(days, provider, file.path, minDay, false, rank, pace,
+          provider === 'claude' ? { sessionId: path.basename(file.path, '.jsonl') } : undefined);
+        for (const item of subagents) await addFileRecords(days, 'claude', item.path, minDay, true, rank, pace, parent);
+      }
       if (rank?.records) {
         for (const item of [file, ...subagents]) {
           const current = await stat(item.path);
@@ -3219,30 +3229,39 @@ function createAntigravityParser({ limit = 100 } = {}) {
 
 const jsonlRows = text => text.split('\n').map(json).filter(Boolean);
 
-function jsonlMetadata(headers, provider, options = {}) {
-  let sessionId = null, cwd = null;
-  for (const row of headers.slice(0, 30)) {
-    if (provider === 'codex' && row.type === 'session_meta') {
-      sessionId = shortText(row.payload?.id); cwd = shortText(row.payload?.cwd);
-    } else if (provider === 'pi' && row.type === 'session') {
-      sessionId = shortText(row.id); cwd = shortText(row.cwd);
-    } else if (provider === 'claude') {
-      sessionId ??= shortText(row.sessionId); cwd ??= shortText(row.cwd);
-    }
-  }
+function updateJsonlMetadata(metadata, rows, provider, options = {}) {
   // Antigravity transcripts have no header; the conversation id comes from the directory path.
-  if (provider === 'antigravity') sessionId = shortText(options.sessionId);
-  return { sessionId, cwd };
+  if (provider === 'antigravity') {
+    metadata.sessionId ??= shortText(options.sessionId);
+    return metadata;
+  }
+  if (metadata.sessionId && metadata.cwd) return metadata;
+  for (const row of rows) {
+    if (provider === 'codex' && row.type === 'session_meta') {
+      metadata.sessionId ??= shortText(row.payload?.id);
+      metadata.cwd ??= shortText(row.payload?.cwd);
+    } else if (provider === 'pi' && row.type === 'session') {
+      metadata.sessionId ??= shortText(row.id);
+      metadata.cwd ??= shortText(row.cwd);
+    } else if (provider === 'claude') {
+      metadata.sessionId ??= shortText(row.sessionId);
+      metadata.cwd ??= shortText(row.cwd);
+    }
+    if (metadata.sessionId && metadata.cwd) break;
+  }
+  return metadata;
 }
 
 export function readJsonlMetadata(text, provider) {
-  return jsonlMetadata(jsonlRows(text), provider);
+  return updateJsonlMetadata({ sessionId: null, cwd: null }, jsonlRows(text), provider);
 }
 
 /** Keep parser context between complete batches without retaining their message bodies. */
 export function createJsonlCursor(text, provider, headerText = '', options = {}) {
   const rows = jsonlRows(text);
-  const metadata = jsonlMetadata(headerText ? jsonlRows(headerText) : rows, provider, options);
+  const metadata = { sessionId: null, cwd: null };
+  updateJsonlMetadata(metadata, headerText ? jsonlRows(headerText) : rows, provider, options);
+  if (headerText && (!metadata.sessionId || !metadata.cwd)) updateJsonlMetadata(metadata, rows, provider, options);
   const parsers = {
     codex: () => createCodexParser(metadata.sessionId, options),
     claude: () => createClaudeParser(options),
@@ -3252,8 +3271,13 @@ export function createJsonlCursor(text, provider, headerText = '', options = {})
   const parser = Object.hasOwn(parsers, provider) ? parsers[provider]() : null;
   parser?.feed(rows);
   return {
-    ...metadata,
-    feed: text => parser?.feed(jsonlRows(text)),
+    get sessionId() { return metadata.sessionId; },
+    get cwd() { return metadata.cwd; },
+    feed(chunkText) {
+      const fed = jsonlRows(chunkText);
+      updateJsonlMetadata(metadata, fed, provider, options);
+      parser?.feed(fed);
+    },
     finish: native => parser?.finish(native) ?? []
   };
 }

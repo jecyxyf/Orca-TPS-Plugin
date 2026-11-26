@@ -305,10 +305,120 @@ test('the manager reads all 16 harnesses and keeps native request IDs on upgrade
   assert.equal(first.find(row => row.id === 'workbuddy:buddy:child').cwd, project);
   assert.deepEqual(first.filter(row => row.provider === 'gemini').map(row => row.freshInputTokens), [30, 30]);
   assert.equal(first.filter(row => row.provider === 'omp' && row.sessionId === 'omp-child').length, 1);
-  assert.equal(first.filter(row => row.provider === 'pi').length, 1);
+  assert.equal(first.find(row => row.provider === 'omp').cwd, project);
+  const claude = first.find(row => row.provider === 'claude');
+  assert.equal(claude.sessionId, 'claude');
+  assert.equal(claude.cwd, project);
+  const codex = first.find(row => row.provider === 'codex');
+  assert.equal(codex.sessionId, 'codex');
+  assert.equal(codex.cwd, project);
+  const pi = first.find(row => row.provider === 'pi');
+  assert.equal(pi.sessionId, 'pi');
+  assert.equal(pi.cwd, project);
+  const openclaw = first.find(row => row.provider === 'openclaw' && row.sessionId === 'claw');
+  assert.equal(openclaw.cwd, project);
   const mcode = first.find(row => row.provider === 'mcode');
   assert.equal(mcode.outputTokens, 220);
   assert.equal(mcode.model, 'mcode-fixture');
   assert.equal(mcode.cwd, project);
   assert.equal(mcode.firstTokenMs, 200);
+});
+
+test('createJsonlCursor extracts sessionId and cwd across fed chunks and scanTokens indexes Claude and Pi for channel lookup', async t => {
+  const { createJsonlCursor, normalizeComparePath } = await import('../src/harness_parser.mjs');
+  const cursor = createJsonlCursor('', 'claude', '', { limit: Infinity });
+  assert.equal(cursor.sessionId, null);
+  assert.equal(cursor.cwd, null);
+  const preambles = Array.from({ length: 35 }, (_, i) => line({ type: 'mode', index: i, sessionId: 'claude-split' })).join('');
+  cursor.feed(preambles);
+  assert.equal(cursor.sessionId, 'claude-split');
+  assert.equal(cursor.cwd, null);
+  cursor.feed(line({
+    type: 'assistant', uuid: 'r1', cwd: '/proj/split', sessionId: 'claude-split',
+    timestamp: new Date(Date.now() - 1000).toISOString(),
+    message: { id: 'm1', model: 'claude-sonnet-5-5', stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 20 } }
+  }));
+  assert.equal(cursor.sessionId, 'claude-split');
+  assert.equal(cursor.cwd, '/proj/split');
+  assert.equal(cursor.finish().length, 1);
+
+  const home = await mkdtemp(path.join(tmpdir(), 'tps-claude-channel-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const now = Date.now();
+  const project = path.join(home, 'repo');
+  const claudeDir = path.join(home, '.claude', 'projects', 'p');
+  const piDir = path.join(home, '.pi', 'agent', 'sessions', 'p');
+  await mkdir(path.join(claudeDir, 'claude-live', 'subagents'), { recursive: true });
+  await mkdir(piDir, { recursive: true });
+
+  const claudeRows = [
+    ...Array.from({ length: 35 }, (_, i) => ({ type: 'mode', index: i, sessionId: 'claude-live' })),
+    { type: 'user', uuid: 'u1', cwd: project, sessionId: 'claude-live', timestamp: new Date(now - 5000).toISOString() },
+    { type: 'assistant', uuid: 'a1', parentUuid: 'u1', timestamp: new Date(now - 2000).toISOString(),
+      message: { id: 'claude-main-1', model: 'claude-opus-5-5', stop_reason: 'end_turn',
+        usage: { input_tokens: 40, output_tokens: 240, cache_read_input_tokens: 100 } } }
+  ];
+  await writeFile(path.join(claudeDir, 'claude-live.jsonl'), claudeRows.map(line).join(''));
+  await writeFile(path.join(claudeDir, 'claude-live', 'subagents', 'agent-sub.jsonl'), [
+    { type: 'assistant', uuid: 's1', isSidechain: true, timestamp: new Date(now - 1500).toISOString(),
+      message: { id: 'claude-sub-1', model: 'claude-haiku-5-5', stop_reason: 'end_turn',
+        usage: { input_tokens: 20, output_tokens: 120 } } }
+  ].map(line).join(''));
+  await writeFile(path.join(piDir, 'pi-live.jsonl'), [
+    { type: 'session', id: 'pi-live', cwd: project },
+    { type: 'message', id: 'pi-msg-1', timestamp: new Date(now - 1000).toISOString(),
+      message: { role: 'assistant', model: 'pi-fixture', usage: { input: 30, output: 180, cacheRead: 10, cacheWrite: 0 } } }
+  ].map(line).join(''));
+
+  const childScript = `
+    import path from 'node:path';
+    import { openTokensManagerDb } from './src/database.mjs';
+    import { normalizeComparePath } from './src/harness_parser.mjs';
+    import { readManagerChannel, scanTokens } from './src/token_manager.mjs';
+    const home = process.env.TEST_CHANNEL_HOME, now = Number(process.env.TEST_CHANNEL_NOW);
+    const project = process.env.TEST_CHANNEL_PROJECT;
+    const db = openTokensManagerDb(path.join(home, 'manager'), { timeZone: 'UTC' });
+    const codexSeed = Array.from({ length: 100 }, (_, index) => ({
+      id: 'codex-seed-' + index, provider: 'codex', sessionId: 'codex-old', cwd: project,
+      model: 'gpt-6', completedAt: now - 60_000 - index * 1000,
+      freshInputTokens: 10, outputTokens: 20, cacheReadTokens: 0, cacheCreationTokens: 0
+    }));
+    db.commitSource('codex-seed', 'seed-1', codexSeed, now);
+    await scanTokens(path.join(home, 'manager'), db, { at: now });
+    const indexed = db.channelDetails(normalizeComparePath(project), [
+      { provider: 'claude', sessionId: 'claude-live' },
+      { provider: 'pi', sessionId: 'pi-live' }
+    ]);
+    const channel = await readManagerChannel(db, {
+      worktreePath: project, title: 'repo',
+      sessions: [{ provider: 'claude', sessionId: 'claude-live' }, { provider: 'pi', sessionId: 'pi-live' }]
+    });
+    console.log(JSON.stringify({ indexed, channel: channel.session.records }));
+    db.close();
+  `;
+  const { stdout } = await run(process.execPath, ['--input-type=module', '-e', childScript], {
+    timeout: 25_000,
+    env: { ...process.env,
+      HOME: home, USERPROFILE: home, ORCA_USER_DATA_PATH: home, LOCALAPPDATA: home,
+      APPDATA: path.join(home, 'roaming'), XDG_CONFIG_HOME: path.join(home, '.config'),
+      HERMES_HOME: path.join(home, '.hermes'), CODEX_HOME: path.join(home, '.codex'),
+      CLAUDE_CONFIG_DIR: path.join(home, '.claude'), OPENCODE_DB: path.join(home, 'opencode.db'),
+      GEMINI_CLI_HOME: home, GROK_HOME: path.join(home, '.grok'), KIMI_CODE_HOME: path.join(home, '.kimi-code'),
+      MINIMAX_DATA_DIR: path.join(home, '.minimax'), OPENCLAW_STATE_DIR: path.join(home, '.openclaw'),
+      COPILOT_HOME: path.join(home, '.copilot'), WORKBUDDY_CONFIG_DIR: path.join(home, '.workbuddy'), DSH_HOME: path.join(home, '.dsh'),
+      CC_SWITCH_DB_PATH: path.join(home, 'missing-cc-switch.db'),
+      PI_CODING_AGENT_DIR: path.join(home, '.pi', 'agent'), PI_CODING_AGENT_SESSION_DIR: path.join(home, 'missing-pi-shared'),
+      TEST_CHANNEL_HOME: home, TEST_CHANNEL_NOW: String(now), TEST_CHANNEL_PROJECT: project
+    }
+  });
+  const { indexed, channel } = JSON.parse(stdout);
+  assert.equal(indexed.length, 100);
+  const topThree = indexed.slice(0, 3);
+  assert.deepEqual(topThree.map(row => row.provider), ['pi', 'claude', 'claude']);
+  assert.ok(topThree.every(row => normalizeComparePath(row.cwd) === normalizeComparePath(project)));
+  assert.equal(topThree[0].sessionId, 'pi-live');
+  assert.equal(topThree[1].sessionId, 'claude-live');
+  assert.equal(topThree[1].isSubagent, true);
+  assert.equal(topThree[2].sessionId, 'claude-live');
+  assert.deepEqual(channel.slice(0, 3).map(row => row.provider), ['pi', 'claude', 'claude']);
 });
