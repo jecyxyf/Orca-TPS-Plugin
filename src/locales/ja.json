@@ -289,7 +289,7 @@
   "open-repository": "GitHub リポジトリを開く",
   "star-repository": "気に入ったら GitHub で Star をお願いします！",
   "requests-unit": "回",
-  "model-distribution": "モデル別内訳",
+  "model-distribution": "モデルデータ",
   "sort-by-usage": "使用量",
   "sort-by-speed": "平均速度",
   "heatmap-active-days": "{0} 日稼働"

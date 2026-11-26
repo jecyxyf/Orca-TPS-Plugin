@@ -289,7 +289,7 @@
   "open-repository": "Открыть репозиторий GitHub",
   "star-repository": "Нравится плагин? Поставьте Star на GitHub!",
   "requests-unit": "запр.",
-  "model-distribution": "Доля моделей",
+  "model-distribution": "Данные моделей",
   "sort-by-usage": "Объём",
   "sort-by-speed": "Скорость",
   "heatmap-active-days": "{0} дн. активности"

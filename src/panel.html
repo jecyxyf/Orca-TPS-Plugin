@@ -370,8 +370,6 @@
     .section-title { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; font-weight: 700; }
     .usage-breakdown .section-title { font-size: 14px; font-weight: 750; line-height: 1.5; }
     .model-dist-head { padding-bottom: 6px; border-bottom: 1px solid var(--line); align-items: center; }
-    .model-sort-tabs { grid-template-columns: repeat(2, auto); flex: none; }
-    .model-sort-tabs .war-tab { padding: 3px 9px; font-size: 11px; white-space: nowrap; }
     .stacked-bar {
       display: flex; height: 11px; margin: 8px 0 6px;
       border-radius: 999px; overflow: hidden; gap: 2px;
@@ -798,6 +796,9 @@
     .usage-mode-tabs { flex: none; min-width: 0; }
     .usage-mode-tabs .war-tab { display: inline-grid; place-items: center; width: 32px; height: 28px; padding: 0; }
     .usage-mode-tabs svg { width: 16px; height: 16px; }
+    .model-sort-tabs { grid-template-columns: repeat(2, auto); flex: none; margin-inline-start: auto; }
+    .model-sort-tabs .war-tab { display: inline-grid; place-items: center; width: 32px; height: 28px; padding: 0; }
+    .model-sort-tabs svg { width: 16px; height: 16px; }
     .ladder-update-modes { align-self: start; flex: none; block-size: 44px; max-inline-size: 100%; }
     .ladder-update-modes .war-tab { padding-inline: 9px; line-height: 1.2; }
     .war-totals {
@@ -1408,8 +1409,19 @@
           <div class="section-head model-dist-head">
             <h2 class="section-title" id="war-model-title"><span data-i18n="model-distribution"></span></h2>
             <div class="war-tabs model-sort-tabs" role="group" data-i18n-aria-label="model-distribution">
-              <button class="war-tab" type="button" data-model-sort="usage" aria-pressed="true"><span data-i18n="sort-by-usage"></span></button>
-              <button class="war-tab" type="button" data-model-sort="speed" aria-pressed="false"><span data-i18n="sort-by-speed"></span></button>
+              <button class="war-tab" type="button" data-model-sort="usage" aria-pressed="true"
+                      data-i18n-title="sort-by-usage" data-i18n-aria-label="sort-by-usage">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+                  <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
+                </svg>
+              </button>
+              <button class="war-tab" type="button" data-model-sort="speed" aria-pressed="false"
+                      data-i18n-title="sort-by-speed" data-i18n-aria-label="sort-by-speed">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/>
+                </svg>
+              </button>
             </div>
           </div>
           <div class="stacked-bar" id="war-share-bar" hidden></div>

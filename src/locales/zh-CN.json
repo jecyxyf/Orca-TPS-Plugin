@@ -289,7 +289,7 @@
   "open-repository": "打开 GitHub 代码仓库",
   "star-repository": "喜欢的话，去 GitHub 点个 Star 支持一下！",
   "requests-unit": "次",
-  "model-distribution": "模型占比分布",
+  "model-distribution": "模型数据",
   "sort-by-usage": "按用量",
   "sort-by-speed": "按均速",
   "heatmap-active-days": "{0} 天活跃"

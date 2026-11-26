@@ -289,7 +289,7 @@
   "open-repository": "Abrir repositório no GitHub",
   "star-repository": "Gostou? Dê uma estrela no GitHub!",
   "requests-unit": "req",
-  "model-distribution": "Distribuição por modelo",
+  "model-distribution": "Dados dos modelos",
   "sort-by-usage": "Uso",
   "sort-by-speed": "Velocidade",
   "heatmap-active-days": "{0} dias ativos"

@@ -289,7 +289,7 @@
   "open-repository": "Ouvrir le dépôt GitHub",
   "star-repository": "Ce plugin vous plaît ? Mettez-lui une étoile sur GitHub !",
   "requests-unit": "req",
-  "model-distribution": "Répartition par modèle",
+  "model-distribution": "Données des modèles",
   "sort-by-usage": "Usage",
   "sort-by-speed": "Vitesse",
   "heatmap-active-days": "{0} jours actifs"

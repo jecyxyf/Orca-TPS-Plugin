@@ -187,6 +187,13 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.match(html, /id="war-share-bar"/);
   assert.deepEqual([...html.matchAll(/data-model-sort="([^"]+)" aria-pressed="([^"]+)"/g)]
     .map(match => match.slice(1)), [['usage', 'true'], ['speed', 'false']]);
+  assert.equal(css.get('.model-sort-tabs')['grid-template-columns'], 'repeat(2, auto)');
+  assert.equal(css.get('.model-sort-tabs')['margin-inline-start'], 'auto');
+  assert.equal(css.get('.model-sort-tabs .war-tab').width, '32px');
+  assert.equal(css.get('.model-sort-tabs svg').width, '16px');
+  assert.ok(html.indexOf('.war-tabs {') < html.indexOf('.model-sort-tabs {'), '.model-sort-tabs must follow .war-tabs in cascade');
+  const sortTabs = /<div class="war-tabs model-sort-tabs"[\s\S]*?<\/div>/.exec(html)?.[0] ?? '';
+  assert.equal((sortTabs.match(/<svg\b/g) ?? []).length, 2);
   assert.match(html, /function harnessBadge\(provider/);
   assert.match(html, /head\.append\(rank\);[\s\S]*?head\.append\(harnessBadge\(provider, 18\)\)[\s\S]*?head\.append\(model, value\)/);
   assert.match(html, /function warMetaMetric\(kind/);
