@@ -411,6 +411,11 @@ test('today usage renders a heartbeat ECG stage with royal characters driven by 
   const html = await readFile(panelPath, 'utf8');
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
   assert.equal(css.get('.ladder-chart').background, 'transparent');
+  assert.equal(css.get('.ladder-chart').height, '42px');
+  assert.match(html, /if \(rankDays === 7\)[\s\S]*?dailyUsagePath\(points, x, y\)[\s\S]*?const cols = points\.length, dotRows = 6;/);
+  assert.match(html, /function stepChartAnimation\(now\)[\s\S]*?function scheduleChartAnimation\(\)/);
+  assert.match(html, /const triggerChartIntro = \(\) => \{\s*if \(rankDays > 1\) chartIntroAt = /);
+  assert.match(html, /addEventListener\('tps-motion-changed'/);
   assert.match(html, /\.hb-stage:not\(\.is-in-view\) \*, #leaderboard\[hidden\] \.hb-stage \* \{ animation-play-state: paused !important; \}/);
   assert.match(html, /@keyframes ch-sprint-bob\b[\s\S]*?@keyframes ecg-sweep\b/);
 
@@ -469,6 +474,8 @@ test('today usage renders a heartbeat ECG stage with royal characters driven by 
   ], now);
   assert.ok(sprintBpm >= 130, 'dense recent uploads trigger sprinting BPM');
   assert.equal(poseFromBpm(sprintBpm).key, 'sprint');
+  const uncappedBpm = recentHeartbeatBpm(Array.from({ length: 6 }, (_, i) => ({ submittedAt: now - (i + 1) * 5_000 })), now);
+  assert.ok(uncappedBpm > 168, 'rocket heartbeat BPM is uncapped above 168');
 
   const empty = usageCard({ rank: 1, recent: { points: [] } }, now, Infinity);
   const [emptyMeta, emptyStage] = empty.children;

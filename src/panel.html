@@ -633,7 +633,7 @@
     .ladder-speed-tokens { flex: none; color: var(--blue); font-weight: 650; white-space: nowrap; }
     .ladder-recent { grid-area: recent; display: flex; flex-direction: column; min-width: 0; }
     .ladder-chart {
-      display: block; width: 100%; height: 34px; margin-top: 2px;
+      display: block; width: 100%; height: 42px; margin-top: 2px;
       background: transparent; color: var(--blue);
     }
     .ladder-chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin-top: 3px; }
@@ -3339,7 +3339,11 @@
       let busy = false, restoringSession = false;
       let revision = 0, drawnRows = '', renderedDay = '', loginProblem = '', messageCode = '';
       let rankingNodes = new Map(), leaderboardFrame, nextRecentExpiry = Infinity;
+      let chartIntroAt = -Infinity;
       const usagePainters = new WeakMap();
+      const triggerChartIntro = () => {
+        if (rankDays > 1) chartIntroAt = typeof performance !== 'undefined' ? performance.now() : 0;
+      };
 
       async function request(action, payload = {}, signal = lifetime.signal) {
         try {
@@ -3480,6 +3484,38 @@
             for (const { target, isIntersecting } of entries) target.classList.toggle('is-in-view', isIntersecting);
           }, { root: heartbeatScroll, rootMargin: '24px 0px' })
         : null;
+      const visibleCharts = new Set();
+      let chartAnimFrame, lastChartFrameAt = 0;
+      const chartMotionAllowed = () => !group.hidden && !lifetime.signal.aborted &&
+        !document.documentElement?.classList?.contains('is-motion-paused') &&
+        !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      const chartObserver = typeof IntersectionObserver === 'function'
+        ? new IntersectionObserver(entries => {
+            for (const { target, isIntersecting } of entries) {
+              if (isIntersecting) visibleCharts.add(target);
+              else visibleCharts.delete(target);
+            }
+            scheduleChartAnimation();
+          }, { root: heartbeatScroll, rootMargin: '24px 0px' })
+        : null;
+      function stepChartAnimation(now) {
+        chartAnimFrame = undefined;
+        if (!chartMotionAllowed() || rankDays <= 1 || !visibleCharts.size) return;
+        if (now - lastChartFrameAt >= 32) {
+          lastChartFrameAt = now;
+          for (const chart of visibleCharts) {
+            if (!chart.isConnected) { visibleCharts.delete(chart); continue; }
+            usagePainters.get(chart)?.(now);
+          }
+        }
+        if (visibleCharts.size && chartMotionAllowed() && rankDays > 1) {
+          chartAnimFrame = requestAnimationFrame(stepChartAnimation);
+        }
+      }
+      function scheduleChartAnimation() {
+        if (chartAnimFrame !== undefined || !chartMotionAllowed() || rankDays <= 1 || !visibleCharts.size) return;
+        if (typeof requestAnimationFrame === 'function') chartAnimFrame = requestAnimationFrame(stepChartAnimation);
+      }
 
       function recentHeartbeatBpm(points, now) {
         if (!Array.isArray(points) || !points.length) return 0;
@@ -3491,7 +3527,7 @@
         const inLastMin = active.filter(point => now - point.submittedAt <= 60_000).length;
         const inLast3Min = active.filter(point => now - point.submittedAt <= 180_000).length;
         const raw = 58 + inLastMin * 24 + inLast3Min * 9 + active.length * 4 - idleSec * 0.18;
-        return Math.max(38, Math.min(168, Math.round(raw)));
+        return Math.max(38, Math.round(raw));
       }
       const poseFromBpm = bpm => HEARTBEAT_POSES.find(pose => bpm >= pose.minBpm) ?? HEARTBEAT_POSES.at(-1);
 
@@ -3702,7 +3738,7 @@
           const chart = document.createElement('canvas');
           chart.className = 'ladder-chart';
           chart.width = 320;
-          chart.height = 60;
+          chart.height = 42;
           chart.setAttribute('role', 'img');
           chart.setAttribute('aria-label', usageChartLabel());
           chart.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : emptyTitle;
@@ -3716,29 +3752,147 @@
           }
           container.append(axis);
           if (!latestPoint) return container;
-          const width = chart.width, height = chart.height - chartVerticalPadding * 2;
           const maximum = Math.max(1, ...points.map(tokensOf));
-          const x = point => width * Math.min(1, (timeOf(point) - left) / span);
-          const y = point => chartVerticalPadding + height * (1 - tokensOf(point) / maximum);
-          const paint = () => {
+          const tierColor = royalTierOf(row.rank)?.line ?? '#64b0ff';
+          let hoverIndex = -1;
+          const paint = (frameNow = (typeof performance !== 'undefined' ? performance.now() : 0)) => {
             const ctx = chart.getContext('2d');
             if (!ctx) return;
-            ctx.clearRect(0, 0, chart.width, chart.height);
-            ctx.lineWidth = 2;
-            paintUsagePath(ctx, dailyUsagePath(points, x, y), chart.height - chartVerticalPadding, x(points[0]), x(latestPoint));
-            for (const point of points) {
-              ctx.beginPath();
-              ctx.arc(x(point), y(point), 3, 0, Math.PI * 2);
-              ctx.fill();
+            const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+            const rect = chart.getBoundingClientRect?.();
+            const cw = Math.max(120, Math.round(rect?.width || 320));
+            const ch = Math.max(36, Math.round(rect?.height || 42));
+            if (chart.width !== cw * dpr || chart.height !== ch * dpr) {
+              chart.width = cw * dpr;
+              chart.height = ch * dpr;
+            }
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, cw, ch);
+            const motion = typeof chartMotionAllowed === 'function' && chartMotionAllowed();
+            const introElapsed = typeof chartIntroAt === 'number' ? Math.max(0, frameNow - chartIntroAt) : Infinity;
+            const elapsed = Math.max(0, frameNow);
+            if (rankDays === 7) {
+              const pad = 6, base = ch - pad, spanH = ch - pad * 2;
+              const x = point => pad + (cw - pad * 2) * Math.min(1, (timeOf(point) - left) / span);
+              const y = point => pad + spanH * (1 - tokensOf(point) / maximum);
+              const line = dailyUsagePath(points, x, y);
+              const area = new Path2D(line);
+              area.lineTo(x(latestPoint), base);
+              area.lineTo(x(points[0]), base);
+              area.closePath();
+              const intro = motion ? Math.min(1, introElapsed / 550) : 1;
+              const reveal = 1 - Math.pow(1 - intro, 3);
+              ctx.save();
+              if (reveal < 1) {
+                ctx.beginPath();
+                ctx.rect(0, 0, pad + (cw - pad * 2) * reveal, ch);
+                ctx.clip();
+              }
+              const gradient = ctx.createLinearGradient(0, pad, 0, base);
+              gradient.addColorStop(0, tierColor + '66');
+              gradient.addColorStop(1, tierColor + '05');
+              ctx.fillStyle = gradient;
+              ctx.fill(area);
+              ctx.save();
+              ctx.shadowColor = tierColor;
+              ctx.shadowBlur = 7;
+              ctx.strokeStyle = tierColor;
+              ctx.lineWidth = 2;
+              ctx.stroke(line);
+              ctx.restore();
+              if (motion && intro >= 1) {
+                const sweep = (elapsed % 3200) / 3200;
+                if (sweep < 0.72) {
+                  const sx = pad + (cw - pad * 2) * (sweep / 0.72);
+                  const sg = ctx.createLinearGradient(sx - 34, 0, sx + 34, 0);
+                  sg.addColorStop(0, tierColor + '00');
+                  sg.addColorStop(0.5, '#ffffffcc');
+                  sg.addColorStop(1, tierColor + '00');
+                  ctx.strokeStyle = sg;
+                  ctx.lineWidth = 2.6;
+                  ctx.stroke(line);
+                }
+              }
+              ctx.restore();
+              const peak = points.reduce((best, p, i) => tokensOf(p) > tokensOf(points[best]) ? i : best, 0);
+              if (motion && intro >= 1) {
+                const pulse = (elapsed % 1800) / 1800;
+                const ex = x(latestPoint), ey = y(latestPoint);
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(ex, ey, 3.1 + pulse * 6.5, 0, Math.PI * 2);
+                ctx.strokeStyle = tierColor;
+                ctx.globalAlpha = (1 - pulse) * 0.68;
+                ctx.lineWidth = 1.4;
+                ctx.stroke();
+                ctx.restore();
+              }
+              for (const idx of new Set([peak, points.length - 1, ...(hoverIndex >= 0 ? [hoverIndex] : [])])) {
+                if (motion && x(points[idx]) > pad + (cw - pad * 2) * reveal + 2) continue;
+                ctx.beginPath();
+                ctx.arc(x(points[idx]), y(points[idx]), idx === hoverIndex ? 4.2 : 3.1, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.lineWidth = 1.8;
+                ctx.strokeStyle = tierColor;
+                ctx.stroke();
+              }
+              return;
+            }
+            const padX = 4, padT = 3, base = ch - 3, spanH = base - padT;
+            const cols = points.length, dotRows = 6;
+            const step = (cw - padX * 2) / cols;
+            const rowStep = spanH / dotRows;
+            const radius = Math.min(3.1, Math.max(1.7, Math.min(step * 0.27, rowStep * 0.34)));
+            const dark = typeof document !== 'undefined' && document.documentElement?.classList?.contains('dark');
+            const dimColor = dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(28, 28, 30, 0.11)';
+            const peakGlow = dark ? '#ffffff' : '#1c1c1e';
+            const sweepCol = motion ? (((elapsed % 3800) / 3800) * (cols + 8) - 4) : -100;
+            for (let i = 0; i < cols; i++) {
+              const val = tokensOf(points[i]);
+              const targetLit = val > 0 ? Math.max(1, Math.round((val / maximum) * dotRows)) : 0;
+              const colIntro = motion ? Math.max(0, Math.min(1, (introElapsed - i * 14) / 240)) : 1;
+              const lit = Math.round(targetLit * (1 - Math.pow(1 - colIntro, 2)));
+              const cx = padX + step * (i + 0.5);
+              const scanBoost = motion ? Math.max(0, 1 - Math.abs(i - sweepCol) / 2.6) : 0;
+              for (let r = 0; r < dotRows; r++) {
+                const cy = base - rowStep * (r + 0.5);
+                const active = r < lit;
+                ctx.beginPath();
+                ctx.arc(cx, cy, radius * (active && scanBoost > 0.2 ? 1 + scanBoost * 0.14 : 1), 0, Math.PI * 2);
+                if (!active) ctx.fillStyle = dimColor;
+                else if (i === hoverIndex) ctx.fillStyle = peakGlow;
+                else {
+                  const twinkle = motion ? 0.72 + 0.28 * Math.sin(elapsed * 0.0032 + i * 0.9 + r * 1.45) : 1;
+                  const baseAlpha = r >= dotRows - 2 ? 1 : 0.68;
+                  ctx.fillStyle = tierColor;
+                  ctx.globalAlpha = Math.min(1, baseAlpha * twinkle + scanBoost * 0.32);
+                }
+                ctx.fill();
+                ctx.globalAlpha = 1;
+              }
             }
           };
           usagePainters.set(chart, paint);
           paint();
+          if (typeof chartObserver !== 'undefined' && chartObserver) chartObserver.observe(chart);
+          if (typeof requestAnimationFrame === 'function') requestAnimationFrame(paint);
           chart.addEventListener('pointermove', event => {
             const rect = chart.getBoundingClientRect();
-            const position = (event.clientX - rect.left) * chart.width / rect.width;
-            const nearest = points.reduce((a, b) => Math.abs(x(a) - position) <= Math.abs(x(b) - position) ? a : b);
-            chart.title = Math.abs(x(nearest) - position) > width * DAY_MS / span / 2 ? usageChartLabel() : pointTitle(nearest);
+            const frac = Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width)));
+            const nextIndex = Math.round(frac * (points.length - 1));
+            chart.title = pointTitle(points[nextIndex]);
+            if (nextIndex !== hoverIndex) {
+              hoverIndex = nextIndex;
+              paint();
+            }
+          });
+          chart.addEventListener('pointerleave', () => {
+            chart.title = `${usageChartLabel()}\n${pointTitle(latestPoint)}`;
+            if (hoverIndex !== -1) {
+              hoverIndex = -1;
+              paint();
+            }
           });
         } else {
           const meta = document.createElement('div'), tools = document.createElement('span');
@@ -4127,6 +4281,7 @@
         rankingPending = nextRankRefresh = rankingProblem = undefined;
         cachedRankings.clear();
         renderRangeLabels();
+        triggerChartIntro();
         showCachedRanking();
       }
 
@@ -4201,12 +4356,25 @@
         const days = Number(tab.dataset.rankDays);
         if (days === rankDays) return;
         rankDays = days;
+        triggerChartIntro();
         for (const tab of rankTabs) tab.setAttribute('aria-pressed', String(Number(tab.dataset.rankDays) === days));
         render('');
         if (!cachedRankings.size) void showCache(days);
         void refresh(days);
       });
-      group.addEventListener('tps-view-opened', showCachedRanking);
+      group.addEventListener('tps-view-opened', () => {
+        triggerChartIntro();
+        showCachedRanking();
+        scheduleChartAnimation();
+      });
+      document.addEventListener('tps-motion-changed', () => {
+        if (chartMotionAllowed()) scheduleChartAnimation();
+        else {
+          cancelAnimationFrame(chartAnimFrame);
+          chartAnimFrame = undefined;
+          redrawUsageCharts();
+        }
+      }, { signal: lifetime.signal });
       window.addEventListener('online', () => {
         void refresh(rankDays, true);
       }, { signal: lifetime.signal });
@@ -4317,6 +4485,9 @@
         rankingAccess?.abort();
         avatarView.dispose();
         heartbeatObserver?.disconnect();
+        chartObserver?.disconnect();
+        visibleCharts.clear();
+        cancelAnimationFrame(chartAnimFrame);
         usageResize.disconnect();
         usageTheme.disconnect();
         rankingSubscription?.dispose();
