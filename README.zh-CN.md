@@ -7,6 +7,18 @@
 [![MIT 许可](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![GitHub Star 数](https://img.shields.io/github/stars/jecyxyf/Orca-TPS-Plugin?style=social)](https://github.com/jecyxyf/Orca-TPS-Plugin)
 
+> [!NOTE]
+> **写在前面**
+>
+> 娱乐插件，屎山代码，能用就行。
+>
+> - **后台采集**：为了汇总所有设备的 Token 用量、减轻服务器负担，各设备会在后台运行 Token 采集管家脚本，介意的请勿使用。
+> - **纯内存运行**：服务端没有数据库，全程纯内存运行，不记录任何用户信息。
+> - **目录收录**：当前版本不知什么原因，一直未能被官方插件目录收录。
+> - **开发计划**：后续只做维护修复；在到达 **1,000 Star** 之前，不再开发新功能。
+>
+> 希望这个插件可以给您的编程旅途带来快乐。
+
 ## 1. 项目描述
 
 TPS Plugin 在 Orca 右侧栏显示 AI 请求的 Token 用量和生成速度。你可以查看当前会话、通过交互图表与 365 天活跃星图回顾个人用量、自由定制面板主题，也可以用 GitHub 账号参加天梯榜。
@@ -122,13 +134,5 @@ TPS Plugin 在 Orca 右侧栏显示 AI 请求的 Token 用量和生成速度。�
 - **插件目录安装**　在 **Orca → 设置 → 插件** 中搜索 **TPS**，选择 **jecyxyf** 发布的插件，安装并确认权限。[查看插件条目](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
 - **本地安装**　克隆本仓库，在 **设置 → 插件 → 开发目录** 中添加包含 `orca-plugin.json` 的目录，然后启用插件。
 - **打开插件**　在 Orca 右侧栏打开 **TPS Plugin**。
-
-## 7. 已知问题
-
-设备上报榜单后，若在同步前关机，其他设备的个人统计会暂时落后。设备重新上线并同步后会补齐。后续沿用现有同步方式。
-
-## 8. 下个版本的优化计划
-
-继续扩展支持的 AI Harness，持续打磨动效流畅度与内存占用，并提升多设备同步体验。
 
 [MIT 许可](./LICENSE) · [第三方许可声明](./THIRD_PARTY_NOTICES.md)

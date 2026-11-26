@@ -7,6 +7,18 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/jecyxyf/Orca-TPS-Plugin?style=social)](https://github.com/jecyxyf/Orca-TPS-Plugin)
 
+> [!NOTE]
+> **Before you start**
+>
+> Just a fun side-project plugin — spaghetti code, if it works, it works.
+>
+> - **Background collection**: To aggregate token usage across all your devices and keep server load low, a Token Manager script runs in the background on each device. Please skip this plugin if that bothers you.
+> - **In-memory only**: The leaderboard server has no database, runs purely in memory, and stores no user data.
+> - **Directory listing**: For reasons unknown, this version still hasn’t been picked up by the official plugin directory yet.
+> - **Roadmap**: Maintenance fixes only from here on — no new features until **1,000 stars**.
+>
+> Hope this plugin brings a bit of joy to your coding journey.
+
 ## 1. Project description
 
 TPS Plugin shows AI request token usage and generation speed in the Orca sidebar. Inspect the current session, track personal usage with interactive charts and a 365-day star map, customize the panel theme, or join the live leaderboard with a GitHub account.
@@ -122,13 +134,5 @@ Click the palette button in the top-right header to open the live **Theme** pane
 - **Install from the plugin directory.** In Orca, open **Settings → Plugins**, search for **TPS** by **jecyxyf**, then install it and review the permissions. [View the plugin listing](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
 - **Install locally.** Clone this repository. In **Settings → Plugins → Development folders…**, add the folder containing `orca-plugin.json` and enable the plugin.
 - **Open the plugin.** Select **TPS Plugin** in Orca’s right sidebar.
-
-## 7. Known issues
-
-If a device submits to the leaderboard and shuts down before syncing, Personal Stats on other devices can lag behind. Stats catch up once the device reconnects and syncs. Future versions will keep the current sync approach.
-
-## 8. Next version
-
-Continue expanding supported AI Harnesses, refining animation smoothness and memory efficiency, and improving cross-device sync reliability.
 
 [MIT License](./LICENSE) · [Third-party notices](./THIRD_PARTY_NOTICES.md)
