@@ -308,8 +308,99 @@ test('model usage rows show the speed icon with a value or a dash', async () => 
   };
   new Function('byId', 'usageGroup', `${alignFn}; alignWarSpeedIcons();`)(() => warRows, { hidden: false });
   assert.equal(props.get('--war-speed-width'), '75px');
-  assert.match(html, /alignWarSpeedIcons\(\);\s*renderHeatmap\(\);/);
+  assert.match(html, /alignWarSpeedIcons\(\);\s*renderHeatmap\(today\);/);
   assert.match(html, /warResizeObserver[\s\S]*?alignWarSpeedIcons\(\)/);
+});
+
+test('Personal Stats counts up top totals and shows model deltas before counting to targets', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(css.get('.war-delta').position, 'absolute');
+  assert.equal(css.get('.war-delta')['font-size'], '12px');
+  assert.match(css.get('.war-delta').animation, /^war-delta-pop 3\.2s /);
+  assert.match(css.get('.war-row-flash').animation, /^war-jackpot-bg 2\.4s /);
+  assert.match(html, /@keyframes war-delta-pop\b/);
+  assert.match(html, /@keyframes war-jackpot-sweep\b/);
+  assert.match(html, /@keyframes war-value-surge\b/);
+  assert.match(html, /const USAGE_COUNT_MS = 2000;/);
+
+  const helpers = /const USAGE_COUNT_MS = [\s\S]*?(?=\n      const usageGroup = byId\('usage'\);)/.exec(html)?.[0];
+  const funcs = /function setNodeText\([\s\S]*?(?=\n      const usageRangeTabs = )/.exec(html)?.[0];
+  const syncFn = /function syncUsageTotal\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(helpers && funcs && syncFn);
+
+  const frames = [];
+  const makeNode = (text = '') => {
+    const classes = new Set();
+    const node = {
+      isConnected: true,
+      children: [],
+      firstChild: text ? { nodeType: 3, nodeValue: text } : null,
+      classList: {
+        add(name) { classes.add(name); },
+        remove(name) { classes.delete(name); },
+        contains(name) { return classes.has(name); }
+      },
+      get textContent() { return this.firstChild ? this.firstChild.nodeValue : ''; },
+      set textContent(v) { this.firstChild = { nodeType: 3, nodeValue: v }; this.children = []; },
+      append(...items) { this.children.push(...items); },
+      prepend(item) { this.firstChild = item; this.children.unshift(item); },
+      querySelectorAll(sel) {
+        if (sel === '.war-delta') return this.children.filter(c => c.className === 'war-delta');
+        if (sel === '.war-row-flash') return this.children.filter(c => c.className === 'war-row-flash');
+        return [];
+      },
+      addEventListener() {},
+      setAttribute() {},
+      remove() {}
+    };
+    return node;
+  };
+  let now = 1000;
+  const document = {
+    createElement: () => makeNode(),
+    createTextNode: text => ({ nodeType: 3, nodeValue: text })
+  };
+  const usageGroup = makeNode();
+  usageGroup.hidden = false;
+  const run = new Function('document', 'usageGroup', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance', 'numeric', `
+    let disposed = false;
+    ${helpers}
+    ${funcs}
+    ${syncFn}
+    return { activeUsageCounters, syncUsageTotal, scheduleUsageCounter, stepUsageCounters, attachWarDelta, attachWarRowFlash, setNodeText, stopUsageAnimations };
+  `)(document, usageGroup, cb => { frames.push(cb); return frames.length; }, () => {}, { now: () => now }, v => typeof v === 'number' && Number.isFinite(v) && v >= 0);
+
+  const totalEl = makeNode('100.00 M');
+  run.syncUsageTotal('total:tokens', totalEl, 110_000_000, 100_000_000, true, v => `${(v / 1e6).toFixed(2)} M`, (a, b) => b > a);
+  assert.equal(totalEl.textContent, '100.00 M');
+  assert.equal(totalEl.classList.contains('is-counting'), true);
+  assert.equal(totalEl.children.filter(c => c.className === 'war-delta').length, 0);
+
+  const rowEl = makeNode();
+  const rowAmount = makeNode('50.00 M');
+  run.attachWarRowFlash(rowEl);
+  run.attachWarDelta(rowAmount, '+10.00 M');
+  run.scheduleUsageCounter('row:tokens:m', { node: rowAmount, from: 50_000_000, to: 60_000_000, apply: v => run.setNodeText(rowAmount, `${(v / 1e6).toFixed(2)} M`) });
+  assert.equal(rowEl.children.filter(c => c.className === 'war-row-flash').length, 1);
+  assert.equal(rowAmount.children.filter(c => c.className === 'war-delta')[0].textContent, '+10.00 M');
+  assert.equal(rowAmount.classList.contains('is-counting'), true);
+
+  now = 1900;
+  frames.shift()(now);
+  assert.ok(parseFloat(totalEl.textContent) > 100 && parseFloat(totalEl.textContent) < 110);
+  assert.ok(parseFloat(rowAmount.firstChild.nodeValue) > 50 && parseFloat(rowAmount.firstChild.nodeValue) < 60);
+  assert.equal(rowAmount.children.filter(c => c.className === 'war-delta').length, 1);
+
+  now = 3200;
+  frames.shift()(now);
+  assert.equal(totalEl.textContent, '110.00 M');
+  assert.equal(rowAmount.firstChild.nodeValue, '60.00 M');
+  assert.equal(totalEl.classList.contains('is-counting'), false);
+  assert.equal(rowAmount.classList.contains('is-counting'), false);
+  assert.equal(run.activeUsageCounters.size, 0);
+  assert.match(html, /if \(byId\('usage'\)\.hidden\) stopUsageAnimations\(true\);/);
+  assert.match(html, /usageViewSnapshots\.set\(viewKey,/);
 });
 
 test('today usage draws a full zero line and animates real-time pulses once', async () => {

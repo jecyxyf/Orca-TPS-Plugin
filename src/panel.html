@@ -845,8 +845,24 @@
     .war-note { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
     .war-note:empty, .war-note[hidden] { display: none; }
     .war-rows { margin: 2px 0 0; padding: 0; list-style: none; }
-    .war-row { padding: 8px 2px 7px; border-top: 1px solid var(--line); }
+    .war-row { position: relative; padding: 8px 2px 7px; border-top: 1px solid var(--line); }
     .war-row:first-child { border-top: 0; }
+    .war-row > :not(.war-row-flash) { position: relative; z-index: 1; }
+    .war-row-flash {
+      position: absolute; inset: 1px 0; z-index: 0; overflow: hidden; border-radius: 10px; pointer-events: none;
+      background: linear-gradient(90deg, rgb(16 185 129 / 18%), rgb(250 204 21 / 14%) 55%, rgb(16 185 129 / 6%));
+      box-shadow: inset 0 0 0 1px rgb(74 222 128 / 34%);
+      animation: war-jackpot-bg 2.4s ease-out 1 both;
+    }
+    html:not(.dark) .war-row-flash {
+      background: linear-gradient(90deg, rgb(0 127 72 / 14%), rgb(217 119 6 / 11%) 55%, rgb(0 127 72 / 4%));
+      box-shadow: inset 0 0 0 1px rgb(0 127 72 / 28%);
+    }
+    .war-row-flash::before {
+      content: ""; position: absolute; inset-block: -20%; left: 0; width: 46%;
+      background: linear-gradient(90deg, transparent, rgb(110 231 183 / 22%) 36%, rgb(253 224 71 / 42%) 52%, transparent);
+      animation: war-jackpot-sweep 1.25s cubic-bezier(.22, 1, .36, 1) 1 both;
+    }
     .war-row-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
     .war-agent-icon {
       display: inline-grid; place-items: center; flex: none;
@@ -854,15 +870,55 @@
     }
     .war-agent-icon svg { width: 20px; height: 20px; display: block; }
     .war-model { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--purple); font-size: 15px; font-weight: 700; }
-    .war-amount { flex-shrink: 0; color: var(--blue); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .war-amount { position: relative; flex-shrink: 0; color: var(--blue); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .war-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px 10px; margin-top: 3px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-    .war-meta-item { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
-    .war-meta-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .war-meta-item { position: relative; display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
+    .war-meta-item > span:not(.war-delta) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .war-meta-item svg { width: 13px; height: 13px; flex: none; color: var(--icon-color, currentColor); }
     /* Keep every speed icon in a single vertical column sized to the widest row in #war-rows. */
     .war-meta-item.is-speed { min-width: min(var(--war-speed-width, 0px), 55%); }
     .war-meta-item.is-speed svg { color: var(--icon-color, var(--speed)); }
-    .war-meta-tokens { color: var(--blue); font-weight: 650; }
+    .war-meta-tokens { position: relative; color: var(--blue); font-weight: 650; }
+    .war-value.is-counting, .war-amount.is-counting, .war-meta-tokens.is-counting,
+    .war-meta-item.is-counting > span:not(.war-delta) {
+      overflow: visible;
+      animation: war-value-surge 2s cubic-bezier(.22, 1, .36, 1) 1;
+    }
+    .war-amount.is-counting, .war-meta-tokens.is-counting { transform-origin: right center; }
+    .war-meta-item.is-counting > span:not(.war-delta) { transform-origin: left center; }
+    .war-delta {
+      position: absolute; top: 50%; right: calc(100% + 7px); z-index: 3;
+      padding: 2px 8px; border-radius: 999px; pointer-events: none; white-space: nowrap;
+      border: 1px solid color-mix(in srgb, var(--green) 68%, transparent);
+      background: var(--proxy-bg); color: var(--green);
+      box-shadow: 0 2px 12px color-mix(in srgb, var(--green) 36%, transparent);
+      font-size: 12px; line-height: 1.35; font-weight: 800; font-variant-numeric: tabular-nums;
+      animation: war-delta-pop 3.2s cubic-bezier(.22, 1, .36, 1) 1 both;
+    }
+    .war-meta-item .war-delta { right: auto; left: calc(100% + 7px); }
+    @keyframes war-jackpot-bg {
+      0% { opacity: 0; }
+      14% { opacity: 1; }
+      68% { opacity: .85; }
+      100% { opacity: 0; }
+    }
+    @keyframes war-jackpot-sweep {
+      0% { transform: translateX(-130%) skewX(-20deg); }
+      100% { transform: translateX(340%) skewX(-20deg); }
+    }
+    @keyframes war-value-surge {
+      0% { transform: scale(1); }
+      15% { transform: scale(1.1); color: var(--green); text-shadow: 0 0 12px color-mix(in srgb, var(--green) 58%, transparent); }
+      72% { transform: scale(1.03); color: var(--green); text-shadow: 0 0 8px color-mix(in srgb, var(--green) 32%, transparent); }
+      100% { transform: scale(1); }
+    }
+    @keyframes war-delta-pop {
+      0% { opacity: 0; transform: translateY(calc(-50% + 6px)) scale(.58); }
+      8% { opacity: 1; transform: translateY(calc(-50% - 2px)) scale(1.16); }
+      15% { opacity: 1; transform: translateY(-50%) scale(1); }
+      78% { opacity: 1; transform: translateY(-50%) scale(1); }
+      100% { opacity: 0; transform: translateY(calc(-50% - 10px)) scale(.95); }
+    }
     .war-empty { margin: 10px 2px 2px; color: var(--muted); font-size: 12px; text-align: center; }
     .war-empty[hidden] { display: none; }
     .rank-index { flex-shrink: 0; min-width: 16px; color: var(--muted); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -1028,7 +1084,9 @@
       .ladder-medal::before, .ladder-medal::after, .ladder-medal-emblem::before { animation: none; opacity: 0; }
       .heat-cell, .stacked-seg { transition: none; }
       .heat-cell, .heat-cell:hover::before, .heat-cell:hover::after, .heat-star-grid.is-waking .heat-cell { animation: none !important; }
-      .heat-cell::after { animation: none !important; opacity: 0; }
+      .heat-cell::after, .war-delta, .war-row-flash, .war-row-flash::before { animation: none !important; opacity: 0; }
+      .war-value.is-counting, .war-amount.is-counting, .war-meta-tokens.is-counting,
+      .war-meta-item.is-counting > span:not(.war-delta) { animation: none !important; }
     }
   </style>
 </head>
@@ -1966,6 +2024,7 @@
           view.tabIndex = selected ? 0 : -1;
           byId(view.getAttribute('aria-controls')).hidden = !selected;
         }
+        if (byId('usage').hidden) stopUsageAnimations(true);
         byId(tab.getAttribute('aria-controls')).dispatchEvent(new Event('tps-view-opened'));
       }
       for (const [index, tab] of views.entries()) {
@@ -2245,7 +2304,101 @@
       }
       let usageSummary = null, usageRange = 'today', usageMode = 'calendar', usageSort = 'usage', usageTimer = null;
       let usagePending, usageFrame, drawnUsage, drawnHeat, heatLayout, heatCells = [], usageRevision = 0;
+      const USAGE_COUNT_MS = 2000;
+      const usageViewSnapshots = new Map();
+      const activeUsageCounters = new Map();
+      let usageCountFrame, activeUsageViewKey = '', suppressUsageDelta = false;
+      const millionSteps = value => numeric(value) ? Math.round(value / 10_000) : -1;
       const usageGroup = byId('usage');
+      const usageMotionAllowed = () => !disposed && !usageGroup.hidden && !document.hidden &&
+        !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      function setNodeText(host, text) {
+        let textNode = host?.firstChild;
+        if (!textNode || textNode.nodeType !== 3) {
+          textNode = document.createTextNode(text);
+          host?.prepend(textNode);
+        } else {
+          textNode.nodeValue = text;
+        }
+      }
+      function stopUsageAnimations(snapToTarget = true) {
+        cancelAnimationFrame(usageCountFrame);
+        usageCountFrame = undefined;
+        if (snapToTarget) {
+          for (const entry of activeUsageCounters.values()) {
+            if (!entry.node || entry.node.isConnected) entry.apply(entry.to);
+          }
+        }
+        for (const entry of activeUsageCounters.values()) entry.pulseEl?.classList.remove('is-counting');
+        activeUsageCounters.clear();
+        for (const node of usageGroup.querySelectorAll('.is-counting')) node.classList.remove('is-counting');
+        for (const badge of usageGroup.querySelectorAll('.war-delta, .war-row-flash')) badge.remove();
+      }
+      function stepUsageCounters(now) {
+        usageCountFrame = undefined;
+        if (disposed || usageGroup.hidden) {
+          stopUsageAnimations(true);
+          return;
+        }
+        let anyActive = false;
+        for (const [key, entry] of activeUsageCounters) {
+          if (entry.node && !entry.node.isConnected) {
+            entry.pulseEl?.classList.remove('is-counting');
+            activeUsageCounters.delete(key);
+            continue;
+          }
+          const progress = Math.min(1, (now - entry.startAt) / entry.duration);
+          const eased = 1 - (1 - progress) ** 3;
+          const current = entry.from + (entry.to - entry.from) * eased;
+          entry.current = current;
+          entry.apply(progress >= 1 ? entry.to : current);
+          if (progress >= 1) {
+            entry.pulseEl?.classList.remove('is-counting');
+            activeUsageCounters.delete(key);
+          } else {
+            anyActive = true;
+          }
+        }
+        if (anyActive) usageCountFrame = requestAnimationFrame(stepUsageCounters);
+      }
+      function scheduleUsageCounter(key, { node, pulseEl = node, from, to, apply }) {
+        const existing = activeUsageCounters.get(key);
+        const startFrom = existing ? existing.current : from;
+        if (pulseEl?.classList) {
+          pulseEl.classList.remove('is-counting');
+          void pulseEl.offsetWidth;
+          pulseEl.classList.add('is-counting');
+        }
+        activeUsageCounters.set(key, {
+          node, pulseEl, from: startFrom, to, current: startFrom,
+          startAt: performance.now(), duration: USAGE_COUNT_MS, apply
+        });
+        apply(startFrom);
+        if (usageCountFrame === undefined) usageCountFrame = requestAnimationFrame(stepUsageCounters);
+      }
+      function attachWarRowFlash(rowEl) {
+        if (!rowEl) return;
+        for (const stale of rowEl.querySelectorAll('.war-row-flash')) stale.remove();
+        const flash = document.createElement('span');
+        flash.className = 'war-row-flash';
+        flash.setAttribute('aria-hidden', 'true');
+        const clear = () => flash.remove();
+        flash.addEventListener('animationend', event => { if (event.target === flash) clear(); });
+        setTimeout(clear, 2600).unref?.();
+        rowEl.prepend(flash);
+      }
+      function attachWarDelta(host, deltaText) {
+        if (!host || !deltaText) return;
+        for (const stale of host.querySelectorAll('.war-delta')) stale.remove();
+        const badge = document.createElement('span');
+        badge.className = 'war-delta';
+        badge.setAttribute('aria-hidden', 'true');
+        badge.textContent = deltaText;
+        const clear = () => badge.remove();
+        badge.addEventListener('animationend', clear, { once: true });
+        setTimeout(clear, 3500).unref?.();
+        host.append(badge);
+      }
       const usageRangeTabs = usageGroup.querySelectorAll('[data-range]');
       const usageModeButtons = usageGroup.querySelectorAll('[data-usage-mode]');
       const modelSortButtons = usageGroup.querySelectorAll('[data-model-sort]');
@@ -2345,6 +2498,37 @@
         item.append(head, meta);
         return item;
       }
+      function usageCalendarToday() {
+        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: usageSummary?.timeZone,
+          year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
+        const calendar = Object.fromEntries(parts.map(part => [part.type, Number(part.value)]));
+        const today = new Date(calendar.year, calendar.month - 1, calendar.day);
+        today.setHours(0, 0, 0, 0);
+        return today;
+      }
+      function syncUsageTotal(key, el, toValue, prevValue, shouldAnimate, format, canGrow) {
+        if (toValue === null) {
+          activeUsageCounters.delete(key);
+          el.textContent = '—';
+          return;
+        }
+        const existing = activeUsageCounters.get(key);
+        if (shouldAnimate && canGrow(prevValue, toValue)) {
+          if (existing?.to !== toValue) {
+            scheduleUsageCounter(key, {
+              node: el,
+              pulseEl: el.closest?.('.war-value') ?? el,
+              from: prevValue,
+              to: toValue,
+              apply: value => { el.textContent = format(value); }
+            });
+          }
+          return;
+        }
+        if (existing?.to === toValue) return;
+        activeUsageCounters.delete(key);
+        el.textContent = format(toValue);
+      }
       function renderUsage() {
         if (disposed || usageGroup.hidden) return;
         const hourly = usageMode === 'hourly';
@@ -2357,39 +2541,137 @@
           if (tab.firstElementChild.textContent !== label) tab.firstElementChild.textContent = label;
           tab.setAttribute('aria-selected', String(tab.dataset.range === usageRange));
         }
-        byId('war-tokens').textContent = range ? formatMillionTokens(range.tokens) : '—';
+        const viewKey = `${usageRange}:${usageMode}:${usageSort}`;
+        const viewChanged = viewKey !== activeUsageViewKey;
+        if (viewChanged) {
+          stopUsageAnimations(true);
+          activeUsageViewKey = viewKey;
+        }
+        const today = usageCalendarToday();
+        const dayKey = localKey(today);
+        const prev = !suppressUsageDelta && range && usageMotionAllowed() ? usageViewSnapshots.get(viewKey) : null;
+        const canAnimateDelta = Boolean(prev && prev.day === dayKey);
+
+        const toTokens = range && numeric(range.tokens) ? range.tokens : null;
+        syncUsageTotal('total:tokens', byId('war-tokens'), toTokens, prev?.tokens, canAnimateDelta,
+          formatMillionTokens, (from, to) => numeric(from) && to > from && millionSteps(to) > millionSteps(from));
+
         const hasRequests = numeric(range?.requests);
-        byId('war-requests').textContent = hasRequests ? formatCount(range.requests) : '—';
+        const toRequests = hasRequests ? range.requests : null;
+        syncUsageTotal('total:requests', byId('war-requests'), toRequests, prev?.requests, canAnimateDelta,
+          value => formatCount(Math.round(value)), (from, to) => numeric(from) && to > from);
         byId('war-requests-unit').hidden = !hasRequests;
+
         const maxSpeed = range?.maxSpeed;
         const hasMaxSpeed = Number.isFinite(maxSpeed?.tokensPerSecond) && maxSpeed.tokensPerSecond > 0;
+        const toMaxSpeed = usageRange === 'today' && hasMaxSpeed ? maxSpeed.tokensPerSecond : null;
         byId('war-max-speed-row').hidden = usageRange !== 'today';
-        byId('war-max-speed').textContent = hasMaxSpeed ? speedText(maxSpeed.tokensPerSecond) : '—';
+        syncUsageTotal('total:maxSpeed', byId('war-max-speed'), toMaxSpeed, prev?.maxSpeed, canAnimateDelta,
+          speedText, (from, to) => numeric(from) && to > from && speedText(to) !== speedText(from));
         byId('war-max-speed-unit').hidden = !hasMaxSpeed;
+
         const list = Array.isArray(range?.rows) ? range.rows : [];
         const speeds = Array.isArray(range?.speeds) ? range.speeds : [];
+        const tokensByModel = new Map();
+        if (usageSort === 'speed') {
+          for (const row of list) {
+            if (!row.model || !numeric(row.tokens)) continue;
+            tokensByModel.set(row.model, (tokensByModel.get(row.model) ?? 0) + row.tokens);
+          }
+        }
+        const nextModels = new Map();
+        const rowTargets = [];
+        if (usageSort === 'speed') {
+          for (const entry of speeds) {
+            const totalTokens = tokensByModel.get(entry.model);
+            const rowTokens = numeric(totalTokens) ? totalTokens : 0;
+            const rowReqs = numeric(entry.samples) ? entry.samples : 0;
+            if (entry.model) nextModels.set(entry.model, { tokens: rowTokens, requests: rowReqs });
+            rowTargets.push({ key: entry.model || '', tokens: rowTokens, requests: rowReqs });
+          }
+        } else {
+          for (const row of list) {
+            const modelKey = `${row.provider ?? ''}\u0000${row.model ?? ''}`;
+            const rowTokens = numeric(row.tokens) ? row.tokens : 0;
+            const rowReqs = numeric(row.requests) ? row.requests : 0;
+            nextModels.set(modelKey, { tokens: rowTokens, requests: rowReqs });
+            rowTargets.push({ key: modelKey, tokens: rowTokens, requests: rowReqs });
+          }
+        }
+
         const signature = JSON.stringify([usageRange, usageMode, usageSort, list, speeds]);
         if (signature !== drawnUsage) {
           drawnUsage = signature;
+          const inFlightRowValues = new Map();
+          for (const [key, entry] of activeUsageCounters) {
+            if (!key.startsWith('row:')) continue;
+            inFlightRowValues.set(key, entry.current);
+            activeUsageCounters.delete(key);
+          }
           const colors = renderShareBar(list, range?.tokens);
+          const warRows = byId('war-rows');
           if (usageSort === 'speed') {
-            const tokensByModel = new Map();
-            for (const row of list) {
-              if (!row.model || !numeric(row.tokens)) continue;
-              tokensByModel.set(row.model, (tokensByModel.get(row.model) ?? 0) + row.tokens);
-            }
-            byId('war-rows').replaceChildren(...speeds.map((entry, index) => speedRow(entry, index, tokensByModel)));
+            warRows.replaceChildren(...speeds.map((entry, index) => speedRow(entry, index, tokensByModel)));
           } else {
             const speedByModel = new Map(speeds.map(entry => [entry.model, entry.tokensPerSecond]));
-            byId('war-rows').replaceChildren(...list.map(row => usageRow(row, speedByModel, colors.get(`${row.provider}\u0000${row.model}`))));
+            warRows.replaceChildren(...list.map(row => usageRow(row, speedByModel, colors.get(`${row.provider}\u0000${row.model}`))));
+          }
+          if (canAnimateDelta) {
+            const children = [...warRows.children];
+            rowTargets.forEach((target, index) => {
+              const rowEl = children[index];
+              if (!rowEl || !target.key) return;
+              const prevModel = prev.models.get(target.key) ?? { tokens: 0, requests: 0 };
+              let rowGrew = false;
+              const tokHost = rowEl.querySelector(usageSort === 'speed' ? '.war-meta-tokens' : '.war-amount');
+              const tokKey = `row:tokens:${target.key}`;
+              const fromTokens = inFlightRowValues.get(tokKey) ?? prevModel.tokens;
+              if (tokHost && target.tokens > prevModel.tokens && millionSteps(target.tokens) > millionSteps(prevModel.tokens)) {
+                rowGrew = true;
+                const deltaSteps = millionSteps(target.tokens) - millionSteps(prevModel.tokens);
+                attachWarDelta(tokHost, `+${formatMillionTokens(deltaSteps * 10_000)}`);
+                scheduleUsageCounter(tokKey, {
+                  node: tokHost,
+                  from: fromTokens,
+                  to: target.tokens,
+                  apply: value => setNodeText(tokHost, formatMillionTokens(value))
+                });
+              }
+              const reqHost = rowEl.querySelector('.war-meta-item');
+              const reqTextSpan = reqHost?.querySelector('span:not(.war-delta)');
+              const reqKey = `row:requests:${target.key}`;
+              const fromReqs = inFlightRowValues.get(reqKey) ?? prevModel.requests;
+              if (reqHost && reqTextSpan && target.requests > prevModel.requests) {
+                rowGrew = true;
+                attachWarDelta(reqHost, `+${formatCount(Math.round(target.requests - prevModel.requests))}`);
+                scheduleUsageCounter(reqKey, {
+                  node: reqTextSpan,
+                  pulseEl: reqHost,
+                  from: fromReqs,
+                  to: target.requests,
+                  apply: value => setNodeText(reqTextSpan, `${formatCount(Math.round(value))} ${t('requests-unit')}`.trim())
+                });
+              }
+              if (rowGrew) attachWarRowFlash(rowEl);
+            });
           }
         }
+        if (range) {
+          usageViewSnapshots.set(viewKey, {
+            day: dayKey,
+            tokens: toTokens,
+            requests: toRequests,
+            maxSpeed: toMaxSpeed,
+            models: nextModels
+          });
+        }
+        suppressUsageDelta = false;
         const emptyEl = byId('war-empty');
         const hasVisibleRows = usageSort === 'speed' ? speeds.length > 0 : list.length > 0;
         emptyEl.firstElementChild.textContent = t(usageSort === 'speed' ? 'empty-model-speeds' : 'empty-usage');
         emptyEl.hidden = !range || hasVisibleRows;
         alignWarSpeedIcons();
-        renderHeatmap();
+        renderHeatmap(today);
       }
       function alignWarSpeedIcons() {
         const warRows = byId('war-rows');
@@ -2487,14 +2769,8 @@
       const HEAT_DAYS = 365;
       const localKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
       const dayLabel = date => locale.date(date, { dateStyle: 'full' });
-      function renderHeatmap() {
+      function renderHeatmap(today = usageCalendarToday()) {
         const grid = byId('heat-grid');
-        const now = new Date();
-        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: usageSummary?.timeZone,
-          year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(now);
-        const calendar = Object.fromEntries(parts.map(part => [part.type, Number(part.value)]));
-        const today = new Date(calendar.year, calendar.month - 1, calendar.day);
-        today.setHours(0, 0, 0, 0);
         const layout = localKey(today);
         const daily = usageSummary?.daily ?? [];
         const signature = JSON.stringify([layout, Boolean(usageSummary), daily]);
@@ -2732,6 +3008,8 @@
       function cleanup() {
         if (disposed) return;
         disposed = true;
+        stopUsageAnimations(false);
+        usageViewSnapshots.clear();
         warResizeObserver?.disconnect();
         lifetime.abort();
         for (const subscription of subscriptions) subscription?.dispose();
@@ -2742,6 +3020,8 @@
       }
       document.addEventListener('tps-language-changed', () => {
         suppressInsertAnimation = true;
+        suppressUsageDelta = true;
+        stopUsageAnimations(false);
         drawnRecords = '';
         recordNodes.clear();
         drawnUsage = drawnHeat = heatLayout = undefined;
