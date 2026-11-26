@@ -178,10 +178,8 @@
       position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
     }
     .panel-bg-img {
-      position: absolute; inset: 0; width: 100%; height: 100%;
+      position: absolute; left: 0; top: 0; width: 100%; height: 100%; max-width: none; max-height: none;
       object-fit: cover; pointer-events: none; user-select: none;
-      transform-origin: center center;
-      transform: translate(var(--bg-x, 0%), var(--bg-y, 0%)) scale(var(--bg-scale, 1));
     }
     .panel-bg-layer::after {
       content: ""; position: absolute; inset: 0;
@@ -3593,19 +3591,24 @@
       const lifetime = new AbortController();
       const BG_IMAGE_KEY = 'tps:panel-bg-image';
       const BG_TRANSFORM_KEY = 'tps:panel-bg-transform';
+      const BG_ORIG_DB = 'orca-tps-bg';
+      const BG_ORIG_STORE = 'images';
+      const BG_ORIG_KEY = 'panel-bg-original';
       const COLOR_UNSELECTED_KEY = 'tps:panel-color-unselected';
       const COLOR_SELECTED_KEY = 'tps:panel-color-selected';
       const COLOR_ICON_KEY = 'tps:panel-color-icon';
       const CARD_COLOR_KEY = 'tps:panel-card-color';
       const CARD_OPACITY_KEY = 'tps:panel-card-opacity';
       const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
-      const DEFAULT_BG_TRANSFORM = { scale: 100, x: 0, y: 0 };
+      const DEFAULT_BG_TRANSFORM = { scale: 100, x: 0, y: 0, baked: false };
       const MAX_BG_BYTES = 2 * 1024 * 1024;
+      const MAX_STORED_BG_CHARS = 2_200_000;
       const MIME_BY_EXT = {
         svg: 'image/svg+xml', jpg: 'image/jpeg', jpeg: 'image/jpeg',
         png: 'image/png', webp: 'image/webp', gif: 'image/gif'
       };
       const ALLOWED_MIMES = new Set(Object.values(MIME_BY_EXT));
+      const RASTER_CROP_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
       const DATA_IMAGE_RE = /^data:image\/(?:svg\+xml|jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/;
       const panelMain = byId('panel');
       const toggle = byId('settings-toggle');
@@ -3673,8 +3676,15 @@
         }
       ];
       let hasBgImage = false;
+      let croppedBgUrl = '';
+      let originalBgUrl = null;
+      let originalBgLoaded = false;
+      let activeImgSize = { w: 0, h: 0 };
       let bgTransform = { ...DEFAULT_BG_TRANSFORM };
       let beforeEdit = null;
+      let editorBusy = false;
+      let editingOriginal = false;
+      let editingSourceUrl = '';
       let dragState = null;
 
       function readStore(key) {
@@ -3690,18 +3700,125 @@
         }
       }
 
+      function openBgDb() {
+        if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+        return new Promise(resolve => {
+          try {
+            const req = indexedDB.open(BG_ORIG_DB, 1);
+            req.onupgradeneeded = () => {
+              const db = req.result;
+              if (!db.objectStoreNames.contains(BG_ORIG_STORE)) {
+                db.createObjectStore(BG_ORIG_STORE);
+              }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+            req.onblocked = () => resolve(null);
+          } catch {
+            resolve(null);
+          }
+        });
+      }
+
+      async function readOriginalBg() {
+        if (originalBgLoaded) return originalBgUrl;
+        const db = await openBgDb();
+        if (!db) {
+          originalBgLoaded = true;
+          return originalBgUrl;
+        }
+        return new Promise(resolve => {
+          try {
+            const tx = db.transaction(BG_ORIG_STORE, 'readonly');
+            const req = tx.objectStore(BG_ORIG_STORE).get(BG_ORIG_KEY);
+            req.onsuccess = () => {
+              const val = typeof req.result === 'string' && DATA_IMAGE_RE.test(req.result) ? req.result : null;
+              if (!originalBgLoaded) originalBgUrl = val;
+              originalBgLoaded = true;
+              db.close();
+              resolve(originalBgUrl);
+            };
+            req.onerror = () => {
+              originalBgLoaded = true;
+              db.close();
+              resolve(originalBgUrl);
+            };
+          } catch {
+            originalBgLoaded = true;
+            try { db.close(); } catch {}
+            resolve(originalBgUrl);
+          }
+        });
+      }
+
+      async function writeOriginalBg(dataUrl) {
+        originalBgUrl = typeof dataUrl === 'string' && DATA_IMAGE_RE.test(dataUrl) ? dataUrl : null;
+        originalBgLoaded = true;
+        const db = await openBgDb();
+        if (!db) return false;
+        return new Promise(resolve => {
+          try {
+            const tx = db.transaction(BG_ORIG_STORE, 'readwrite');
+            const store = tx.objectStore(BG_ORIG_STORE);
+            if (originalBgUrl) store.put(originalBgUrl, BG_ORIG_KEY);
+            else store.delete(BG_ORIG_KEY);
+            tx.oncomplete = () => { db.close(); resolve(true); };
+            tx.onerror = () => { db.close(); resolve(false); };
+            tx.onabort = () => { db.close(); resolve(false); };
+          } catch {
+            try { db.close(); } catch {}
+            resolve(false);
+          }
+        });
+      }
+
       const clampInt = (value, min, max, fallback) => {
         const num = Number(value);
         return Number.isFinite(num) ? Math.min(max, Math.max(min, Math.round(num))) : fallback;
       };
+
+      function bgViewportSize() {
+        const w = bgLayer.clientWidth || document.documentElement.clientWidth || window.innerWidth || 1;
+        const h = bgLayer.clientHeight || document.documentElement.clientHeight || window.innerHeight || 1;
+        return { w, h };
+      }
+
+      function clearBgImgInlineLayout() {
+        bgImg.style.left = '';
+        bgImg.style.top = '';
+        bgImg.style.width = '';
+        bgImg.style.height = '';
+        bgImg.style.objectFit = '';
+      }
+
+      function computeBgLayout(transform, imgW, imgH) {
+        const { w: W, h: H } = bgViewportSize();
+        const hasDims = imgW > 0 && imgH > 0;
+        const natW = hasDims ? imgW : W;
+        const natH = hasDims ? imgH : H;
+        const scale = clampInt(transform?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale);
+        const coverScale = Math.max(W / natW, H / natH);
+        const dispW = natW * coverScale * (scale / 100);
+        const dispH = natH * coverScale * (scale / 100);
+        const rawX = typeof transform?.x === 'number' && Number.isFinite(transform.x) ? transform.x : 0;
+        const rawY = typeof transform?.y === 'number' && Number.isFinite(transform.y) ? transform.y : 0;
+        const boundX = Math.abs(W - dispW) / (2 * dispW) * 100;
+        const boundY = Math.abs(H - dispH) / (2 * dispH) * 100;
+        const x = hasDims ? Math.min(boundX, Math.max(-boundX, rawX)) : rawX;
+        const y = hasDims ? Math.min(boundY, Math.max(-boundY, rawY)) : rawY;
+        const left = W / 2 - dispW / 2 + (x / 100) * dispW;
+        const top = H / 2 - dispH / 2 + (y / 100) * dispH;
+        return { W, H, imgW: natW, imgH: natH, hasDims, scale, x, y, dispW, dispH, left, top };
+      }
 
       function loadTransform() {
         try {
           const parsed = JSON.parse(readStore(BG_TRANSFORM_KEY) || 'null');
           return {
             scale: clampInt(parsed?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale),
-            x: clampInt(parsed?.x, -100, 100, DEFAULT_BG_TRANSFORM.x),
-            y: clampInt(parsed?.y, -100, 100, DEFAULT_BG_TRANSFORM.y)
+            x: typeof parsed?.x === 'number' && Number.isFinite(parsed.x) ? parsed.x : 0,
+            y: typeof parsed?.y === 'number' && Number.isFinite(parsed.y) ? parsed.y : 0,
+            baked: parsed?.baked === true
           };
         } catch {
           return { ...DEFAULT_BG_TRANSFORM };
@@ -3709,19 +3826,35 @@
       }
 
       function applyBackgroundTransform(next, persist = false) {
-        bgTransform = {
-          scale: clampInt(next?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale),
-          x: clampInt(next?.x, -100, 100, DEFAULT_BG_TRANSFORM.x),
-          y: clampInt(next?.y, -100, 100, DEFAULT_BG_TRANSFORM.y)
-        };
-        document.documentElement.style.setProperty('--bg-scale', String(bgTransform.scale / 100));
-        document.documentElement.style.setProperty('--bg-x', `${bgTransform.x}%`);
-        document.documentElement.style.setProperty('--bg-y', `${bgTransform.y}%`);
+        const baked = next?.baked === true;
+        if (baked && bgEditor.hidden) {
+          bgTransform = {
+            scale: clampInt(next?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale),
+            x: typeof next?.x === 'number' && Number.isFinite(next.x) ? next.x : 0,
+            y: typeof next?.y === 'number' && Number.isFinite(next.y) ? next.y : 0,
+            baked: true
+          };
+          clearBgImgInlineLayout();
+        } else {
+          const imgW = activeImgSize.w || bgImg.naturalWidth || 0;
+          const imgH = activeImgSize.h || bgImg.naturalHeight || 0;
+          const layout = computeBgLayout(next, imgW, imgH);
+          bgTransform = { scale: layout.scale, x: layout.x, y: layout.y, baked };
+          if (layout.hasDims) {
+            bgImg.style.left = `${layout.left}px`;
+            bgImg.style.top = `${layout.top}px`;
+            bgImg.style.width = `${layout.dispW}px`;
+            bgImg.style.height = `${layout.dispH}px`;
+            bgImg.style.objectFit = 'fill';
+          } else {
+            clearBgImgInlineLayout();
+          }
+        }
         bgEditorZoomValue.textContent = `${bgTransform.scale}%`;
         bgEditorZoomOut.disabled = bgTransform.scale <= 50;
         bgEditorZoomIn.disabled = bgTransform.scale >= 300;
         bgEditorResetPos.disabled = bgTransform.scale === DEFAULT_BG_TRANSFORM.scale &&
-          bgTransform.x === DEFAULT_BG_TRANSFORM.x && bgTransform.y === DEFAULT_BG_TRANSFORM.y;
+          Math.abs(bgTransform.x) < 0.01 && Math.abs(bgTransform.y) < 0.01;
         if (persist) writeStore(BG_TRANSFORM_KEY, JSON.stringify(bgTransform));
       }
 
@@ -3733,10 +3866,23 @@
       function applyBackgroundImage(dataUrl) {
         const valid = typeof dataUrl === 'string' && DATA_IMAGE_RE.test(dataUrl);
         hasBgImage = valid;
+        croppedBgUrl = valid ? dataUrl : '';
         bgLayer.hidden = !valid;
-        bgImg.src = valid ? dataUrl : '';
+        if (valid) {
+          if (bgImg.getAttribute('src') !== dataUrl) {
+            activeImgSize = { w: 0, h: 0 };
+            bgImg.src = dataUrl;
+          } else {
+            activeImgSize = { w: bgImg.naturalWidth || 0, h: bgImg.naturalHeight || 0 };
+          }
+        } else {
+          activeImgSize = { w: 0, h: 0 };
+          bgImg.removeAttribute('src');
+          clearBgImgInlineLayout();
+        }
         bgEdit.hidden = !valid;
         bgReset.hidden = !valid;
+        if (valid) applyBackgroundTransform(bgTransform, false);
       }
 
       function resolveImageMime(file) {
@@ -3744,6 +3890,11 @@
         if (ALLOWED_MIMES.has(rawType)) return rawType;
         const ext = typeof file?.name === 'string' ? file.name.split('.').pop()?.toLowerCase() : '';
         return ext && Object.hasOwn(MIME_BY_EXT, ext) ? MIME_BY_EXT[ext] : null;
+      }
+
+      function extractDataUrlMime(dataUrl) {
+        const match = typeof dataUrl === 'string' ? /^data:(image\/[a-z0-9+.-]+);base64,/i.exec(dataUrl) : null;
+        return match ? match[1].toLowerCase() : '';
       }
 
       function readAsDataUrl(blob) {
@@ -3755,17 +3906,70 @@
         });
       }
 
-      function decodesImage(dataUrl) {
+      function loadImageElement(dataUrl) {
         return new Promise(resolve => {
           const img = new Image();
-          img.addEventListener('load', () => resolve(true), { once: true });
-          img.addEventListener('error', () => resolve(false), { once: true });
+          img.addEventListener('load', () => resolve(img), { once: true });
+          img.addEventListener('error', () => resolve(null), { once: true });
           img.src = dataUrl;
         });
       }
 
-      applyBackgroundTransform(loadTransform(), false);
+      async function saveCroppedBgToStore(sourceUrl, transform, sourceMime) {
+        const img = await loadImageElement(sourceUrl);
+        if (!img || !img.naturalWidth || !img.naturalHeight) return null;
+        const layout = computeBgLayout(transform, img.naturalWidth, img.naturalHeight);
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const maxDim = 1600;
+        const outScale = Math.min(dpr, maxDim / Math.max(layout.W, layout.H, 1));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(layout.W * outScale));
+        canvas.height = Math.max(1, Math.round(layout.H * outScale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(
+          img,
+          layout.left * outScale,
+          layout.top * outScale,
+          layout.dispW * outScale,
+          layout.dispH * outScale
+        );
+        const hasMargins = layout.left > 0.5 || layout.top > 0.5 ||
+          layout.left + layout.dispW < layout.W - 0.5 ||
+          layout.top + layout.dispH < layout.H - 0.5;
+        const candidates = [];
+        if (!hasMargins && sourceMime === 'image/jpeg') {
+          candidates.push(['image/jpeg', 0.92], ['image/jpeg', 0.82], ['image/jpeg', 0.72]);
+        } else if (sourceMime === 'image/webp') {
+          candidates.push(['image/webp', 0.92], ['image/webp', 0.82], ['image/webp', 0.72]);
+        } else if (sourceMime === 'image/png') {
+          candidates.push(['image/png', undefined], ['image/webp', 0.92], ['image/webp', 0.82]);
+          if (!hasMargins) candidates.push(['image/jpeg', 0.85]);
+        } else {
+          candidates.push(['image/webp', 0.92], ['image/png', undefined]);
+          if (!hasMargins) candidates.push(['image/jpeg', 0.85]);
+        }
+        let oversizedUrl = null;
+        for (const [mime, quality] of candidates) {
+          try {
+            const url = quality === undefined ? canvas.toDataURL(mime) : canvas.toDataURL(mime, quality);
+            if (!DATA_IMAGE_RE.test(url)) continue;
+            if (url.length <= MAX_STORED_BG_CHARS) {
+              if (writeStore(BG_IMAGE_KEY, url)) return url;
+            } else if (!oversizedUrl) {
+              oversizedUrl = url;
+            }
+          } catch {}
+        }
+        if (oversizedUrl && writeStore(BG_IMAGE_KEY, oversizedUrl)) return oversizedUrl;
+        return null;
+      }
+
+      bgTransform = loadTransform();
       applyBackgroundImage(readStore(BG_IMAGE_KEY));
+      if (hasBgImage) void readOriginalBg();
 
       function updateFontReset() {
         fontColorReset.disabled = !colorInputs.some(entry => entry.group === 'font' && entry.custom);
@@ -3866,27 +4070,115 @@
         }
       }
 
-      function openEditor() {
-        if (!hasBgImage) return;
-        beforeEdit = { ...bgTransform };
-        setOpen(false, false);
-        panelMain.hidden = true;
-        document.body.classList.add('is-bg-editing');
-        bgEditor.hidden = false;
-        bgEditorSave.focus();
+      async function openEditor() {
+        if (!hasBgImage || editorBusy || !bgEditor.hidden) return;
+        editorBusy = true;
+        try {
+          const savedCropped = readStore(BG_IMAGE_KEY);
+          if (!savedCropped || !DATA_IMAGE_RE.test(savedCropped)) return;
+          croppedBgUrl = savedCropped;
+          const origUrl = await readOriginalBg();
+          if (lifetime.signal.aborted) return;
+          const useOriginal = Boolean(origUrl && DATA_IMAGE_RE.test(origUrl));
+          const sourceUrl = useOriginal ? origUrl : croppedBgUrl;
+          const loaded = await loadImageElement(sourceUrl);
+          if (lifetime.signal.aborted || !loaded) return;
+
+          beforeEdit = { ...bgTransform };
+          editingOriginal = useOriginal;
+          editingSourceUrl = sourceUrl;
+          activeImgSize = { w: loaded.naturalWidth || 0, h: loaded.naturalHeight || 0 };
+
+          const startTransform = !useOriginal && bgTransform.baked
+            ? { scale: 100, x: 0, y: 0, baked: false }
+            : { ...bgTransform, baked: false };
+
+          if (bgImg.getAttribute('src') !== sourceUrl) bgImg.src = sourceUrl;
+          setOpen(false, false);
+          panelMain.hidden = true;
+          document.body.classList.add('is-bg-editing');
+          bgEditor.hidden = false;
+          applyBackgroundTransform(startTransform, false);
+          bgEditorSave.focus();
+        } finally {
+          editorBusy = false;
+        }
       }
 
-      function closeEditor(save) {
-        if (bgEditor.hidden) return;
+      async function closeEditor(save) {
+        if (bgEditor.hidden || editorBusy) return;
         dragState = null;
         bgEditor.classList.remove('is-dragging');
-        if (save) applyBackgroundTransform(bgTransform, true);
-        else if (beforeEdit) applyBackgroundTransform(beforeEdit, false);
-        beforeEdit = null;
-        bgEditor.hidden = true;
-        document.body.classList.remove('is-bg-editing');
-        panelMain.hidden = false;
-        toggle.focus();
+        if (!save) {
+          bgTransform = beforeEdit ? { ...beforeEdit } : { ...DEFAULT_BG_TRANSFORM };
+          beforeEdit = null;
+          editingOriginal = false;
+          editingSourceUrl = '';
+          bgEditor.hidden = true;
+          document.body.classList.remove('is-bg-editing');
+          panelMain.hidden = false;
+          applyBackgroundImage(croppedBgUrl);
+          toggle.focus();
+          return;
+        }
+
+        editorBusy = true;
+        bgEditorSave.disabled = true;
+        try {
+          const sourceUrl = editingSourceUrl || croppedBgUrl;
+          const sourceMime = extractDataUrlMime(sourceUrl);
+          let nextUrl = sourceUrl;
+          let nextTransform;
+          if (RASTER_CROP_MIMES.has(sourceMime)) {
+            const savedCropped = await saveCroppedBgToStore(sourceUrl, bgTransform, sourceMime);
+            if (!savedCropped) {
+              bgTransform = beforeEdit ? { ...beforeEdit } : { ...DEFAULT_BG_TRANSFORM };
+              beforeEdit = null;
+              editingOriginal = false;
+              editingSourceUrl = '';
+              bgEditor.hidden = true;
+              document.body.classList.remove('is-bg-editing');
+              panelMain.hidden = false;
+              applyBackgroundImage(croppedBgUrl);
+              setOpen(true, false);
+              showBgError('settings-bg-error-save');
+              return;
+            }
+            nextUrl = savedCropped;
+            nextTransform = editingOriginal
+              ? { scale: bgTransform.scale, x: bgTransform.x, y: bgTransform.y, baked: true }
+              : { scale: 100, x: 0, y: 0, baked: true };
+          } else {
+            if (!writeStore(BG_IMAGE_KEY, sourceUrl)) {
+              bgTransform = beforeEdit ? { ...beforeEdit } : { ...DEFAULT_BG_TRANSFORM };
+              beforeEdit = null;
+              editingOriginal = false;
+              editingSourceUrl = '';
+              bgEditor.hidden = true;
+              document.body.classList.remove('is-bg-editing');
+              panelMain.hidden = false;
+              applyBackgroundImage(croppedBgUrl);
+              setOpen(true, false);
+              showBgError('settings-bg-error-save');
+              return;
+            }
+            nextTransform = { scale: bgTransform.scale, x: bgTransform.x, y: bgTransform.y, baked: false };
+          }
+
+          beforeEdit = null;
+          editingOriginal = false;
+          editingSourceUrl = '';
+          bgEditor.hidden = true;
+          document.body.classList.remove('is-bg-editing');
+          panelMain.hidden = false;
+          bgTransform = nextTransform;
+          writeStore(BG_TRANSFORM_KEY, JSON.stringify(bgTransform));
+          applyBackgroundImage(nextUrl);
+          toggle.focus();
+        } finally {
+          editorBusy = false;
+          bgEditorSave.disabled = false;
+        }
       }
 
       toggle.addEventListener('click', () => setOpen(dialog.hidden, !dialog.hidden));
@@ -3898,7 +4190,7 @@
         if (event.key !== 'Escape') return;
         if (!bgEditor.hidden) {
           event.preventDefault();
-          closeEditor(false);
+          void closeEditor(false);
         } else if (!dialog.hidden) {
           event.preventDefault();
           setOpen(false, true);
@@ -3906,47 +4198,51 @@
       }, { signal: lifetime.signal });
 
       bgUpload.addEventListener('click', () => bgInput.click());
-      bgEdit.addEventListener('click', openEditor);
+      bgEdit.addEventListener('click', () => void openEditor());
       bgReset.addEventListener('click', () => {
         showBgError('');
         writeStore(BG_IMAGE_KEY, null);
         writeStore(BG_TRANSFORM_KEY, null);
-        applyBackgroundTransform(DEFAULT_BG_TRANSFORM, false);
+        void writeOriginalBg(null);
+        bgTransform = { ...DEFAULT_BG_TRANSFORM };
+        applyBackgroundTransform(bgTransform, false);
         applyBackgroundImage('');
       });
 
       bgEditorBar.addEventListener('pointerdown', event => event.stopPropagation());
       bgEditorZoomOut.addEventListener('click', () => applyBackgroundTransform({ ...bgTransform, scale: bgTransform.scale - 10 }, false));
       bgEditorZoomIn.addEventListener('click', () => applyBackgroundTransform({ ...bgTransform, scale: bgTransform.scale + 10 }, false));
-      bgEditorResetPos.addEventListener('click', () => applyBackgroundTransform(DEFAULT_BG_TRANSFORM, false));
-      bgEditorCancel.addEventListener('click', () => closeEditor(false));
-      bgEditorSave.addEventListener('click', () => closeEditor(true));
+      bgEditorResetPos.addEventListener('click', () => applyBackgroundTransform({ ...bgTransform, scale: DEFAULT_BG_TRANSFORM.scale, x: 0, y: 0 }, false));
+      bgEditorCancel.addEventListener('click', () => void closeEditor(false));
+      bgEditorSave.addEventListener('click', () => void closeEditor(true));
 
       bgEditor.addEventListener('pointerdown', event => {
-        if (!hasBgImage || bgEditor.hidden || (event.pointerType === 'mouse' && event.button !== 0)) return;
+        if (!hasBgImage || bgEditor.hidden || editorBusy || (event.pointerType === 'mouse' && event.button !== 0)) return;
         if (bgEditorBar.contains(event.target)) return;
-        const rect = bgEditor.getBoundingClientRect();
-        if (!rect.width || !rect.height) return;
+        const imgW = activeImgSize.w || bgImg.naturalWidth || 0;
+        const imgH = activeImgSize.h || bgImg.naturalHeight || 0;
+        const layout = computeBgLayout(bgTransform, imgW, imgH);
+        if (!layout.dispW || !layout.dispH) return;
         dragState = {
           pointerId: event.pointerId,
-          startClientX: event.clientX,
-          startClientY: event.clientY,
-          startX: bgTransform.x,
-          startY: bgTransform.y,
-          width: rect.width,
-          height: rect.height
+          lastClientX: event.clientX,
+          lastClientY: event.clientY,
+          dispW: layout.dispW,
+          dispH: layout.dispH
         };
         bgEditor.classList.add('is-dragging');
         bgEditor.setPointerCapture?.(event.pointerId);
       });
       bgEditor.addEventListener('pointermove', event => {
         if (!dragState || event.pointerId !== dragState.pointerId) return;
-        const dx = ((event.clientX - dragState.startClientX) / dragState.width) * 100;
-        const dy = ((event.clientY - dragState.startClientY) / dragState.height) * 100;
+        const dx = ((event.clientX - dragState.lastClientX) / dragState.dispW) * 100;
+        const dy = ((event.clientY - dragState.lastClientY) / dragState.dispH) * 100;
+        dragState.lastClientX = event.clientX;
+        dragState.lastClientY = event.clientY;
         applyBackgroundTransform({
           ...bgTransform,
-          x: dragState.startX + dx,
-          y: dragState.startY + dy
+          x: bgTransform.x + dx,
+          y: bgTransform.y + dy
         }, false);
       });
       function stopDrag(event) {
@@ -3960,11 +4256,25 @@
       bgEditor.addEventListener('pointerup', stopDrag);
       bgEditor.addEventListener('pointercancel', stopDrag);
       bgEditor.addEventListener('wheel', event => {
-        if (!hasBgImage || bgEditor.hidden) return;
+        if (!hasBgImage || bgEditor.hidden || editorBusy) return;
         event.preventDefault();
         const step = event.deltaY < 0 ? 5 : -5;
         applyBackgroundTransform({ ...bgTransform, scale: bgTransform.scale + step }, false);
       }, { passive: false });
+
+      const bgResizeObserver = typeof ResizeObserver === 'function'
+        ? new ResizeObserver(() => {
+            if (hasBgImage && (!bgEditor.hidden || !bgTransform.baked)) {
+              applyBackgroundTransform(bgTransform, false);
+            }
+          })
+        : null;
+      bgResizeObserver?.observe(bgLayer);
+      bgImg.addEventListener('load', () => {
+        if (!hasBgImage) return;
+        activeImgSize = { w: bgImg.naturalWidth || 0, h: bgImg.naturalHeight || 0 };
+        if (!bgEditor.hidden || !bgTransform.baked) applyBackgroundTransform(bgTransform, false);
+      }, { signal: lifetime.signal });
 
       bgInput.addEventListener('change', async () => {
         const file = bgInput.files?.[0];
@@ -3975,15 +4285,25 @@
         if (!mime) return showBgError('settings-bg-error-type');
         if (file.size > MAX_BG_BYTES) return showBgError('settings-bg-error-size');
         try {
-          const dataUrl = await readAsDataUrl(new Blob([await file.arrayBuffer()], { type: mime }));
-          if (!DATA_IMAGE_RE.test(dataUrl) || !await decodesImage(dataUrl)) {
-            return showBgError('settings-bg-error-type');
-          }
-          if (!writeStore(BG_IMAGE_KEY, dataUrl)) {
+          const originalDataUrl = await readAsDataUrl(new Blob([await file.arrayBuffer()], { type: mime }));
+          const loaded = DATA_IMAGE_RE.test(originalDataUrl) ? await loadImageElement(originalDataUrl) : null;
+          if (!loaded) return showBgError('settings-bg-error-type');
+
+          const isRaster = RASTER_CROP_MIMES.has(mime);
+          const nextTransform = { scale: 100, x: 0, y: 0, baked: isRaster };
+          let nextCroppedUrl = originalDataUrl;
+          if (isRaster) {
+            const savedCropped = await saveCroppedBgToStore(originalDataUrl, nextTransform, mime);
+            if (!savedCropped) return showBgError('settings-bg-error-save');
+            nextCroppedUrl = savedCropped;
+          } else if (!writeStore(BG_IMAGE_KEY, originalDataUrl)) {
             return showBgError('settings-bg-error-save');
           }
-          applyBackgroundTransform(DEFAULT_BG_TRANSFORM, true);
-          applyBackgroundImage(dataUrl);
+
+          await writeOriginalBg(originalDataUrl);
+          bgTransform = nextTransform;
+          writeStore(BG_TRANSFORM_KEY, JSON.stringify(bgTransform));
+          applyBackgroundImage(nextCroppedUrl);
         } catch {
           showBgError('settings-bg-error-type');
         }
@@ -3998,6 +4318,7 @@
       }
 
       window.addEventListener('pagehide', () => {
+        bgResizeObserver?.disconnect();
         themeObserver.disconnect();
         lifetime.abort();
       }, { once: true });

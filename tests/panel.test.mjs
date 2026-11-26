@@ -710,9 +710,15 @@ test('top-right header places language picker beside settings gear and modal off
 
   const editor = /<div[^>]*id="bg-editor"[^>]*role="dialog"[\s\S]*?(?=\n\s*<template id="ladder-avatar-fallback">)/.exec(html)?.[0] ?? '';
   assert.ok(editor, 'full-panel background editor must exist');
+  assert.doesNotMatch(editor, /id="bg-editor-stage"|id="bg-editor-img"|id="bg-crop-box"/);
   assert.match(editor, /id="bg-editor-reset-pos"/);
   assert.match(editor, /id="bg-editor-cancel"/);
   assert.match(editor, /id="bg-editor-save"/);
+  assert.match(html, /async function readOriginalBg\(/);
+  assert.match(html, /async function writeOriginalBg\(/);
+  assert.match(html, /async function saveCroppedBgToStore\(/);
+  assert.match(html, /function computeBgLayout\(/);
+  assert.match(html, /const sourceUrl = useOriginal \? origUrl : croppedBgUrl;/);
 
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
   assert.equal(css.get('.settings-backdrop').position, 'fixed');
