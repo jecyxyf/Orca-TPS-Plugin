@@ -307,9 +307,9 @@
   "tier-emerald": "Smeraldo",
   "tier-platinum": "Platino",
   "tier-gold": "Oro",
-  "pose-sprint": "Scatta",
-  "pose-run": "Corricchia",
-  "pose-walk": "Cammina",
-  "pose-idle": "Riposa",
-  "pose-flat": "Sdraiato"
+  "pose-sprint": "Sul razzo",
+  "pose-run": "In auto sportiva",
+  "pose-walk": "Scatto",
+  "pose-idle": "Ansima",
+  "pose-flat": "Piatto"
 }

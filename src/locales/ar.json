@@ -307,9 +307,9 @@
   "tier-emerald": "الزمردي",
   "tier-platinum": "البلاتيني",
   "tier-gold": "الذهبي",
-  "pose-sprint": "عدو سريع",
-  "pose-run": "هرولة",
-  "pose-walk": "مشي",
-  "pose-idle": "استراحة",
-  "pose-flat": "مستلقٍ"
+  "pose-sprint": "على صاروخ",
+  "pose-run": "في سيارة سباق",
+  "pose-walk": "انطلاق سريع",
+  "pose-idle": "يلهث",
+  "pose-flat": "خط مسطح"
 }

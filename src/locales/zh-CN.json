@@ -307,9 +307,9 @@
   "tier-emerald": "华贵翡翠",
   "tier-platinum": "流光铂金",
   "tier-gold": "荣耀黄金",
-  "pose-sprint": "狂奔冲刺",
-  "pose-run": "小跑赶路",
-  "pose-walk": "稳步散步",
-  "pose-idle": "喘气歇息",
-  "pose-flat": "直接躺平"
+  "pose-sprint": "坐在火箭上",
+  "pose-run": "坐在跑车上",
+  "pose-walk": "狂奔",
+  "pose-idle": "喘息",
+  "pose-flat": "躺平"
 }

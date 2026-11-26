@@ -307,9 +307,9 @@
   "tier-emerald": "এমেরাল্ড",
   "tier-platinum": "প্ল্যাটিনাম",
   "tier-gold": "গোল্ড",
-  "pose-sprint": "দৌড়াচ্ছে",
-  "pose-run": "জগিং",
-  "pose-walk": "হাঁটছে",
-  "pose-idle": "বিশ্রাম",
-  "pose-flat": "শুয়ে আছে"
+  "pose-sprint": "রকেটে",
+  "pose-run": "স্পোর্টস কারে",
+  "pose-walk": "দ্রুত দৌড়",
+  "pose-idle": "হাঁপাচ্ছে",
+  "pose-flat": "ফ্ল্যাটলাইন"
 }

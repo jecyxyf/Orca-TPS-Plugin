@@ -307,9 +307,9 @@
   "tier-emerald": "Smaragd",
   "tier-platinum": "Platin",
   "tier-gold": "Gold",
-  "pose-sprint": "Sprintet",
-  "pose-run": "Joggt",
-  "pose-walk": "Geht",
-  "pose-idle": "Ruht",
-  "pose-flat": "Liegt flach"
+  "pose-sprint": "Auf Rakete",
+  "pose-run": "Im Sportwagen",
+  "pose-walk": "Sprintet",
+  "pose-idle": "Keucht",
+  "pose-flat": "Flachlinie"
 }

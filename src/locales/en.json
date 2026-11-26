@@ -307,9 +307,9 @@
   "tier-emerald": "Emerald",
   "tier-platinum": "Platinum",
   "tier-gold": "Gold",
-  "pose-sprint": "Sprinting",
-  "pose-run": "Jogging",
-  "pose-walk": "Walking",
-  "pose-idle": "Resting",
+  "pose-sprint": "On Rocket",
+  "pose-run": "Sports Car",
+  "pose-walk": "Sprinting",
+  "pose-idle": "Panting",
   "pose-flat": "Flatline"
 }

@@ -482,6 +482,25 @@ test('today usage renders a heartbeat ECG stage with royal characters driven by 
   }, now, Infinity);
   assert.match(active.children[1].children[0].children[0].innerHTML, /pose-walk|ch-body/);
   assert.equal(active.children[1].children[2].children[1].textContent, 'pose-walk');
+
+  const rocket = usageCard({
+    rank: 1,
+    recent: { topModel: 'claude-opus', topCli: 'claude', points: [
+      { submittedAt: now - 40_000, deltaTokens: 100, avgTps: 120 },
+      { submittedAt: now - 20_000, deltaTokens: 100, avgTps: 120 },
+      { submittedAt: now - 5_000, deltaTokens: 100, avgTps: 120 }
+    ] }
+  }, now, Infinity);
+  assert.match(rocket.children[1].children[0].children[0].innerHTML, /ch-flame/);
+
+  const car = usageCard({
+    rank: 2,
+    recent: { topModel: 'claude-opus', topCli: 'claude', points: [
+      { submittedAt: now - 90_000, deltaTokens: 100, avgTps: 90 },
+      { submittedAt: now - 15_000, deltaTokens: 100, avgTps: 90 }
+    ] }
+  }, now, Infinity);
+  assert.match(car.children[1].children[0].children[0].innerHTML, /ch-wheel/);
 });
 
 test('usage rankings omit the subtitle beneath the period selector', async () => {
@@ -555,6 +574,8 @@ test('non-interactive transfer indicators sit beside the last successful times',
   assert.equal(css.get('.ladder-logout-btn').width, '28px');
   assert.match(html, /id="ladder-controls"[\s\S]*?id="ladder-upload-wrap"[\s\S]*?id="ladder-logout"[\s\S]*?id="ladder-personal-data"/);
   assert.equal(css.get('.ladder-rank-card')['scrollbar-gutter'], 'stable');
+  assert.equal(css.get('.ladder-ranking-scroll')['scrollbar-gutter'], 'stable');
+  assert.equal(css.get('.ladder-ranking-scroll')['padding-inline-end'], '6px');
   assert.equal(css.get('.ladder-transfer.is-spinning .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
   assert.match(html, /transferSpinTimers\.set\(indicator, setTimeout\([\s\S]*?classList\.add\('is-spinning'\)[\s\S]*?\}, 1000\)\)/);
   assert.equal(css.get('.ladder-transfer.is-failed .ladder-transfer-error').color, 'var(--error)');

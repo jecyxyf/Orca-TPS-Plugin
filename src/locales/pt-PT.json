@@ -307,9 +307,9 @@
   "tier-emerald": "Esmeralda",
   "tier-platinum": "Platina",
   "tier-gold": "Ouro",
-  "pose-sprint": "A correr",
-  "pose-run": "A trotar",
-  "pose-walk": "A andar",
-  "pose-idle": "A descansar",
-  "pose-flat": "Deitado"
+  "pose-sprint": "No foguetão",
+  "pose-run": "No desportivo",
+  "pose-walk": "Em sprint",
+  "pose-idle": "Ofegante",
+  "pose-flat": "No chão"
 }

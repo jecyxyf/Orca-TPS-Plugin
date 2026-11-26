@@ -307,9 +307,9 @@
   "tier-emerald": "Émeraude",
   "tier-platinum": "Platine",
   "tier-gold": "Or",
-  "pose-sprint": "Sprinte",
-  "pose-run": "Trotte",
-  "pose-walk": "Marche",
-  "pose-idle": "Se repose",
-  "pose-flat": "Allongé"
+  "pose-sprint": "Sur fusée",
+  "pose-run": "En bolide",
+  "pose-walk": "Sprint",
+  "pose-idle": "Essoufflé",
+  "pose-flat": "À plat"
 }

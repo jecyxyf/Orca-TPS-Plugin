@@ -307,9 +307,9 @@
   "tier-emerald": "エメラルド",
   "tier-platinum": "プラチナ",
   "tier-gold": "ゴールド",
-  "pose-sprint": "猛ダッシュ",
-  "pose-run": "ジョギング",
-  "pose-walk": "お散歩",
-  "pose-idle": "ひと休み",
-  "pose-flat": "ごろ寝"
+  "pose-sprint": "ロケット搭乗",
+  "pose-run": "スポーツカー",
+  "pose-walk": "全力疾走",
+  "pose-idle": "息切れ",
+  "pose-flat": "ゴロ寝"
 }

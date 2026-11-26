@@ -429,7 +429,7 @@
     #ladder-ranking-notice { overflow-y: auto; scrollbar-width: thin; }
     #ladder-ranking-content { display: flex; flex: 1; flex-direction: column; min-block-size: 0; }
     #ladder-ranking-content > :not(.ladder-ranking-scroll) { flex: none; }
-    .ladder-ranking-scroll { flex: 1; min-block-size: 0; }
+    .ladder-ranking-scroll { flex: 1; min-block-size: 0; scrollbar-gutter: stable; padding-inline-end: 6px; }
     .war-tabs.ladder-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 8px; }
     .ladder-tabs .war-tab { min-width: 0; padding: 6px 4px; font-size: 13px; overflow-wrap: anywhere; }
     html:lang(zh-CN) .ladder-tabs { grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); }
@@ -541,9 +541,9 @@
       border: 1px solid transparent;
     }
     .rk-1 {
-      background: linear-gradient(135deg, #fef08a, #f59e0b);
-      color: #451a03; border-color: rgb(125 211 252 / 82%);
-      box-shadow: 0 0 8px rgb(251 191 36 / 40%), 0 0 10px rgb(56 189 248 / 28%);
+      background: linear-gradient(135deg, #fef08a, #facc15);
+      color: #b91c1c; border-color: rgb(239 68 68 / 45%);
+      box-shadow: 0 0 8px rgb(250 204 21 / 38%);
     }
     .rk-2 {
       background: linear-gradient(135deg, #ef4444, #991b1b);
@@ -555,25 +555,21 @@
       color: #faf5ff; border-color: rgb(233 213 255 / 72%);
     }
     .rk-4 {
-      background: color-mix(in srgb, #38bdf8 22%, transparent);
-      color: #bae6fd; border-color: color-mix(in srgb, #38bdf8 52%, transparent);
+      background: #ffffff;
+      color: #dc2626; border-color: rgb(220 38 38 / 38%);
     }
-    html:not(.dark) .rk-4 { color: #0369a1; }
     .rk-5 {
-      background: color-mix(in srgb, #10b981 22%, transparent);
-      color: #6ee7b7; border-color: color-mix(in srgb, #10b981 48%, transparent);
+      background: linear-gradient(135deg, #10b981, #047857);
+      color: #ffffff; border-color: rgb(167 243 208 / 55%);
     }
-    html:not(.dark) .rk-5 { color: #047857; }
     .rk-6 {
-      background: color-mix(in srgb, #2dd4bf 18%, transparent);
-      color: #99f6e4; border-color: color-mix(in srgb, #2dd4bf 42%, transparent);
+      background: #ffffff;
+      color: #0284c7; border-color: rgb(2 132 199 / 38%);
     }
-    html:not(.dark) .rk-6 { color: #0f766e; }
     .rk-7 {
-      background: color-mix(in srgb, #eab308 18%, transparent);
-      color: #fde047; border-color: color-mix(in srgb, #eab308 42%, transparent);
+      background: linear-gradient(135deg, #fde047, #eab308);
+      color: #1c1c1e; border-color: rgb(161 98 7 / 42%);
     }
-    html:not(.dark) .rk-7 { color: #a16207; }
     .ladder-badge-slot:empty { display: none; }
     .ladder-transfer {
       display: inline-flex; align-items: center; justify-content: flex-end;
@@ -676,34 +672,33 @@
     .hb-bpm.is-run { color: var(--orange); }
     .hb-bpm.is-sprint { color: var(--speed); }
     .hb-stage:not(.is-in-view) *, #leaderboard[hidden] .hb-stage * { animation-play-state: paused !important; }
-    .pose-sprint .ch-body { transform-origin: 20px 24px; animation: ch-sprint-bob .24s ease-in-out infinite alternate; }
-    .pose-sprint .ch-cape { transform-origin: 15px 17px; animation: ch-cape-flap .22s ease-in-out infinite alternate; }
-    .pose-sprint .ch-leg-a { transform-origin: 20px 25px; animation: ch-leg-a .24s ease-in-out infinite alternate; }
-    .pose-sprint .ch-leg-b { transform-origin: 20px 25px; animation: ch-leg-b .24s ease-in-out infinite alternate; }
-    .pose-sprint .ch-fx { animation: ch-wind-streak .34s linear infinite; }
-    .pose-run .ch-body { transform-origin: 20px 24px; animation: ch-jog-bob .4s ease-in-out infinite alternate; }
-    .pose-run .ch-cape { transform-origin: 15px 17px; animation: ch-cape-flap .38s ease-in-out infinite alternate; }
-    .pose-run .ch-leg-a { transform-origin: 20px 25px; animation: ch-jog-a .4s ease-in-out infinite alternate; }
-    .pose-run .ch-leg-b { transform-origin: 20px 25px; animation: ch-jog-b .4s ease-in-out infinite alternate; }
-    .pose-walk .ch-body { transform-origin: 20px 24px; animation: ch-walk-bob .65s ease-in-out infinite alternate; }
-    .pose-walk .ch-leg-a { transform-origin: 20px 25px; animation: ch-walk-a .65s ease-in-out infinite alternate; }
-    .pose-walk .ch-leg-b { transform-origin: 20px 25px; animation: ch-walk-b .65s ease-in-out infinite alternate; }
-    .pose-idle .ch-body { transform-origin: 20px 30px; animation: ch-breathe 1.6s ease-in-out infinite; }
-    .pose-idle .ch-head { transform-origin: 20px 14px; animation: ch-nod 2.4s ease-in-out infinite; }
+    .pose-sprint .ch-body { transform-origin: 20px 24px; animation: ch-sprint-bob .18s ease-in-out infinite alternate; }
+    .pose-sprint .ch-flame { transform-origin: 9px 26px; animation: ch-flame .16s ease-in-out infinite alternate; }
+    .pose-sprint .ch-cape { transform-origin: 15px 17px; animation: ch-cape-flap .2s ease-in-out infinite alternate; }
+    .pose-sprint .ch-fx { animation: ch-wind-streak .28s linear infinite; }
+    .pose-run .ch-body { transform-origin: 20px 26px; animation: ch-car-bob .26s ease-in-out infinite alternate; }
+    .pose-run .ch-wheel { transform-box: fill-box; transform-origin: center; animation: ch-wheel .36s linear infinite; }
+    .pose-run .ch-cape { transform-origin: 15px 17px; animation: ch-cape-flap .28s ease-in-out infinite alternate; }
+    .pose-run .ch-fx { animation: ch-wind-streak .42s linear infinite; }
+    .pose-walk .ch-body { transform-origin: 20px 24px; animation: ch-walk-bob .26s ease-in-out infinite alternate; }
+    .pose-walk .ch-cape { transform-origin: 15px 17px; animation: ch-cape-flap .24s ease-in-out infinite alternate; }
+    .pose-walk .ch-leg-a { transform-origin: 20px 25px; animation: ch-leg-a .26s ease-in-out infinite alternate; }
+    .pose-walk .ch-leg-b { transform-origin: 20px 25px; animation: ch-leg-b .26s ease-in-out infinite alternate; }
+    .pose-walk .ch-fx { animation: ch-wind-streak .36s linear infinite; }
+    .pose-idle .ch-body { transform-origin: 20px 30px; animation: ch-breathe 1.2s ease-in-out infinite; }
+    .pose-idle .ch-head { transform-origin: 20px 14px; animation: ch-nod 1.8s ease-in-out infinite; }
     .pose-flat .ch-body { transform-origin: 20px 21px; transform: translate(0, 5px) rotate(-86deg) scale(.86); }
     .pose-flat .ch-zzz { animation: ch-float-zzz 2.2s ease-out infinite; }
-    @keyframes ch-sprint-bob { 0% { transform: translateY(0) rotate(9deg); } 100% { transform: translateY(-3px) rotate(13deg); } }
-    @keyframes ch-jog-bob { 0% { transform: translateY(0) rotate(4deg); } 100% { transform: translateY(-2px) rotate(7deg); } }
-    @keyframes ch-walk-bob { 0% { transform: translateY(0); } 100% { transform: translateY(-1.2px); } }
+    @keyframes ch-sprint-bob { 0% { transform: translateY(0) rotate(-3deg); } 100% { transform: translateY(-2.4px) rotate(-6deg); } }
+    @keyframes ch-flame { 0% { transform: scaleX(.85); opacity: .85; } 100% { transform: scaleX(1.25); opacity: 1; } }
+    @keyframes ch-car-bob { 0% { transform: translateY(0); } 100% { transform: translateY(-1.3px); } }
+    @keyframes ch-wheel { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes ch-walk-bob { 0% { transform: translateY(0) rotate(9deg); } 100% { transform: translateY(-3px) rotate(13deg); } }
     @keyframes ch-cape-flap { 0% { transform: rotate(0deg) scaleX(1); } 100% { transform: rotate(12deg) scaleX(1.12); } }
     @keyframes ch-leg-a { 0% { transform: rotate(-38deg); } 100% { transform: rotate(38deg); } }
     @keyframes ch-leg-b { 0% { transform: rotate(38deg); } 100% { transform: rotate(-38deg); } }
-    @keyframes ch-jog-a { 0% { transform: rotate(-24deg); } 100% { transform: rotate(24deg); } }
-    @keyframes ch-jog-b { 0% { transform: rotate(24deg); } 100% { transform: rotate(-24deg); } }
-    @keyframes ch-walk-a { 0% { transform: rotate(-14deg); } 100% { transform: rotate(14deg); } }
-    @keyframes ch-walk-b { 0% { transform: rotate(14deg); } 100% { transform: rotate(-14deg); } }
-    @keyframes ch-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.94); } }
-    @keyframes ch-nod { 0%, 72%, 100% { transform: rotate(0deg); } 86% { transform: rotate(8deg) translateY(1px); } }
+    @keyframes ch-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.91); } }
+    @keyframes ch-nod { 0%, 60%, 100% { transform: rotate(0deg); } 80% { transform: rotate(9deg) translateY(1px); } }
     @keyframes ch-wind-streak { 0% { opacity: .9; transform: translateX(0); } 100% { opacity: 0; transform: translateX(-6px); } }
     @keyframes ch-float-zzz { 0% { opacity: 0; transform: translate(0, 2px) scale(.75); } 35% { opacity: 1; } 100% { opacity: 0; transform: translate(3px, -7px) scale(1.08); } }
     @keyframes heart-beat { 0%, 100% { transform: scale(1); } 20% { transform: scale(1.32); } 40% { transform: scale(.96); } 60% { transform: scale(1.2); } }
@@ -3463,13 +3458,13 @@
       const setAvatar = (avatar, username, options) => avatarView.set(avatar, username, options);
 
       const ROYAL_TIERS = [
-        { max: 1, cls: 'rk-1', key: 'tier-challenger', gear: 'challenger', main: '#eab308', dark: '#1d4ed8', trim: '#7dd3fc', gem: '#38bdf8' },
-        { max: 2, cls: 'rk-2', key: 'tier-grandmaster', gear: 'grandmaster', main: '#dc2626', dark: '#7f1d1d', trim: '#fbbf24', gem: '#ef4444' },
-        { max: 3, cls: 'rk-3', key: 'tier-master', gear: 'master', main: '#9333ea', dark: '#581c87', trim: '#e9d5ff', gem: '#fde047' },
-        { max: 10, cls: 'rk-4', key: 'tier-diamond', gear: 'diamond', main: '#0ea5e9', dark: '#0369a1', trim: '#bae6fd', gem: '#e0f2fe' },
-        { max: 30, cls: 'rk-5', key: 'tier-emerald', gear: 'emerald', main: '#10b981', dark: '#065f46', trim: '#a7f3d0', gem: '#fef08a' },
-        { max: 60, cls: 'rk-6', key: 'tier-platinum', gear: 'platinum', main: '#14b8a6', dark: '#0f766e', trim: '#ccfbf1', gem: '#5eead4' },
-        { max: Infinity, cls: 'rk-7', key: 'tier-gold', gear: 'gold', main: '#d97706', dark: '#78350f', trim: '#fde68a', gem: '#facc15' }
+        { max: 1, cls: 'rk-1', key: 'tier-challenger', gear: 'challenger', cape: 'cape', main: '#eab308', dark: '#1d4ed8', trim: '#7dd3fc', gem: '#38bdf8' },
+        { max: 2, cls: 'rk-2', key: 'tier-grandmaster', gear: 'grandmaster', cape: 'tattered', main: '#dc2626', dark: '#7f1d1d', trim: '#fbbf24', gem: '#ef4444' },
+        { max: 3, cls: 'rk-3', key: 'tier-master', gear: 'master', cape: 'cape', main: '#9333ea', dark: '#581c87', trim: '#e9d5ff', gem: '#fde047' },
+        { max: 10, cls: 'rk-4', key: 'tier-diamond', gear: 'diamond', cape: 'angel', main: '#ec4899', dark: '#fce7f3', trim: '#fbcfe8', gem: '#ec4899' },
+        { max: 30, cls: 'rk-5', key: 'tier-emerald', gear: 'emerald', cape: 'angel', main: '#6366f1', dark: '#e0e7ff', trim: '#fde047', gem: '#38bdf8' },
+        { max: 60, cls: 'rk-6', key: 'tier-platinum', gear: 'platinum', cape: 'pack', main: '#f8fafc', dark: '#cbd5e1', trim: '#f97316', gem: '#38bdf8' },
+        { max: Infinity, cls: 'rk-7', key: 'tier-gold', gear: 'gold', cape: 'cape', main: '#d97706', dark: '#78350f', trim: '#fde68a', gem: '#f59e0b' }
       ];
       const royalTierOf = rank => ROYAL_TIERS.find(tier => (rank > 0 ? rank : Infinity) <= tier.max);
       const HEARTBEAT_POSES = [
@@ -3522,29 +3517,45 @@
         svg.setAttribute('viewBox', '0 0 38 34');
         svg.setAttribute('aria-hidden', 'true');
         const gear = tier.gear === 'challenger'
-          ? `<path d="M12.5 10.6l-1.6-5.2 4.4 2.4 4.2-4.5 4.2 4.5 4.4-2.4-1.6 5.2z" fill="#fbbf24" stroke="#92400e" stroke-width=".7" stroke-linejoin="round"/><polygon points="19.5,5.8 21,7.8 19.5,9.8 18,7.8" fill="${tier.gem}"/>`
+          ? `<path d="M12.5 10.6l-1.5-5.2 4.3 2.4 4.2-4.5 4.2 4.5 4.3-2.4-1.5 5.2z" fill="#fbbf24" stroke="#92400e" stroke-width=".7" stroke-linejoin="round"/><circle cx="19.5" cy="8.2" r="1.2" fill="${tier.gem}"/>`
           : tier.gear === 'grandmaster'
-          ? `<path d="M13 10.8c-1.8-2.2-2.2-5-1.2-7 1.4 1.6 2.5 2.4 3.8 2.7l3.9 1.6 3.9-1.6c1.3-.3 2.4-1.1 3.8-2.7 1 2 .6 4.8-1.2 7z" fill="#dc2626" stroke="#7f1d1d" stroke-width=".7" stroke-linejoin="round"/><polygon points="19.5,6.8 20.8,8.5 19.5,10.2 18.2,8.5" fill="${tier.trim}"/>`
+          ? `<path d="M13 11c-2-2.2-2.4-5-1.2-7.2 1.4 1.6 2.6 2.5 4 2.8l3.7 1.4 3.7-1.4c1.4-.3 2.6-1.2 4-2.8 1.2 2.2.8 5-1.2 7.2z" fill="#b91c1c" stroke="#450a0a" stroke-width=".7" stroke-linejoin="round"/><polygon points="19.5,6.8 20.8,8.6 19.5,10.2 18.2,8.6" fill="${tier.trim}"/>`
           : tier.gear === 'master'
           ? `<path d="M13 10.8l-.6-4.2 3.8 2.2 3.3-4.3 3.3 4.3 3.8-2.2-.6 4.2z" fill="#a855f7" stroke="#581c87" stroke-width=".7" stroke-linejoin="round"/><circle cx="19.5" cy="8.6" r="1.2" fill="${tier.gem}"/>`
           : tier.gear === 'diamond'
-          ? `<polygon points="19.5,3 24.5,8.2 23,11 16,11 14.5,8.2" fill="#38bdf8" stroke="#0369a1" stroke-width=".7" stroke-linejoin="round"/><polygon points="19.5,4.2 21.8,8.2 19.5,10.4 17.2,8.2" fill="${tier.gem}" opacity=".85"/>`
+          ? `<path d="M14 10.8l-3-3.5 4.5 1.5 4-3.5 4 3.5 4.5-1.5-3 3.5z" fill="#fde047" stroke="#b45309" stroke-width=".6" stroke-linejoin="round"/><circle cx="19.5" cy="8.8" r="1.2" fill="${tier.gem}"/>`
           : tier.gear === 'emerald'
-          ? `<path d="M12.5 10.8c.5-3.2 2.4-5.3 4.6-6.2l2.4 3.4 2.4-3.4c2.2.9 4.1 3 4.6 6.2z" fill="#10b981" stroke="#065f46" stroke-width=".7" stroke-linejoin="round"/><polygon points="19.5,6.2 20.8,8.2 19.5,10.2 18.2,8.2" fill="${tier.gem}"/>`
+          ? `<path d="M12.5 10.6l-1.5-5 4.2 2.4 4.3-4.6 4.3 4.6 4.2-2.4-1.5 5z" fill="#fde047" stroke="#92400e" stroke-width=".6" stroke-linejoin="round"/><circle cx="15.5" cy="8.4" r=".9" fill="#ef4444"/><circle cx="19.5" cy="7.5" r="1.1" fill="${tier.gem}"/><circle cx="23.5" cy="8.4" r=".9" fill="#4ade80"/>`
           : tier.gear === 'platinum'
-          ? `<path d="M13.5 11c.3-3.5 2.7-5.6 6-5.6s5.7 2.1 6 5.6l-3-.9-3 1.1-3-1.1z" fill="#2dd4bf" stroke="#0f766e" stroke-width=".7" stroke-linejoin="round"/><path d="M14.2 7.2l-2.2-1.8m13 1.8 2.2-1.8" stroke="${tier.trim}" stroke-width="1.3" stroke-linecap="round"/>`
-          : `<path d="M14 11c0-3 2.3-4.8 5.5-4.8S25 8 25 11h-11z" fill="#eab308" stroke="#854d0e" stroke-width=".7" stroke-linejoin="round"/><path d="M13.8 8.8l-2-1.6M25.2 8.8l2-1.6" stroke="${tier.trim}" stroke-width="1.3" stroke-linecap="round"/>`;
+          ? `<circle cx="19.5" cy="13.5" r="7" fill="rgb(56 189 248 / 22%)" stroke="#e2e8f0" stroke-width="1.3"/><path d="M16 9.5a4 4 0 0 1 5-1" stroke="#fff" stroke-width="1" fill="none" stroke-linecap="round"/>`
+          : `<path d="M13 11.5c-.8-3.5 1.5-7 6.5-7s7.3 3.5 6.5 7l-2.5-1.2-2 1.2-2-1.2-2 1.2-2-1.2z" fill="${tier.gem}" stroke="#92400e" stroke-width=".6" stroke-linejoin="round"/>`;
+        const cape = tier.cape === 'tattered'
+          ? `<path class="ch-cape" d="M16 17.5c-4 1.5-8 4-9 7.5l2.5-1.2 1.8 1.5 2-1.4 3.7-.9z" fill="${tier.dark}"/>`
+          : tier.cape === 'angel'
+          ? `<path class="ch-cape" d="M15.5 18c-5-4-9-2.2-9 1.5 2.5 0 4.5 1 5.5 2.2-3 0-4.8 1.4-4.2 3.3 3 0 6-1 8.5-2.8z" fill="${tier.dark}" stroke="#94a3b8" stroke-width=".6"/>`
+          : tier.cape === 'pack'
+          ? `<rect class="ch-cape" x="10.5" y="17" width="4.8" height="6.8" rx="1.6" fill="${tier.dark}" stroke="#475569" stroke-width=".6"/>`
+          : `<path class="ch-cape" d="M16 17.5c-4 1.2-7.5 3.8-8.2 7.2 3.2.5 6.8-.2 9.2-2z" fill="${tier.dark}"/>`;
         const eye = pose.key === 'flat'
           ? `<path d="M19.8 14.2q1.2 1 2.4 0" stroke="#1e1b2e" stroke-width="1.3" fill="none" stroke-linecap="round"/>`
-          : pose.key === 'sprint'
+          : (pose.key === 'sprint' || pose.key === 'walk')
           ? `<path d="M20.2 13.5l2.2.8-2.2.8" stroke="#1e1b2e" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23.8" cy="11.2" r=".95" fill="#38bdf8"/>`
           : `<ellipse cx="21.5" cy="14" rx="1.15" ry="1.45" fill="#1e1b2e"/><circle cx="21.9" cy="13.5" r=".45" fill="#fff"/>`;
-        const fx = pose.key === 'sprint'
-          ? `<g class="ch-fx" stroke="${tier.trim}" stroke-width="1.4" stroke-linecap="round" opacity=".85"><line x1="2" y1="13" x2="8" y2="13"/><line x1="0" y1="18" x2="7" y2="18"/><line x1="3" y1="23" x2="8" y2="23"/></g>`
+        const head = `<g class="ch-head"><circle cx="19.5" cy="13.8" r="5.3" fill="#ffdfc4"/><path d="M14.2 13.5c0-3 2.3-5.1 5.3-5.1 1.4 0 2.7.5 3.6 1.3-2.5-.2-4.6.6-6.2 2.4-.7.8-1.8 1.4-2.7 1.4z" fill="#473849"/><ellipse cx="20.4" cy="15.9" rx="1.2" ry=".7" fill="#fb7185" opacity=".48"/>${eye}${gear}</g>`;
+        const fx = (pose.key === 'sprint' || pose.key === 'run' || pose.key === 'walk')
+          ? `<g class="ch-fx" stroke="${tier.trim}" stroke-width="1.4" stroke-linecap="round" opacity=".85"><line x1="1" y1="12" x2="7" y2="12"/><line x1="-1" y1="17" x2="6" y2="17"/><line x1="2" y1="22" x2="7" y2="22"/></g>`
           : pose.key === 'flat'
           ? `<text class="ch-zzz" x="24" y="10" fill="var(--muted)" font-size="8" font-weight="800">Zzz</text>`
+          : pose.key === 'idle'
+          ? `<circle cx="25.2" cy="11.5" r=".9" fill="#38bdf8"/><path d="M25 14.5q2 .6 2.8-.6" stroke="#94a3b8" stroke-width="1" fill="none" stroke-linecap="round"/>`
           : '';
-        svg.innerHTML = `${fx}<g class="ch-body"><path class="ch-cape" d="M16 17.5c-4 1.2-7.5 3.8-8.2 7.2 3.2.5 6.8-.2 9.2-2z" fill="${tier.dark}"/><g class="ch-leg-b"><rect x="17" y="24" width="3" height="6.2" rx="1.5" fill="#334155"/><ellipse cx="19" cy="30.2" rx="2.4" ry="1.3" fill="#0f172a"/></g><g class="ch-leg-a"><rect x="20" y="24" width="3" height="6.2" rx="1.5" fill="#475569"/><ellipse cx="22.3" cy="30.2" rx="2.4" ry="1.3" fill="#1e293b"/></g><path d="M15 17.5c0-1.2 1.2-2 4.5-2s4.5.8 4.5 2l1 7.2h-11z" fill="${tier.main}"/><path d="M15.2 17.6q4.3 2 8.6 0" stroke="#f8fafc" stroke-width="2.1" stroke-linecap="round" fill="none"/><rect x="14.5" y="22.5" width="10" height="1.6" rx=".8" fill="${tier.trim}"/><g class="ch-head"><circle cx="19.5" cy="13.8" r="5.3" fill="#ffdfc4"/><path d="M14.2 13.5c0-3 2.3-5.1 5.3-5.1 1.4 0 2.7.5 3.6 1.3-2.5-.2-4.6.6-6.2 2.4-.7.8-1.8 1.4-2.7 1.4z" fill="#473849"/><ellipse cx="20.4" cy="15.9" rx="1.2" ry=".7" fill="#fb7185" opacity=".48"/>${eye}${gear}</g></g>`;
+        if (pose.key === 'sprint') {
+          svg.innerHTML = `${fx}<g class="ch-body">${cape}<g class="ch-flame"><polygon points="8,24 1,26.2 8,28.4" fill="#f97316"/><polygon points="8,25 3.5,26.2 8,27.4" fill="#fde047"/></g><path d="M9 22.8h18c3 0 5.5 1.5 6.8 3.4-1.3 1.9-3.8 3.4-6.8 3.4H9z" fill="#e2e8f0" stroke="#475569" stroke-width=".7"/><path d="M27 22.8c3 0 5.5 1.5 6.8 3.4-1.3 1.9-3.8 3.4-6.8 3.4z" fill="#ef4444"/><polygon points="9,22.8 6.5,19.8 12,22.8" fill="#dc2626"/><polygon points="9,29.6 7,32 12,29.6" fill="#dc2626"/><circle cx="23.5" cy="26.2" r="1.4" fill="#38bdf8" stroke="#0f172a" stroke-width=".5"/><path d="M15.5 17.5c0-1.1 1.1-1.9 4-1.9s4 .8 4 1.9l.8 5.4h-9.6z" fill="${tier.main}"/><path d="M18.5 22.8l3.5 3" stroke="#334155" stroke-width="2.6" stroke-linecap="round"/><rect x="15" y="21.2" width="9" height="1.5" rx=".7" fill="${tier.trim}"/>${head}</g>`;
+        } else if (pose.key === 'run') {
+          svg.innerHTML = `${fx}<g class="ch-body">${cape}<path d="M15.5 17.2c0-1 1.1-1.8 4-1.8s4 .8 4 1.8l.8 5.2h-9.6z" fill="${tier.main}"/><rect x="15" y="21" width="9" height="1.4" rx=".7" fill="${tier.trim}"/>${head}<path d="M6 25.5l1.2-3.5 3.5 1.5h15.5l6.5 1.6c1.5.4 2.2 1.4 2.2 2.8v1.8H6z" fill="${tier.main}" stroke="#0f172a" stroke-width=".7" stroke-linejoin="round"/><path d="M23.5 23.5l2.5-3" stroke="#7dd3fc" stroke-width="1.3" stroke-linecap="round"/><line x1="8" y1="26.6" x2="33" y2="26.6" stroke="${tier.trim}" stroke-width="1.2"/><g class="ch-wheel"><circle cx="12.5" cy="29.5" r="2.7" fill="#1e293b" stroke="#cbd5e1" stroke-width=".8"/><circle cx="12.5" cy="29.5" r="1" fill="#94a3b8"/></g><g class="ch-wheel"><circle cx="28" cy="29.5" r="2.7" fill="#1e293b" stroke="#cbd5e1" stroke-width=".8"/><circle cx="28" cy="29.5" r="1" fill="#94a3b8"/></g></g>`;
+        } else {
+          svg.innerHTML = `${fx}<g class="ch-body">${cape}<g class="ch-leg-b"><rect x="17" y="24" width="3" height="6.2" rx="1.5" fill="#334155"/><ellipse cx="19" cy="30.2" rx="2.4" ry="1.3" fill="#0f172a"/></g><g class="ch-leg-a"><rect x="20" y="24" width="3" height="6.2" rx="1.5" fill="#475569"/><ellipse cx="22.3" cy="30.2" rx="2.4" ry="1.3" fill="#1e293b"/></g><path d="M15 17.5c0-1.2 1.2-2 4.5-2s4.5.8 4.5 2l1 7.2h-11z" fill="${tier.main}"/><path d="M15.2 17.6q4.3 2 8.6 0" stroke="#f8fafc" stroke-width="2.1" stroke-linecap="round" fill="none"/><rect x="14.5" y="22.5" width="10" height="1.6" rx=".8" fill="${tier.trim}"/>${head}</g>`;
+        }
         return svg;
       }
 

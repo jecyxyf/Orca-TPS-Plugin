@@ -307,9 +307,9 @@
   "tier-emerald": "Изумруд",
   "tier-platinum": "Платина",
   "tier-gold": "Золото",
-  "pose-sprint": "Спринт",
-  "pose-run": "Бег трусцой",
-  "pose-walk": "Прогулка",
-  "pose-idle": "Отдых",
-  "pose-flat": "Лежит пластом"
+  "pose-sprint": "На ракете",
+  "pose-run": "На спорткаре",
+  "pose-walk": "Спринт",
+  "pose-idle": "Одышка",
+  "pose-flat": "Лежит"
 }
