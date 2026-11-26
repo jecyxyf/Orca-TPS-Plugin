@@ -349,28 +349,50 @@
       block-size: calc(100dvh - 32px);
     }
     #current-data { display: grid; grid-template: auto minmax(96px, 1fr) / minmax(0, 1fr); min-block-size: 0; }
-    #usage { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr); min-block-size: 0; }
-    .usage-breakdown {
-      display: grid; grid-template-rows: repeat(2, minmax(112px, 1fr)) 180px; gap: 8px;
-      min-inline-size: 0;
+    #usage {
+      display: grid;
+      grid-template-rows: auto minmax(150px, 1fr) auto;
+      gap: 8px;
+      min-block-size: 0;
     }
-    .usage-ranking, .heat { display: grid; min-inline-size: 0; }
-    .usage-ranking { grid-template-rows: auto minmax(0, 1fr); }
+    #war {
+      display: flex; flex-direction: column; justify-content: center; gap: 6px;
+      padding: 10px 16px; min-block-size: 0;
+    }
+    .usage-breakdown { display: contents; }
+    .usage-ranking { display: flex; flex-direction: column; min-inline-size: 0; min-block-size: 0; }
+    .heat { display: flex; flex-direction: column; height: clamp(220px, 32dvh, 296px); min-inline-size: 0; min-block-size: 0; }
     .usage-scroll, #current-scroll, .ladder-ranking-scroll { min-inline-size: 0; overflow-y: auto; scrollbar-width: thin; }
+    .usage-scroll { flex: 1; min-block-size: 0; }
     #current-scroll { scrollbar-gutter: stable; padding-inline-end: 6px; }
     :is(.usage-scroll, #current-scroll, .ladder-ranking-scroll):focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
     .section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 8px; }
     .section-title { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; font-weight: 700; }
     .usage-breakdown .section-title { font-size: 14px; font-weight: 750; line-height: 1.5; }
-    .usage-ranking .section-title { padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+    .model-dist-head { padding-bottom: 6px; border-bottom: 1px solid var(--line); align-items: center; }
+    .model-sort-tabs { grid-template-columns: repeat(2, auto); flex: none; }
+    .model-sort-tabs .war-tab { padding: 3px 9px; font-size: 11px; white-space: nowrap; }
+    .stacked-bar {
+      display: flex; height: 11px; margin: 8px 0 6px;
+      border-radius: 999px; overflow: hidden; gap: 2px;
+      background: var(--tag-bg); flex: none;
+    }
+    .stacked-seg { height: 100%; min-width: 4px; transition: opacity .15s ease; }
+    .stacked-seg:first-child { border-start-start-radius: 999px; border-end-start-radius: 999px; }
+    .stacked-seg:last-child { border-start-end-radius: 999px; border-end-end-radius: 999px; }
+    .share-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
     .section-detail { margin: 0; color: var(--muted); font-size: 11px; }
     .ladder-card { padding: 12px 16px; }
     #leaderboard {
-      --ladder-medal-size: 48px; --ladder-medal-scale: .85;
+      --ladder-medal-size: 48px; --ladder-medal-scale: .72;
       display: flex; flex-direction: column; gap: 8px; min-block-size: 0;
     }
     #ladder-controls, .ladder-personal-data { flex: none; }
-    #ladder-controls:has(#ladder-account:not([hidden])) { block-size: 62px; overflow-y: auto; scrollbar-width: thin; }
+    .ladder-controls-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0;
+    }
+    .ladder-controls-main { flex: 1; min-width: 0; }
+    .ladder-controls-actions { display: flex; align-items: center; gap: 6px; flex: none; }
     .ladder-personal-data, .ladder-rank-card { scrollbar-width: thin; scrollbar-gutter: stable; }
     .ladder-personal-data { max-block-size: 208px; padding-block-end: 8px; overflow-y: auto; }
     .ladder-rank-card { display: flex; flex: 1; flex-direction: column; min-block-size: 224px; overflow: hidden; }
@@ -378,11 +400,11 @@
     #ladder-ranking-content { display: flex; flex: 1; flex-direction: column; min-block-size: 0; }
     #ladder-ranking-content > :not(.ladder-ranking-scroll) { flex: none; }
     .ladder-ranking-scroll { flex: 1; min-block-size: 0; }
-    .war-tabs.ladder-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 6px; }
-    .ladder-tabs .war-tab { min-width: 0; padding-inline: 3px; font-size: 12px; overflow-wrap: anywhere; }
+    .war-tabs.ladder-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 8px; }
+    .ladder-tabs .war-tab { min-width: 0; padding: 6px 4px; font-size: 13px; overflow-wrap: anywhere; }
     html:lang(zh-CN) .ladder-tabs { grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); }
     .ladder-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
-    .ladder-control { min-height: 36px; padding-inline: 12px; font-size: 13px; font-weight: 700; }
+    .ladder-control { min-height: 28px; padding: 4px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; }
     .ladder-secondary { color: var(--muted); background: var(--tag-bg); }
     .ladder-note { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
     .ladder-notice p { margin: 0; }
@@ -465,8 +487,8 @@
     .ladder-user-rank { font-size: 16px; font-weight: 750; overflow-wrap: anywhere; }
     .ladder-user-tokens { color: var(--blue); font-size: 14px; font-weight: 650; text-align: start; overflow-wrap: anywhere; }
     .ladder-mine {
-      min-width: 0; margin: 0; color: var(--purple); font-size: 24px; font-weight: 800; line-height: 1.25;
-      letter-spacing: -.3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      min-width: 0; margin: 0; color: var(--purple); font-size: 17px; font-weight: 800; line-height: 1.25;
+      letter-spacing: -.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .ladder-badge-slot { display: inline-flex; flex: none; }
     .ladder-badge-slot:empty { display: none; }
@@ -576,42 +598,45 @@
         "rank   .      name   total"
         "recent recent recent recent"
         "time   time   time   time";
-      row-gap: 5px; align-items: center; padding: 9px 0;
+      row-gap: 4px; align-items: center; padding: 10px 0;
       border-top: 1px solid var(--line); font-variant-numeric: tabular-nums;
     }
     .ladder-rank {
-      grid-area: rank; display: grid; place-items: center; min-width: 3ch; height: 100%;
-      padding-inline: 2px; color: var(--muted); font-size: 20px; font-weight: 750;
+      grid-area: rank; display: grid; place-items: center; min-width: 2.2ch; height: 100%;
+      padding-inline: 2px; color: var(--muted); font-size: 17px; font-weight: 750;
     }
     .ladder-self .ladder-rank { color: var(--ladder-own-rank); }
-    .ladder-row-user { grid-area: name; display: flex; gap: 4px; align-items: center; min-width: 0; margin-inline-end: var(--ladder-row-gap); }
+    .ladder-row-user { grid-area: name; display: flex; gap: 6px; align-items: center; min-width: 0; margin-inline-end: var(--ladder-row-gap); }
     .ladder-row-user .ladder-avatar {
-      --ladder-row-avatar-size: calc(var(--ladder-row-size) * .9);
+      --ladder-row-avatar-size: calc(var(--ladder-row-size) * .86);
       width: var(--ladder-row-avatar-size); height: var(--ladder-row-avatar-size);
     }
     .ladder-name {
-      min-width: 0; font-size: 18px; line-height: var(--ladder-row-size); color: var(--purple); font-weight: 750;
+      min-width: 0; font-size: 16px; line-height: var(--ladder-row-size); color: var(--purple); font-weight: 750;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .ladder-total {
       grid-area: total; display: grid; align-content: center; height: 100%;
-      padding-inline: 8px; border-radius: 11px; background: var(--button-bg); color: var(--blue);
-      font-size: 14px; line-height: 1.15; font-weight: 750; text-align: end; overflow-wrap: anywhere; max-width: 15ch;
+      padding-inline: 0; border-radius: 0; background: transparent; color: var(--blue);
+      font-size: 16px; line-height: 1.15; font-weight: 800; text-align: end; overflow-wrap: anywhere; max-width: 15ch;
     }
     .ladder-time { grid-area: time; color: var(--muted); font-size: 11px; }
     .ladder-rows .ladder-speed-row:not(:has(.ladder-medal)) { --ladder-row-size: 32px; }
-    .ladder-speed-row .ladder-total { white-space: nowrap; }
+    .ladder-speed-row .ladder-total { color: var(--speed); white-space: nowrap; }
     .ladder-speed-row .ladder-recent-meta { margin-top: 0; }
-    .ladder-speed-tokens { flex: none; color: var(--muted); white-space: nowrap; }
-    .ladder-recent { grid-area: recent; min-width: 0; }
+    .ladder-speed-tokens { flex: none; color: var(--blue); font-weight: 650; white-space: nowrap; }
+    .ladder-recent { grid-area: recent; display: flex; flex-direction: column; min-width: 0; }
     .ladder-chart {
-      display: block; width: 100%; height: 30px;
+      display: block; width: 100%; height: 34px; margin-top: 2px;
       background: transparent; color: var(--blue);
     }
     .ladder-chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin-top: 3px; }
-    .ladder-recent-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 4px; font-size: 11px; }
-    .ladder-recent-tools { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .ladder-recent-speed { flex: none; color: var(--blue); white-space: nowrap; }
+    .ladder-recent-meta { order: -1; display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+    .ladder-recent-tools { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .ladder-recent-tools span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .ladder-recent-tools .war-agent-icon { width: 16px; height: 16px; }
+    .ladder-recent-tools .war-agent-icon svg { width: 15px; height: 15px; }
+    .ladder-recent-speed { flex: none; color: var(--speed); font-weight: 700; white-space: nowrap; }
     .ladder-transfer .ladder-transfer-spinner,
     .ladder-transfer .ladder-transfer-error,
     .ladder-transfer[aria-busy="true"] .ladder-transfer-icon,
@@ -803,7 +828,7 @@
     .war-value small { margin-inline-start: 2px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0; }
     .war-note { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
     .war-note:empty, .war-note[hidden] { display: none; }
-    .war-rows { margin: 6px 0 0; padding: 0; list-style: none; }
+    .war-rows { margin: 2px 0 0; padding: 0; list-style: none; }
     .war-row { padding: 8px 2px 7px; border-top: 1px solid var(--line); }
     .war-row:first-child { border-top: 0; }
     .war-row-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -814,102 +839,45 @@
     .war-agent-icon svg { width: 20px; height: 20px; display: block; }
     .war-model { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--purple); font-size: 15px; font-weight: 700; }
     .war-amount { flex-shrink: 0; color: var(--blue); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .war-track { height: 9px; margin: 6px 0 5px; border-radius: 999px; background: var(--tag-bg); overflow: hidden; }
-    .war-fill { position: relative; height: 100%; border-radius: 999px; background: var(--blue); overflow: hidden; }
-    #war-rows .war-fill {
-      background: linear-gradient(90deg, #004fd6 0%, #1c88ff 58%, #5ee0ff 100%);
-      box-shadow: 0 0 8px color-mix(in srgb, #38b6ff 45%, transparent);
-    }
-    #war-rows .war-fill::before,
-    #war-rows .war-fill::after {
-      content: '';
-      position: absolute;
-      inset: 0 auto 0 0;
-      pointer-events: none;
-      background-repeat: repeat-x;
-    }
-    #war-rows .war-fill::before {
-      left: -42px;
-      width: calc(100% + 42px);
-      background-image:
-        radial-gradient(circle 1.3px at 6px 2.5px, rgba(255, 255, 255, .96) 95%, transparent),
-        radial-gradient(circle 1px at 19px 6.5px, rgba(165, 243, 252, .92) 95%, transparent),
-        radial-gradient(circle 1.4px at 33px 3px, rgba(255, 255, 255, .94) 95%, transparent);
-      background-size: 42px 9px;
-      animation: usage-stars-drift 5.5s linear infinite, usage-stars-twinkle 2.1s ease-in-out infinite alternate;
-    }
-    #war-rows .war-fill::after {
-      left: -34px;
-      width: calc(100% + 34px);
-      background-image:
-        radial-gradient(circle 1.5px at 8px 6.2px, rgba(255, 255, 255, .98) 95%, transparent),
-        radial-gradient(circle 1px at 21px 2.2px, rgba(196, 241, 255, .94) 95%, transparent),
-        radial-gradient(circle 1.2px at 30px 6.8px, rgba(255, 255, 255, .86) 95%, transparent);
-      background-size: 34px 9px;
-      animation: usage-stars-drift-b 4.2s linear infinite, usage-stars-twinkle 1.6s ease-in-out -.8s infinite alternate;
-    }
-    @keyframes usage-stars-drift {
-      from { transform: translateX(0); }
-      to { transform: translateX(42px); }
-    }
-    @keyframes usage-stars-drift-b {
-      from { transform: translateX(0); }
-      to { transform: translateX(34px); }
-    }
-    @keyframes usage-stars-twinkle {
-      from { opacity: .35; }
-      to { opacity: 1; }
-    }
-    .war-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-    #war-rows .war-meta { display: grid; grid-template-columns: 5.2em 6.2em 6.2em minmax(0, 1fr); gap: 2px 8px; }
-    .war-meta-item { display: inline-flex; align-items: center; gap: 3px; min-width: 0; white-space: nowrap; }
+    .war-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px 10px; margin-top: 3px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .war-meta-item { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
     .war-meta-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .war-meta-item svg { width: 13px; height: 13px; flex: none; color: var(--icon-color, currentColor); }
+    .war-meta-item.is-speed svg { color: var(--icon-color, var(--speed)); }
+    .war-meta-tokens { color: var(--blue); font-weight: 650; }
     .war-empty { margin: 10px 2px 2px; color: var(--muted); font-size: 12px; text-align: center; }
     .war-empty[hidden] { display: none; }
     .rank-index { flex-shrink: 0; min-width: 16px; color: var(--muted); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .rank-tps { flex-shrink: 0; color: var(--speed); background: transparent; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .rank-tps small { margin-inline-start: 2px; color: var(--muted); font-size: 11px; font-weight: 600; }
-    #speed-rows .war-meta-item:first-child { min-width: 5.2em; }
-    #speed .war-fill {
-      background: transparent;
-      box-shadow: 0 0 8px color-mix(in srgb, #ff4b2b 42%, transparent);
+    .rank-tps { display: inline-flex; align-items: baseline; gap: 2px; flex-shrink: 0; color: var(--speed); background: transparent; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rank-tps svg { width: 13px; height: 13px; align-self: center; flex: none; color: var(--icon-color, currentColor); }
+    .rank-tps small { margin-inline-start: 1px; color: var(--muted); font-size: 11px; font-weight: 600; }
+    .heat { position: relative; }
+    .heat-head { flex: none; padding-bottom: 5px; border-bottom: 1px solid var(--line); align-items: center; }
+    .heat-active { color: var(--muted); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .heat-star-box {
+      flex: 1; min-block-size: 0; margin-top: 8px;
+      container-type: size; display: grid; place-items: center;
     }
-    #speed .war-fill::before {
-      content: '';
-      position: absolute;
-      inset: 0 auto 0 0;
-      width: 200%;
-      pointer-events: none;
-      background: linear-gradient(90deg, #ff2a5f 0%, #ff7a18 12.5%, #ffd23f 25%, #e84393 37.5%, #ff2a5f 50%, #ff7a18 62.5%, #ffd23f 75%, #e84393 87.5%, #ff2a5f 100%);
-      animation: speed-gradient-flow 2.8s linear infinite;
+    .heat-star-grid {
+      display: grid; grid-template-columns: repeat(23, minmax(0, 1fr));
+      gap: 3px; width: min(100%, 100cqw, calc(100cqh * 23 / 16));
+      align-items: center;
     }
-    @keyframes speed-gradient-flow {
-      from { transform: translateX(-50%); }
-      to { transform: translateX(0); }
+    .heat-cell {
+      width: 100%; aspect-ratio: 1; border-radius: 50%; background: var(--heat-0);
+      transition: transform .12s ease;
     }
-    .heat { position: relative; grid-template-rows: minmax(0, 1fr); }
-    .heat-scroll { direction: ltr; margin-top: 8px; padding-bottom: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
-    .heat-canvas { position: relative; width: max-content; }
-    .heat-months { position: relative; height: 13px; color: var(--muted); font-size: 9px; }
-    .heat-months span { position: absolute; top: 0; white-space: nowrap; }
-    .heat-grid { display: grid; grid-template-rows: repeat(7, 8px); grid-auto-flow: column; grid-auto-columns: 8px; gap: 2px; }
-    .heat-cell { width: 8px; height: 8px; border-radius: 2px; background: var(--heat-0); }
-    .heat-cell.lv1 { background: var(--heat-1); }
-    .heat-cell.lv2 { background: var(--heat-2); }
-    .heat-cell.lv3 { background: var(--heat-3); }
-    .heat-cell.lv4 { background: var(--heat-4); }
-    .heat-cell.outside { visibility: hidden; }
-    .heat-cell:hover { outline: 1px solid var(--blue); outline-offset: 0; }
-    .heat-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--muted); font-size: 10px; }
-    .heat-legend { display: inline-flex; align-items: center; gap: 3px; }
-    .heat-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
-    .heat-legend .lv0 { background: var(--heat-0); }
-    .heat-legend .lv1 { background: var(--heat-1); }
-    .heat-legend .lv2 { background: var(--heat-2); }
-    .heat-legend .lv3 { background: var(--heat-3); }
-    .heat-legend .lv4 { background: var(--heat-4); }
-    .heat-tip { position: absolute; z-index: 5; max-width: min(240px, calc(100% - 8px)); padding: 5px 8px; border-radius: 8px; background: var(--ink); color: var(--surface); font-size: 11px; line-height: 1.4; pointer-events: none; transform: translate(-50%, -100%); box-shadow: var(--shadow); }
+    .heat-cell.lv1 { background: #2d4c7c; }
+    .heat-cell.lv2 { background: #3b82f6; box-shadow: 0 0 3px rgb(59 130 246 / 45%); }
+    .heat-cell.lv3 { background: #60a5fa; box-shadow: 0 0 5px rgb(96 165 250 / 75%); }
+    .heat-cell.lv4 { background: #dbeafe; box-shadow: 0 0 7px rgb(125 211 252 / 95%), 0 0 12px rgb(56 189 248 / 50%); }
+    html:not(.dark) .heat-cell { background: var(--heat-0); }
+    html:not(.dark) .heat-cell.lv1 { background: var(--heat-1); }
+    html:not(.dark) .heat-cell.lv2 { background: var(--heat-2); box-shadow: none; }
+    html:not(.dark) .heat-cell.lv3 { background: var(--heat-3); box-shadow: 0 0 3px rgb(59 130 230 / 40%); }
+    html:not(.dark) .heat-cell.lv4 { background: var(--heat-4); box-shadow: 0 0 5px rgb(29 79 184 / 55%); }
+    .heat-cell:hover { transform: scale(1.45); outline: 1px solid var(--blue); outline-offset: 0; }
+    .heat-tip { position: absolute; z-index: 5; width: max-content; max-width: calc(100% - 8px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 5px 8px; border-radius: 8px; background: var(--ink); color: var(--surface); font-size: 11px; line-height: 1.4; pointer-events: none; transform: translate(-50%, -100%); box-shadow: var(--shadow); }
     .heat-tip[hidden] { display: none; }
     @media (max-width: 339px) {
       .metrics { gap: 6px; }
@@ -920,11 +888,11 @@
       .speed { gap: 3px; }
       .speed-value { font-size: 17px; }
       .war, .heat, .ladder-card { padding-inline: 12px; }
-      .ladder-mine { font-size: 22px; }
+      .ladder-mine { font-size: 16px; }
       .ladder-user-stat { grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1.4fr)); column-gap: 6px; }
       .ladder-user-stat dt { font-size: 12px; }
       .ladder-user-position { gap: 2px; }
-      #leaderboard { --ladder-medal-scale: .7; }
+      #leaderboard { --ladder-medal-scale: .65; }
       .ladder-user-rank, .ladder-user-tokens { font-size: 13px; }
       .ladder-toolbar {
         --ladder-toolbar-action-width: 36px;
@@ -932,8 +900,11 @@
       }
       .ladder-rows li { --ladder-row-gap: 6px; }
       .ladder-rows .ladder-speed-row { --ladder-row-gap: 4px; }
-      .ladder-speed-row .ladder-rank { min-width: 2ch; font-size: 16px; }
+      .ladder-speed-row .ladder-rank { min-width: 2ch; font-size: 15px; }
       .ladder-speed-row .ladder-avatar { --ladder-row-avatar-size: 22px; }
+      .ladder-tabs .war-tab { padding: 5px 3px; font-size: 12px; }
+      .ladder-total { font-size: 14px; }
+      .ladder-name { font-size: 14px; }
       .war-totals { gap: 4px; }
       .war-period-tabs .war-tab { padding: 5px 3px; font-size: 12px; }
       .war-stat { gap: 3px; }
@@ -948,10 +919,7 @@
       .rank-index { min-width: 14px; font-size: 12px; }
       .war-meta { font-size: 11px; }
       .war-meta-item svg { width: 12px; height: 12px; }
-      #war-rows .war-meta { grid-template-columns: 4.6em 5.6em 5.6em minmax(0, 1fr); gap: 2px 6px; }
-      #speed-rows .war-meta-item:first-child { min-width: 4.6em; }
-      .ladder-total { padding-inline: 6px; font-size: 12px; }
-      .ladder-speed-row .ladder-total { padding-inline: 4px; font-size: 11px; }
+      .heat-star-grid { gap: 2px; }
       .settings-sheet { padding: 12px; }
     }
     @media (max-width: 280px) {
@@ -977,7 +945,7 @@
       .panel-star-link:hover { transform: none; }
       .panel-star-svg .star-core, .panel-star-svg .star-spark { animation: none; }
       .ladder-medal::before, .ladder-medal::after, .ladder-medal-emblem::before { animation: none; opacity: 0; }
-      #war-rows .war-fill::before, #war-rows .war-fill::after, #speed .war-fill::before { animation: none; }
+      .heat-cell, .stacked-seg { transition: none; }
     }
   </style>
 </head>
@@ -1219,37 +1187,53 @@
     </div>
     <section class="panel-view" id="leaderboard" role="tabpanel" aria-labelledby="tab-leaderboard" tabindex="0" hidden>
       <div class="ladder-card" id="ladder-controls" hidden>
-        <div id="ladder-sign-in" hidden>
-          <div class="ladder-identity">
-            <p class="ladder-mine"><span data-i18n="signed-out-label"></span></p>
-            <button class="refresh ladder-control" id="ladder-login" type="button" aria-describedby="ladder-login-notice" disabled><span data-i18n="github-login"></span></button>
-          </div>
-          <div class="ladder-note ladder-notice" id="ladder-login-notice" dir="auto">
-            <p class="ladder-notice-title"><span aria-hidden="true">ℹ️</span> <strong data-i18n="leaderboard-notice-title"></strong></p>
-            <p data-i18n="github-login-notice-consent"></p>
-          </div>
-        </div>
-        <div class="ladder-preview" id="ladder-login-wait" hidden>
-          <p><span data-i18n="github-authorize"></span></p>
-          <div class="ladder-actions">
-            <button class="refresh ladder-secondary" id="ladder-stop-login" type="button"><span data-i18n="cancel"></span></button>
-          </div>
-        </div>
-        <div id="ladder-account" hidden>
-          <div class="ladder-identity">
-            <div class="ladder-account-name">
-              <span class="ladder-avatar" id="ladder-account-avatar" aria-hidden="true"></span>
-              <p class="ladder-mine" id="ladder-mine" dir="auto"></p>
+        <div class="ladder-controls-head">
+          <div class="ladder-controls-main">
+            <div id="ladder-sign-in" hidden>
+              <div class="ladder-identity">
+                <p class="ladder-mine"><span data-i18n="signed-out-label"></span></p>
+                <button class="refresh ladder-control" id="ladder-login" type="button" aria-describedby="ladder-login-notice" disabled><span data-i18n="github-login"></span></button>
+              </div>
+              <div class="ladder-note ladder-notice" id="ladder-login-notice" dir="auto">
+                <p class="ladder-notice-title"><span aria-hidden="true">ℹ️</span> <strong data-i18n="leaderboard-notice-title"></strong></p>
+                <p data-i18n="github-login-notice-consent"></p>
+              </div>
             </div>
-            <button class="refresh ladder-control" id="ladder-logout" type="button"><span data-i18n="sign-out"></span></button>
+            <div class="ladder-preview" id="ladder-login-wait" hidden>
+              <p><span data-i18n="github-authorize"></span></p>
+              <div class="ladder-actions">
+                <button class="refresh ladder-secondary" id="ladder-stop-login" type="button"><span data-i18n="cancel"></span></button>
+              </div>
+            </div>
+            <div id="ladder-account" hidden>
+              <div class="ladder-identity">
+                <div class="ladder-account-name">
+                  <span class="ladder-avatar" id="ladder-account-avatar" aria-hidden="true"></span>
+                  <p class="ladder-mine" id="ladder-mine" dir="auto"></p>
+                </div>
+                <button class="refresh ladder-control ladder-secondary" id="ladder-logout" type="button"><span data-i18n="sign-out"></span></button>
+              </div>
+            </div>
+          </div>
+          <div class="war-tabs war-mode-tabs usage-mode-tabs" role="group" data-i18n-aria-label="ranking-update-mode">
+            <button class="war-tab" type="button" data-ladder-mode="calendar" aria-pressed="true"
+                    data-i18n-title="ranking-update-daily" data-i18n-aria-label="ranking-update-daily">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="17" rx="2"/>
+                <path d="M8 2v4M16 2v4M3 10h18"/>
+              </svg>
+            </button>
+            <button class="war-tab" type="button" data-ladder-mode="hourly" aria-pressed="false"
+                    data-i18n-title="ranking-update-hourly" data-i18n-aria-label="ranking-update-hourly">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 7v5l3.2 2"/>
+              </svg>
+            </button>
           </div>
         </div>
         <p class="ladder-status" id="ladder-status" role="status" data-localized-text></p>
         <p class="ladder-note" id="ladder-logout-pending" role="status" data-localized-text hidden></p>
-      </div>
-      <div class="war-tabs war-mode-tabs ladder-update-modes" role="group" data-i18n-aria-label="ranking-update-mode">
-        <button class="war-tab" type="button" data-ladder-mode="calendar" aria-pressed="true"><span data-i18n="ranking-update-daily"></span></button>
-        <button class="war-tab" type="button" data-ladder-mode="hourly" aria-pressed="false"><span data-i18n="ranking-update-hourly"></span></button>
       </div>
       <div class="ladder-card ladder-personal-data" id="ladder-personal-data" hidden>
         <dl class="ladder-user-stats" id="ladder-personal-ranks" data-i18n-aria-label="personal-ranking" hidden>
@@ -1358,11 +1342,14 @@
           </div>
           <div class="war-stat" data-i18n-title="request-count">
             <span class="war-stat-icon requests" role="img" data-i18n-aria-label="request-count">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 9h16"/>
+                <path d="M4 15h16"/>
+                <path d="M10 3 8 21"/>
+                <path d="M16 3l-2 18"/>
               </svg>
             </span>
-            <strong class="war-value requests" id="war-requests" data-testid="war-requests">—</strong>
+            <strong class="war-value requests"><span id="war-requests" data-testid="war-requests">—</span> <small id="war-requests-unit" data-i18n="requests-unit" hidden></small></strong>
           </div>
           <div class="war-stat" id="war-max-speed-row" data-i18n-title="max-speed">
             <span class="war-stat-icon speed-max" role="img" data-i18n-aria-label="max-speed">
@@ -1377,36 +1364,27 @@
         </div>
       </section>
       <div class="usage-breakdown">
-        <section class="war usage-ranking" aria-labelledby="war-model-title">
-          <h2 class="section-title" id="war-model-title"><span data-i18n="model-usage"></span></h2>
+        <section class="war usage-ranking" id="model-dist" aria-labelledby="war-model-title" data-testid="speed">
+          <div class="section-head model-dist-head">
+            <h2 class="section-title" id="war-model-title"><span data-i18n="model-distribution"></span></h2>
+            <div class="war-tabs model-sort-tabs" role="group" data-i18n-aria-label="model-distribution">
+              <button class="war-tab" type="button" data-model-sort="usage" aria-pressed="true"><span data-i18n="sort-by-usage"></span></button>
+              <button class="war-tab" type="button" data-model-sort="speed" aria-pressed="false"><span data-i18n="sort-by-speed"></span></button>
+            </div>
+          </div>
+          <div class="stacked-bar" id="war-share-bar" hidden></div>
           <div class="usage-scroll" tabindex="0" aria-labelledby="war-model-title">
             <ol class="war-rows" id="war-rows" data-testid="war-rows" data-i18n-aria-label="usage-by-agent-model"></ol>
             <p class="war-empty" id="war-empty" data-testid="war-empty" hidden><span data-i18n="empty-usage"></span></p>
           </div>
         </section>
-        <section class="war usage-ranking" id="speed" aria-labelledby="speed-title" data-testid="speed">
-          <h2 class="section-title" id="speed-title"><span data-i18n="average-model-speed"></span></h2>
-          <div class="usage-scroll" tabindex="0" aria-labelledby="speed-title">
-            <ol class="war-rows" id="speed-rows" data-testid="speed-rows" data-i18n-aria-label="model-speed-list"></ol>
-            <p class="war-empty" id="speed-empty" data-testid="speed-empty" hidden><span data-i18n="empty-model-speeds"></span></p>
-          </div>
-        </section>
         <section class="heat" id="heat" aria-labelledby="heat-title" data-testid="heatmap">
-          <div class="usage-scroll" tabindex="0" aria-labelledby="heat-title">
-            <div class="section-head">
-              <h2 class="section-title" id="heat-title"><span data-i18n="usage-heatmap"></span></h2>
-              <p class="section-detail" id="heat-sub"><span data-i18n="heatmap-description"></span></p>
-            </div>
-            <div class="heat-scroll" id="heat-scroll" tabindex="0">
-              <div class="heat-canvas">
-                <div class="heat-months" id="heat-months" aria-hidden="true"></div>
-                <div class="heat-grid" id="heat-grid" role="img" data-i18n-aria-label="heatmap-label"></div>
-              </div>
-            </div>
-            <div class="heat-foot">
-              <span id="heat-total" data-testid="heat-total" data-localized-text></span>
-              <span class="heat-legend" aria-hidden="true"><span data-i18n="heatmap-less"></span> <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> <span data-i18n="heatmap-more"></span></span>
-            </div>
+          <div class="section-head heat-head">
+            <h2 class="section-title" id="heat-title"><span data-i18n="usage-heatmap"></span></h2>
+            <span class="heat-active" id="heat-total" data-testid="heat-total" data-localized-text></span>
+          </div>
+          <div class="heat-star-box">
+            <div class="heat-star-grid" id="heat-grid" role="img" data-i18n-aria-label="heatmap-label"></div>
           </div>
           <div class="heat-tip" id="heat-tip" role="tooltip" data-localized-text hidden></div>
         </section>
@@ -1801,6 +1779,33 @@
       kimi: 'Kimi Code', mcode: 'MiniMax Code', omp: 'Oh My Pi', opencode: 'OpenCode', opencode2: 'OpenCode',
       pi: 'Pi Agent', workbuddy: 'WorkBuddy'
     };
+    const HARNESS_ICONS = new Map([
+      ['claude', 'claude'], ['claude-desktop', 'claude-desktop'], ['codex', 'codex'],
+      ['gemini', 'gemini'], ['grokbuild', 'grokbuild'], ['opencode', 'opencode'], ['opencode2', 'opencode'],
+      ['openclaw', 'openclaw'], ['hermes', 'hermes'], ['pi', 'pi'], ['mcode', 'mcode'],
+      ['kimi', 'kimi'], ['omp', 'omp'], ['antigravity', 'antigravity'], ['agy', 'antigravity'],
+      ['copilot', 'copilot'], ['workbuddy', 'workbuddy'], ['dsh', 'dsh']
+    ]);
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    function createHarnessIconBadge(provider, size = 18) {
+      const label = AGENT_LABELS[provider] ?? String(provider || 'agent').slice(0, 40);
+      const badge = document.createElement('span');
+      badge.className = 'war-agent-icon';
+      badge.title = label;
+      badge.setAttribute('role', 'img');
+      badge.setAttribute('aria-label', label);
+      const svg = document.createElementNS(SVG_NS, 'svg');
+      svg.setAttribute('width', String(size));
+      svg.setAttribute('height', String(size));
+      svg.setAttribute('aria-hidden', 'true');
+      const use = document.createElementNS(SVG_NS, 'use');
+      use.setAttribute('width', '100%');
+      use.setAttribute('height', '100%');
+      use.setAttribute('href', `#harness-${HARNESS_ICONS.get(provider) ?? 'default'}`);
+      svg.append(use);
+      badge.append(svg);
+      return badge;
+    }
     function updateList(container, items, previous, keyOf, create, inserted) {
       const next = new Map();
       let position = container.firstChild;
@@ -2118,59 +2123,31 @@
       }
       // 用量战况: totals per window from the background index (tps.summary); counts only, never message text.
       const USAGE_REFRESH_MS = 30_000;
-      const HARNESS_ICONS = new Map([
-        ['claude', 'claude'], ['claude-desktop', 'claude-desktop'], ['codex', 'codex'],
-        ['gemini', 'gemini'], ['grokbuild', 'grokbuild'], ['opencode', 'opencode'], ['opencode2', 'opencode'],
-        ['openclaw', 'openclaw'], ['hermes', 'hermes'], ['pi', 'pi'], ['mcode', 'mcode'],
-        ['kimi', 'kimi'], ['omp', 'omp'], ['antigravity', 'antigravity'], ['agy', 'antigravity'],
-        ['copilot', 'copilot'], ['workbuddy', 'workbuddy'], ['dsh', 'dsh']
-      ]);
       function harnessIconId(provider) {
         return HARNESS_ICONS.get(provider || current?.activeSession?.provider) ?? 'default';
       }
       function agentLabel(provider) {
         return AGENT_LABELS[provider || current?.activeSession?.provider] ?? '';
       }
-      let usageSummary = null, usageRange = 'today', usageMode = 'calendar', usageTimer = null;
+      let usageSummary = null, usageRange = 'today', usageMode = 'calendar', usageSort = 'usage', usageTimer = null;
       let usagePending, usageFrame, drawnUsage, drawnHeat, heatLayout, heatCells = [], usageRevision = 0;
       const usageGroup = byId('usage');
       const usageRangeTabs = usageGroup.querySelectorAll('[data-range]');
       const usageModeButtons = usageGroup.querySelectorAll('[data-usage-mode]');
+      const modelSortButtons = usageGroup.querySelectorAll('[data-model-sort]');
+      const SHARE_COLORS = ['#38bdf8', '#a855f7', '#4ade80', '#fbbf24', '#fb7185', '#2dd4bf', '#818cf8', '#f97316'];
       function formatCount(value) {
         if (!numeric(value)) return '—';
         return value >= 1e4 ? locale.number(value, { notation: 'compact', maximumFractionDigits: 2 }) : number(value);
       }
-      const SVG_NS = 'http://www.w3.org/2000/svg';
       const WAR_METRIC_PATHS = {
-        requests: ['M22 12h-4l-3 9L9 3l-3 9H2'],
-        input: ['M12 3v12m-4-4 4 4 4-4', 'M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2'],
-        output: ['M12 15V3m-4 4 4-4 4 4', 'M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2'],
-        cache: ['M3 5a9 3 0 1 0 18 0a9 3 0 1 0-18 0', 'M3 5v14a9 3 0 0 0 18 0V5', 'M3 12a9 3 0 0 0 18 0']
+        requests: ['M4 9h16', 'M4 15h16', 'M10 3 8 21', 'M16 3l-2 18'],
+        speed: ['M13 2 4 14h7l-1 8 9-12h-7l1-8Z']
       };
       function harnessBadge(provider, size = 18) {
-        const label = AGENT_LABELS[provider] ?? String(provider || 'agent').slice(0, 40);
-        const badge = document.createElement('span');
-        badge.className = 'war-agent-icon';
-        badge.title = label;
-        badge.setAttribute('role', 'img');
-        badge.setAttribute('aria-label', label);
-        const svg = document.createElementNS(SVG_NS, 'svg');
-        svg.setAttribute('width', String(size));
-        svg.setAttribute('height', String(size));
-        svg.setAttribute('aria-hidden', 'true');
-        const use = document.createElementNS(SVG_NS, 'use');
-        use.setAttribute('width', '100%');
-        use.setAttribute('height', '100%');
-        use.setAttribute('href', `#harness-${harnessIconId(provider)}`);
-        svg.append(use);
-        badge.append(svg);
-        return badge;
+        return createHarnessIconBadge(provider || current?.activeSession?.provider, size);
       }
-      function warMetaMetric(kind, valueText, tooltip) {
-        const item = document.createElement('span');
-        item.className = 'war-meta-item';
-        item.title = tooltip;
-        item.setAttribute('aria-label', tooltip);
+      function metricSvg(kind) {
         const svg = document.createElementNS(SVG_NS, 'svg');
         svg.setAttribute('viewBox', '0 0 24 24');
         svg.setAttribute('fill', 'none');
@@ -2184,16 +2161,58 @@
           path.setAttribute('d', d);
           svg.append(path);
         }
+        return svg;
+      }
+      function warMetaMetric(kind, valueText, tooltip) {
+        const item = document.createElement('span');
+        item.className = kind === 'speed' ? 'war-meta-item is-speed' : 'war-meta-item';
+        item.title = tooltip;
+        item.setAttribute('aria-label', tooltip);
         const text = document.createElement('span');
         text.textContent = valueText;
-        item.append(svg, text);
+        item.append(metricSvg(kind), text);
         return item;
       }
-      function usageRow(row, max) {
+      function renderShareBar(list, totalTokens) {
+        const bar = byId('war-share-bar');
+        const positive = list.filter(row => numeric(row.tokens) && row.tokens > 0);
+        const total = numeric(totalTokens) && totalTokens > 0
+          ? totalTokens : positive.reduce((sum, row) => sum + row.tokens, 0);
+        const colors = new Map();
+        if (!positive.length || total <= 0) {
+          bar.hidden = true;
+          bar.replaceChildren();
+          return colors;
+        }
+        const segments = [];
+        for (const [index, row] of positive.entries()) {
+          const color = SHARE_COLORS[index % SHARE_COLORS.length];
+          colors.set(`${row.provider}\u0000${row.model}`, color);
+          const seg = document.createElement('span');
+          seg.className = 'stacked-seg';
+          seg.style.width = `${(row.tokens / total) * 100}%`;
+          seg.style.background = color;
+          const pct = percent(row.tokens / total, 1);
+          seg.title = `${row.model || t('unknown-model')} · ${formatMillionTokens(row.tokens)} (${pct})`;
+          segments.push(seg);
+        }
+        bar.replaceChildren(...segments);
+        bar.hidden = false;
+        return colors;
+      }
+      function usageRow(row, speedByModel, dotColor) {
         const item = document.createElement('li');
         item.className = 'war-row';
+        item.title = `${t('fresh-input-amount', formatMillionTokens(row.freshInput))} · ${t('output-amount', formatMillionTokens(row.output))} · ${t('cache-read-amount', formatMillionTokens(row.cacheRead))}`;
         const head = document.createElement('div');
         head.className = 'war-row-head';
+        if (dotColor) {
+          const dot = document.createElement('span');
+          dot.className = 'share-dot';
+          dot.style.background = dotColor;
+          dot.setAttribute('aria-hidden', 'true');
+          head.append(dot);
+        }
         const model = document.createElement('span');
         model.className = 'war-model';
         model.textContent = row.model || t('unknown-model');
@@ -2202,21 +2221,15 @@
         amount.className = 'war-amount';
         amount.textContent = formatMillionTokens(row.tokens);
         head.append(harnessBadge(row.provider, 18), model, amount);
-        const track = document.createElement('div');
-        track.className = 'war-track';
-        const fill = document.createElement('div');
-        fill.className = 'war-fill';
-        fill.style.width = `${max > 0 && numeric(row.tokens) ? Math.max(2, Math.round((row.tokens / max) * 100)) : 0}%`;
-        track.append(fill);
         const meta = document.createElement('div');
         meta.className = 'war-meta';
-        meta.append(
-          warMetaMetric('requests', formatCount(row.requests), t('requests-counted', formatCount(row.requests))),
-          warMetaMetric('input', formatMillionTokens(row.freshInput), t('fresh-input-amount', formatMillionTokens(row.freshInput))),
-          warMetaMetric('output', formatMillionTokens(row.output), t('output-amount', formatMillionTokens(row.output))),
-          warMetaMetric('cache', formatMillionTokens(row.cacheRead), t('cache-read-amount', formatMillionTokens(row.cacheRead)))
-        );
-        item.append(head, track, meta);
+        const reqText = `${formatCount(row.requests)} ${t('requests-unit')}`.trim();
+        meta.append(warMetaMetric('requests', reqText, t('requests-counted', formatCount(row.requests))));
+        const avgTps = speedByModel.get(row.model);
+        if (numeric(avgTps) && avgTps > 0) {
+          meta.append(warMetaMetric('speed', `${speedText(avgTps)} tokens/s`, t('leaderboard-average-speed')));
+        }
+        item.append(head, meta);
         return item;
       }
       function renderUsage() {
@@ -2232,28 +2245,43 @@
           tab.setAttribute('aria-selected', String(tab.dataset.range === usageRange));
         }
         byId('war-tokens').textContent = range ? formatMillionTokens(range.tokens) : '—';
-        byId('war-requests').textContent = range ? formatCount(range.requests) : '—';
+        const hasRequests = numeric(range?.requests);
+        byId('war-requests').textContent = hasRequests ? formatCount(range.requests) : '—';
+        byId('war-requests-unit').hidden = !hasRequests;
         const maxSpeed = range?.maxSpeed;
         const hasMaxSpeed = Number.isFinite(maxSpeed?.tokensPerSecond) && maxSpeed.tokensPerSecond > 0;
         byId('war-max-speed-row').hidden = usageRange !== 'today';
         byId('war-max-speed').textContent = hasMaxSpeed ? speedText(maxSpeed.tokensPerSecond) : '—';
         byId('war-max-speed-unit').hidden = !hasMaxSpeed;
         const list = Array.isArray(range?.rows) ? range.rows : [];
-        const signature = JSON.stringify([usageRange, usageMode, list, range?.speeds]);
+        const speeds = Array.isArray(range?.speeds) ? range.speeds : [];
+        const signature = JSON.stringify([usageRange, usageMode, usageSort, list, speeds]);
         if (signature !== drawnUsage) {
           drawnUsage = signature;
-          const max = list.reduce((top, row) => Math.max(top, numeric(row.tokens) ? row.tokens : 0), 0);
-          byId('war-rows').replaceChildren(...list.map(row => usageRow(row, max)));
-          renderSpeeds(range);
+          const colors = renderShareBar(list, range?.tokens);
+          if (usageSort === 'speed') {
+            const tokensByModel = new Map();
+            for (const row of list) {
+              if (!row.model || !numeric(row.tokens)) continue;
+              tokensByModel.set(row.model, (tokensByModel.get(row.model) ?? 0) + row.tokens);
+            }
+            byId('war-rows').replaceChildren(...speeds.map((entry, index) => speedRow(entry, index, tokensByModel)));
+          } else {
+            const speedByModel = new Map(speeds.map(entry => [entry.model, entry.tokensPerSecond]));
+            byId('war-rows').replaceChildren(...list.map(row => usageRow(row, speedByModel, colors.get(`${row.provider}\u0000${row.model}`))));
+          }
         }
-        byId('war-empty').hidden = !range || list.length > 0;
+        const emptyEl = byId('war-empty');
+        const hasVisibleRows = usageSort === 'speed' ? speeds.length > 0 : list.length > 0;
+        emptyEl.firstElementChild.textContent = t(usageSort === 'speed' ? 'empty-model-speeds' : 'empty-usage');
+        emptyEl.hidden = !range || hasVisibleRows;
         renderHeatmap();
       }
       // 模型均速: mean per-request TPS per model over the selected window, fastest first; ranking comes from tps.summary.
       function speedText(tps) {
         return number(tps, tps < 1 ? 1 : 0);
       }
-      function speedRow(entry, index, max) {
+      function speedRow(entry, index, tokensByModel) {
         const item = document.createElement('li');
         item.className = 'war-row';
         const head = document.createElement('div');
@@ -2269,7 +2297,7 @@
         value.className = 'rank-tps';
         const unit = document.createElement('small');
         unit.textContent = 'tokens/s';
-        value.append(speedText(entry.tokensPerSecond), unit);
+        value.append(metricSvg('speed'), speedText(entry.tokensPerSecond), unit);
         head.append(rank);
         const seenIcons = new Set();
         for (const provider of entry.providers ?? []) {
@@ -2279,23 +2307,19 @@
           head.append(harnessBadge(provider, 18));
         }
         head.append(model, value);
-        const track = document.createElement('div');
-        track.className = 'war-track';
-        const fill = document.createElement('div');
-        fill.className = 'war-fill';
-        fill.style.width = `${max > 0 ? Math.max(2, Math.round((entry.tokensPerSecond / max) * 100)) : 0}%`;
-        track.append(fill);
         const meta = document.createElement('div');
         meta.className = 'war-meta';
-        meta.append(warMetaMetric('requests', formatCount(entry.samples), t('requests-counted', formatCount(entry.samples))));
-        item.append(head, track, meta);
+        const reqText = `${formatCount(entry.samples)} ${t('requests-unit')}`.trim();
+        meta.append(warMetaMetric('requests', reqText, t('requests-counted', formatCount(entry.samples))));
+        const totalTokens = tokensByModel.get(entry.model);
+        if (numeric(totalTokens) && totalTokens > 0) {
+          const tokens = document.createElement('span');
+          tokens.className = 'war-meta-tokens';
+          tokens.textContent = formatMillionTokens(totalTokens);
+          meta.append(tokens);
+        }
+        item.append(head, meta);
         return item;
-      }
-      function renderSpeeds(range) {
-        const list = Array.isArray(range?.speeds) ? range.speeds : [];
-        const max = list.reduce((top, entry) => Math.max(top, numeric(entry.tokensPerSecond) ? entry.tokensPerSecond : 0), 0);
-        byId('speed-rows').replaceChildren(...list.map((entry, index) => speedRow(entry, index, max)));
-        byId('speed-empty').hidden = !range || list.length > 0;
       }
       async function loadUsage() {
         if (!bridge || disposed || usagePending || typeof bridge.request !== 'function') return;
@@ -2325,12 +2349,19 @@
           renderUsage();
         });
       }
-      // One cell per local day over the last year, grouped by week.
+      for (const button of modelSortButtons) {
+        button.addEventListener('click', () => {
+          usageSort = button.dataset.modelSort;
+          for (const option of modelSortButtons) option.setAttribute('aria-pressed', String(option === button));
+          renderUsage();
+        });
+      }
+      // 365 stars in one unboxed 23-column star map, newest day at top-left, oldest at bottom.
       const HEAT_DAYS = 365;
       const localKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
       const dayLabel = date => locale.date(date, { dateStyle: 'full' });
       function renderHeatmap() {
-        const grid = byId('heat-grid'), months = byId('heat-months');
+        const grid = byId('heat-grid');
         const now = new Date();
         const parts = new Intl.DateTimeFormat('en-CA', { timeZone: usageSummary?.timeZone,
           year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(now);
@@ -2348,57 +2379,44 @@
         first.setDate(today.getDate() - (HEAT_DAYS - 1));
         const from = localKey(first);
         const byDay = new Map(daily.filter(entry => entry.day >= from && entry.day <= layout).map(entry => [entry.day, entry]));
-        const start = new Date(first);
-        start.setDate(start.getDate() - start.getDay());
-        const weeks = Math.ceil((Math.round((today - start) / 86_400_000) + 1) / 7);
         const values = [...byDay.values()].map(entry => entry.tokens).filter(value => numeric(value) && value > 0).sort((a, b) => a - b);
         const quantile = p => values.length ? values[Math.min(values.length - 1, Math.floor(values.length * p))] : 0;
         const [t1, t2, t3] = [quantile(0.25), quantile(0.5), quantile(0.75)];
         const levelOf = tokens => (tokens <= 0 ? 0 : tokens <= t1 ? 1 : tokens <= t2 ? 2 : tokens <= t3 ? 3 : 4);
-        const cells = [], labels = [];
-        let lastMonth = -1, activeDays = 0, total = 0;
-        for (let week = 0; week < weeks; week++) {
-          for (let weekday = 0; weekday < 7; weekday++) {
-            const date = new Date(start);
-            date.setDate(start.getDate() + week * 7 + weekday);
-            const outside = date < first || date > today;
-            const entry = byDay.get(localKey(date));
-            const tokens = numeric(entry?.tokens) ? entry.tokens : 0;
-            if (tokens > 0) { activeDays += 1; total += tokens; }
-            const cell = rebuild ? document.createElement('span') : heatCells[cells.length];
-            const style = `heat-cell lv${levelOf(tokens)}${outside ? ' outside' : ''}`;
-            const requests = numeric(entry?.requests) ? entry.requests : 0;
-            if (cell.className !== style) cell.className = style;
-            if (rebuild || cell.dataset.tokens !== String(tokens) || cell.dataset.requests !== String(requests)) {
-              cell.dataset.tokens = String(tokens);
-              cell.dataset.requests = String(requests);
-              if (rebuild) cell.dataset.label = dayLabel(date);
-              cell.setAttribute('aria-label', tokens > 0
-                ? t('heatmap-day-usage', cell.dataset.label, formatMillionTokens(tokens), formatCount(requests))
-                : t('heatmap-day-empty', cell.dataset.label));
-            }
-            cells.push(cell);
-            if (rebuild && !outside && (weekday === 0 || localKey(date) === from) && date.getMonth() !== lastMonth) {
-              lastMonth = date.getMonth();
-              const label = document.createElement('span');
-              label.textContent = locale.date(date, { month: 'short' });
-              label.style.left = `${week * 10}px`;
-              labels.push(label);
-            }
+        const cells = [];
+        let activeDays = 0;
+        for (let offset = 0; offset < HEAT_DAYS; offset++) {
+          const date = new Date(today);
+          date.setDate(today.getDate() - offset);
+          const entry = byDay.get(localKey(date));
+          const tokens = numeric(entry?.tokens) ? entry.tokens : 0;
+          if (tokens > 0) activeDays += 1;
+          const cell = rebuild ? document.createElement('span') : heatCells[offset];
+          const style = `heat-cell lv${levelOf(tokens)}`;
+          const requests = numeric(entry?.requests) ? entry.requests : 0;
+          if (cell.className !== style) cell.className = style;
+          if (rebuild || cell.dataset.tokens !== String(tokens) || cell.dataset.requests !== String(requests)) {
+            cell.dataset.tokens = String(tokens);
+            cell.dataset.requests = String(requests);
+            if (rebuild) cell.dataset.label = dayLabel(date);
+            cell.setAttribute('aria-label', tokens > 0
+              ? t('heatmap-day-usage', cell.dataset.label, formatMillionTokens(tokens), formatCount(requests))
+              : t('heatmap-day-empty', cell.dataset.label));
           }
+          cells.push(cell);
         }
         if (rebuild) {
           heatCells = cells;
           grid.replaceChildren(...cells);
-          months.replaceChildren(...labels);
         }
-        byId('heat-total').textContent = usageSummary ? t('recent-usage-total', formatMillionTokens(total), number(activeDays)) : t('calculating-usage');
+        byId('heat-total').textContent = usageSummary ? t('heatmap-active-days', number(activeDays)) : t('calculating-usage');
       }
       const heatTip = byId('heat-tip');
       function showHeatTip(cell) {
         heatTip.textContent = Number(cell.dataset.tokens) > 0
           ? t('heatmap-day-usage', cell.dataset.label, formatMillionTokens(Number(cell.dataset.tokens)), formatCount(Number(cell.dataset.requests)))
           : t('heatmap-day-empty', cell.dataset.label);
+        heatTip.style.left = '0px';
         heatTip.hidden = false;
         const host = byId('heat').getBoundingClientRect(), rect = cell.getBoundingClientRect();
         const half = heatTip.offsetWidth / 2;
@@ -2415,8 +2433,6 @@
       byId('heat').addEventListener('scroll', () => { heatTip.hidden = true; }, { capture: true, passive: true });
       usageGroup.addEventListener('tps-view-opened', () => {
         renderUsage();
-        const scroller = byId('heat-scroll');
-        scroller.scrollLeft = scroller.scrollWidth;   // open on the latest weeks, as GitHub does
         if (!usageSummary) void loadUsage();
       });
       ui['current-data'].addEventListener('tps-view-opened', render);
@@ -2964,8 +2980,15 @@
           const speed = document.createElement('strong');
           meta.className = 'ladder-recent-meta';
           tools.className = 'ladder-recent-tools';
-          tools.textContent = toolText(recent?.topModel, recent?.topCli);
-          tools.title = tools.textContent;
+          const label = toolText(recent?.topModel, recent?.topCli);
+          tools.title = label;
+          if (typeof document.createElementNS === 'function' && recent?.topCli) {
+            const nameText = document.createElement('span');
+            nameText.textContent = label;
+            tools.append(createHarnessIconBadge(recent.topCli, 16), nameText);
+          } else {
+            tools.textContent = label;
+          }
           speed.className = 'ladder-recent-speed';
           speed.textContent = speedText(latestPoint?.avgTps ?? 0);
           speed.title = t('leaderboard-average-speed');
@@ -3048,8 +3071,15 @@
             const tools = document.createElement('span');
             meta.className = 'ladder-recent ladder-recent-meta';
             tools.className = 'ladder-recent-tools';
-            tools.textContent = toolText(row.topModel, row.topCli);
-            tools.title = tools.textContent;
+            const label = toolText(row.topModel, row.topCli);
+            tools.title = label;
+            if (typeof document.createElementNS === 'function' && row.topCli) {
+              const nameText = document.createElement('span');
+              nameText.textContent = label;
+              tools.append(createHarnessIconBadge(row.topCli, 16), nameText);
+            } else {
+              tools.textContent = label;
+            }
             meta.append(tools);
             if (Number.isSafeInteger(row.deltaTokens)) {
               const tokens = document.createElement('bdi');

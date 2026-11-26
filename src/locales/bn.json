@@ -41,7 +41,7 @@
   "model-speed-description": "সেশন লগ থেকে গড় আউটপুট গতি",
   "model-speed-list": "মডেল অনুযায়ী গড় আউটপুট গতি, দ্রুততম আগে",
   "empty-model-speeds": "এই সময়ে কোনো মডেলের যথেষ্ট অনুরোধ নেই",
-  "usage-heatmap": "ব্যবহারের হিটম্যাপ",
+  "usage-heatmap": "সক্রিয়তার তারকা মানচিত্র",
   "heatmap-description": "গত ৩৬৫ দিনের দৈনিক ব্যবহার (M, ক্যাশ সহ)",
   "heatmap-label": "গত ৩৬৫ দিনের দৈনিক ব্যবহারের হিটম্যাপ (M)",
   "heatmap-less": "কম",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "জুম",
   "settings-bg-reset-position": "অবস্থান রিসেট",
   "open-repository": "GitHub রিপোজিটরি খুলুন",
-  "star-repository": "পছন্দ হলে GitHub-এ একটি Star দিন!"
+  "star-repository": "পছন্দ হলে GitHub-এ একটি Star দিন!",
+  "requests-unit": "বার",
+  "model-distribution": "মডেল বণ্টন",
+  "sort-by-usage": "ব্যবহার",
+  "sort-by-speed": "গতি",
+  "heatmap-active-days": "{0} দিন সক্রিয়"
 }

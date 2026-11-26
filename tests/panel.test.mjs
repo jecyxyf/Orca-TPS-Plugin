@@ -88,11 +88,11 @@ test('per-request card TPS value keeps large 20px font and is not clobbered by m
   assert.equal(speedValue.color, undefined, '.speed-value must inherit var(--speed) from .speed instead of green ranking text');
   assert.equal(speedPill['margin-top'], undefined, 'per-request .speed pill must not inherit section margin-top');
 
-  // Ranking section (#speed) and speedRow() must not reuse .speed or .speed-value classes.
-  const rankingSection = html.match(/<section[^>]*\bid="speed"[^>]*>/i)?.[0] ?? '';
-  assert.ok(rankingSection, 'model speed ranking section (#speed) must remain present');
+  // Model distribution section (#model-dist) and speedRow() must not reuse .speed or .speed-value classes.
+  const rankingSection = html.match(/<section[^>]*\bid="model-dist"[^>]*>/i)?.[0] ?? '';
+  assert.ok(rankingSection, 'model distribution section (#model-dist) must exist');
   const rankingClasses = (rankingSection.match(/\bclass="([^"]*)"/i)?.[1] ?? '').split(/\s+/);
-  assert.ok(!rankingClasses.includes('speed'), '#speed ranking section must not share the .speed pill class');
+  assert.ok(!rankingClasses.includes('speed'), '#model-dist section must not share the .speed pill class');
   assert.ok(!/value\.className\s*=\s*['"]speed-value['"]/.test(html), 'speedRow() must not assign .speed-value');
 });
 
@@ -160,6 +160,8 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   const warTotals = /<div class="war-totals">([\s\S]*?)<\/div>\s*<\/section>/.exec(html)?.[1] ?? '';
   assert.equal((warTotals.match(/class="war-stat-icon\b/g) ?? []).length, 3);
   assert.doesNotMatch(warTotals, /class="war-label"/);
+  assert.match(warTotals, /id="war-requests"[\s\S]*?id="war-requests-unit"[^>]*data-i18n="requests-unit"/);
+  assert.match(warTotals, /class="war-stat-icon requests"[\s\S]*?M4 9h16/);
   assert.match(html, /\.war-totals\s*\{[^}]*grid-auto-flow:\s*column/);
   assert.match(html, /\.war-value\.speed-max\s*\{\s*color:\s*var\(--speed\)/);
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
@@ -182,13 +184,34 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.match(html, /@media \(max-width: 339px\)[\s\S]*?\.war-period-tabs \.war-tab \{ padding: 5px 3px; font-size: 12px; \}/);
   assert.match(html, /@media \(max-width: 339px\)[\s\S]*?\.war-value \{ font-size: 17px; \}/);
   assert.doesNotMatch(html, /speed-note|model-speed-description|model-speed-insufficient-samples|model-list-truncated|class="war-agent"/);
-  assert.match(html, /#war-rows \.war-meta\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*5\.2em 6\.2em 6\.2em minmax\(0, 1fr\)/);
+  assert.match(html, /id="war-share-bar"/);
+  assert.deepEqual([...html.matchAll(/data-model-sort="([^"]+)" aria-pressed="([^"]+)"/g)]
+    .map(match => match.slice(1)), [['usage', 'true'], ['speed', 'false']]);
   assert.match(html, /function harnessBadge\(provider/);
   assert.match(html, /head\.append\(rank\);[\s\S]*?head\.append\(harnessBadge\(provider, 18\)\)[\s\S]*?head\.append\(model, value\)/);
   assert.match(html, /function warMetaMetric\(kind/);
-  assert.match(html, /output:\s*\['M12 15V3m-4 4 4-4 4 4'/);
-  assert.match(html, /cache:\s*\['M3 5a9 3 0 1 0 18 0a9 3 0 1 0-18 0'/);
-  assert.match(html, /warMetaMetric\('requests'[\s\S]*?warMetaMetric\('input'[\s\S]*?warMetaMetric\('output'[\s\S]*?warMetaMetric\('cache'/);
+  assert.match(html, /requests:\s*\['M4 9h16'/);
+  assert.match(html, /speed:\s*\['M13 2 4 14h7l-1 8 9-12h-7l1-8Z'\]/);
+  assert.match(html, /warMetaMetric\('requests'[\s\S]*?warMetaMetric\('speed'/);
+  assert.doesNotMatch(html, /id="heat-sub"|id="heat-months"|id="heat-scroll"|class="heat-foot"|class="heat-legend"|heat-month-tile/);
+  assert.match(html, /const HEAT_DAYS = 365;/);
+  assert.match(html, /date\.setDate\(today\.getDate\(\) - offset\)/);
+  assert.match(html, /t\('heatmap-active-days'/);
+  assert.equal(css.get('#usage')['grid-template-rows'], 'auto minmax(150px, 1fr) auto');
+  assert.equal(css.get('.heat').height, 'clamp(220px, 32dvh, 296px)');
+  assert.equal(css.get('#war')['justify-content'], 'center');
+  assert.equal(css.get('.usage-breakdown').display, 'contents');
+  assert.equal(css.get('.heat-star-grid')['grid-template-columns'], 'repeat(23, minmax(0, 1fr))');
+  assert.equal(css.get('.heat-cell')['border-radius'], '50%');
+  assert.equal(css.get('.heat-cell')['clip-path'], undefined);
+  assert.equal(css.get('.heat-cell.lv4')?.['clip-path'], undefined);
+  assert.equal(css.get('.heat-tip')['white-space'], 'nowrap');
+  assert.equal(css.get('.heat-tip').width, 'max-content');
+  assert.match(html, /heatTip\.style\.left = '0px';\s*heatTip\.hidden = false;/);
+  assert.match(html, /class="ladder-controls-head"/);
+  assert.equal(css.get('.ladder-total').background, 'transparent');
+  assert.equal(css.get('.ladder-tabs .war-tab')['font-size'], '13px');
+  assert.equal(css.get('.ladder-recent-meta').order, '-1');
   assert.deepEqual([...html.matchAll(/data-ladder-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
     .map(match => match.slice(1)), expectedModes);
   assert.match(html, /usageMode = 'calendar'/);
@@ -707,15 +730,10 @@ test('top-right header places language picker beside settings gear and modal off
   assert.equal(css.get('.war-controls').display, 'grid');
   assert.equal(css.get('.war-period-tabs').width, '100%');
   assert.equal(css.get('.usage-breakdown .section-title')['font-size'], '14px');
-  assert.equal(css.get('.usage-ranking .section-title')['border-bottom'], '1px solid var(--line)');
+  assert.equal(css.get('.model-dist-head')['border-bottom'], '1px solid var(--line)');
   assert.equal(css.get('.rank-tps').background, 'transparent');
-  assert.equal(css.get('#speed-rows .war-meta-item:first-child')['min-width'], '5.2em');
-  assert.equal(css.get('.war-track').height, '9px');
-  assert.match(html, /@keyframes usage-stars-drift\b[\s\S]*?@keyframes usage-stars-twinkle\b/);
-  assert.match(html, /@keyframes speed-gradient-flow\b/);
-  assert.match(css.get('#war-rows .war-fill::before').animation, /usage-stars-drift/);
-  assert.match(css.get('#war-rows .war-fill::after').animation, /usage-stars-twinkle/);
-  assert.match(css.get('#speed .war-fill::before').animation, /speed-gradient-flow/);
+  assert.equal(css.get('.stacked-bar').height, '11px');
+  assert.equal(css.get('.heat-head')['border-bottom'], '1px solid var(--line)');
 
   assert.equal(css.get('.metrics')['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)');
   const cardCode = /function formatTps\(record\) \{[\s\S]*?(?=\n      \/\/ 用量战况)/.exec(html)?.[0] ?? '';

@@ -41,7 +41,7 @@
   "model-speed-description": "Durchschnittliche Ausgabegeschwindigkeit aus Sitzungsprotokollen",
   "model-speed-list": "Durchschnittliche Ausgabegeschwindigkeit nach Modell, schnellste zuerst",
   "empty-model-speeds": "Für diesen Zeitraum liegen zu wenige Anfragen pro Modell vor",
-  "usage-heatmap": "Verbrauchs-Heatmap",
+  "usage-heatmap": "Aktivitäts-Sternenkarte",
   "heatmap-description": "Täglicher Verbrauch in den letzten 365 Tagen (M, einschließlich Cache)",
   "heatmap-label": "Heatmap des täglichen Verbrauchs in den letzten 365 Tagen (M)",
   "heatmap-less": "Weniger",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "Zoom",
   "settings-bg-reset-position": "Position zurücksetzen",
   "open-repository": "GitHub-Repository öffnen",
-  "star-repository": "Gefällt dir das Plugin? Gib ihm einen Stern auf GitHub!"
+  "star-repository": "Gefällt dir das Plugin? Gib ihm einen Stern auf GitHub!",
+  "requests-unit": "Anfr.",
+  "model-distribution": "Modellverteilung",
+  "sort-by-usage": "Nutzung",
+  "sort-by-speed": "Tempo",
+  "heatmap-active-days": "{0} aktive Tage"
 }

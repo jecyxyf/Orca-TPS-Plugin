@@ -41,7 +41,7 @@
   "model-speed-description": "सत्र लॉग से औसत आउटपुट गति",
   "model-speed-list": "औसत आउटपुट गति के अनुसार मॉडल, सबसे तेज़ पहले",
   "empty-model-speeds": "इस अवधि में किसी मॉडल के पर्याप्त अनुरोध नहीं हैं",
-  "usage-heatmap": "उपयोग का हीटमैप",
+  "usage-heatmap": "सक्रियता स्टार मैप",
   "heatmap-description": "पिछले 365 दिनों का दैनिक उपयोग (M, कैश सहित)",
   "heatmap-label": "पिछले 365 दिनों का दैनिक उपयोग हीटमैप (M)",
   "heatmap-less": "कम",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "ज़ूम",
   "settings-bg-reset-position": "स्थिति रीसेट करें",
   "open-repository": "GitHub रिपॉज़िटरी खोलें",
-  "star-repository": "पसंद आया? GitHub पर Star देकर समर्थन करें!"
+  "star-repository": "पसंद आया? GitHub पर Star देकर समर्थन करें!",
+  "requests-unit": "बार",
+  "model-distribution": "मॉडल हिस्सेदारी",
+  "sort-by-usage": "उपयोग",
+  "sort-by-speed": "गति",
+  "heatmap-active-days": "{0} दिन सक्रिय"
 }

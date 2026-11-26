@@ -41,7 +41,7 @@
   "model-speed-description": "Kecepatan keluaran rata-rata dari log sesi",
   "model-speed-list": "Kecepatan keluaran rata-rata per model, tercepat dahulu",
   "empty-model-speeds": "Tidak ada model dengan cukup permintaan dalam periode ini",
-  "usage-heatmap": "Peta panas penggunaan",
+  "usage-heatmap": "Peta bintang aktivitas",
   "heatmap-description": "Penggunaan harian dalam 365 hari terakhir (M, termasuk cache)",
   "heatmap-label": "Peta panas penggunaan harian selama 365 hari terakhir (M)",
   "heatmap-less": "Lebih sedikit",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "Zoom",
   "settings-bg-reset-position": "Atur ulang posisi",
   "open-repository": "Buka repositori GitHub",
-  "star-repository": "Suka plugin ini? Beri Star di GitHub!"
+  "star-repository": "Suka plugin ini? Beri Star di GitHub!",
+  "requests-unit": "req",
+  "model-distribution": "Distribusi model",
+  "sort-by-usage": "Pemakaian",
+  "sort-by-speed": "Kecepatan",
+  "heatmap-active-days": "{0} hari aktif"
 }

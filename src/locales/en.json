@@ -41,7 +41,7 @@
   "model-speed-description": "Average output speed from session logs",
   "model-speed-list": "Average output speed by model, fastest first",
   "empty-model-speeds": "No models have enough requests in this period",
-  "usage-heatmap": "Usage heatmap",
+  "usage-heatmap": "Activity star map",
   "heatmap-description": "Daily usage over the past 365 days (M, including cache)",
   "heatmap-label": "Daily usage heatmap for the past 365 days (M)",
   "heatmap-less": "Less",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "Zoom",
   "settings-bg-reset-position": "Reset position",
   "open-repository": "Open GitHub repository",
-  "star-repository": "Enjoying TPS Plugin? Give it a Star on GitHub!"
+  "star-repository": "Enjoying TPS Plugin? Give it a Star on GitHub!",
+  "requests-unit": "req",
+  "model-distribution": "Model share",
+  "sort-by-usage": "Usage",
+  "sort-by-speed": "Speed",
+  "heatmap-active-days": "{0} active days"
 }

@@ -41,7 +41,7 @@
   "model-speed-description": "根据会话日志计算的平均输出速度",
   "model-speed-list": "按模型的平均输出速度，从高到低",
   "empty-model-speeds": "这段时间还没有样本充足的模型",
-  "usage-heatmap": "用量热力图",
+  "usage-heatmap": "活跃星图",
   "heatmap-description": "近 365 天每日用量（M，含缓存）",
   "heatmap-label": "近 365 天每日用量热力图（M）",
   "heatmap-less": "少",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "缩放",
   "settings-bg-reset-position": "位置复位",
   "open-repository": "打开 GitHub 代码仓库",
-  "star-repository": "喜欢的话，去 GitHub 点个 Star 支持一下！"
+  "star-repository": "喜欢的话，去 GitHub 点个 Star 支持一下！",
+  "requests-unit": "次",
+  "model-distribution": "模型占比分布",
+  "sort-by-usage": "按用量",
+  "sort-by-speed": "按均速",
+  "heatmap-active-days": "{0} 天活跃"
 }

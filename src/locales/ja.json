@@ -41,7 +41,7 @@
   "model-speed-description": "セッションログに基づく平均出力速度",
   "model-speed-list": "モデル別の平均出力速度（速い順）",
   "empty-model-speeds": "この期間にリクエスト数が十分なモデルはありません",
-  "usage-heatmap": "使用量ヒートマップ",
+  "usage-heatmap": "稼働スターマップ",
   "heatmap-description": "過去 365 日間の日別使用量（M、キャッシュを含む）",
   "heatmap-label": "過去 365 日間の日別使用量ヒートマップ（M）",
   "heatmap-less": "少ない",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "拡大率",
   "settings-bg-reset-position": "位置をリセット",
   "open-repository": "GitHub リポジトリを開く",
-  "star-repository": "気に入ったら GitHub で Star をお願いします！"
+  "star-repository": "気に入ったら GitHub で Star をお願いします！",
+  "requests-unit": "回",
+  "model-distribution": "モデル別内訳",
+  "sort-by-usage": "使用量",
+  "sort-by-speed": "平均速度",
+  "heatmap-active-days": "{0} 日稼働"
 }

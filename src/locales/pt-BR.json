@@ -41,7 +41,7 @@
   "model-speed-description": "Velocidade média de saída com base nos registros da sessão",
   "model-speed-list": "Velocidade média de saída por modelo, do mais rápido ao mais lento",
   "empty-model-speeds": "Nenhum modelo tem solicitações suficientes neste período",
-  "usage-heatmap": "Mapa de calor de uso",
+  "usage-heatmap": "Mapa estelar de atividade",
   "heatmap-description": "Uso diário nos últimos 365 dias (M, inclui cache)",
   "heatmap-label": "Mapa de calor do uso diário nos últimos 365 dias (M)",
   "heatmap-less": "Menos",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "Zoom",
   "settings-bg-reset-position": "Redefinir posição",
   "open-repository": "Abrir repositório no GitHub",
-  "star-repository": "Gostou? Dê uma estrela no GitHub!"
+  "star-repository": "Gostou? Dê uma estrela no GitHub!",
+  "requests-unit": "req",
+  "model-distribution": "Distribuição por modelo",
+  "sort-by-usage": "Uso",
+  "sort-by-speed": "Velocidade",
+  "heatmap-active-days": "{0} dias ativos"
 }

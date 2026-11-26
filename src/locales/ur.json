@@ -41,7 +41,7 @@
   "model-speed-description": "سیشن لاگز کے مطابق اوسط آؤٹ پٹ رفتار",
   "model-speed-list": "ماڈل کے لحاظ سے اوسط آؤٹ پٹ رفتار، سب سے تیز پہلے",
   "empty-model-speeds": "اس مدت میں کسی ماڈل کی کافی درخواستیں نہیں ہیں",
-  "usage-heatmap": "استعمال کا ہیٹ میپ",
+  "usage-heatmap": "فعالیت کا ستارہ نقشہ",
   "heatmap-description": "گزشتہ 365 دن کا یومیہ استعمال (M، کیش سمیت)",
   "heatmap-label": "گزشتہ 365 دن کے یومیہ استعمال کا ہیٹ میپ (M)",
   "heatmap-less": "کم",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "زوم",
   "settings-bg-reset-position": "پوزیشن ری سیٹ کریں",
   "open-repository": "GitHub ریپوزٹری کھولیں",
-  "star-repository": "پسند آیا؟ GitHub پر Star دے کر سپورٹ کریں!"
+  "star-repository": "پسند آیا؟ GitHub پر Star دے کر سپورٹ کریں!",
+  "requests-unit": "بار",
+  "model-distribution": "ماڈل تقسیم",
+  "sort-by-usage": "استعمال",
+  "sort-by-speed": "رفتار",
+  "heatmap-active-days": "{0} دن فعال"
 }

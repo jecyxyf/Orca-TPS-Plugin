@@ -41,7 +41,7 @@
   "model-speed-description": "Средняя скорость вывода по журналам сессий",
   "model-speed-list": "Средняя скорость вывода по моделям, сначала самые быстрые",
   "empty-model-speeds": "За этот период ни у одной модели нет достаточного числа запросов",
-  "usage-heatmap": "Тепловая карта расхода",
+  "usage-heatmap": "Карта активности",
   "heatmap-description": "Ежедневный расход за последние 365 дней (M, включая кэш)",
   "heatmap-label": "Тепловая карта ежедневного расхода за последние 365 дней (M)",
   "heatmap-less": "Меньше",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "Масштаб",
   "settings-bg-reset-position": "Сбросить позицию",
   "open-repository": "Открыть репозиторий GitHub",
-  "star-repository": "Нравится плагин? Поставьте Star на GitHub!"
+  "star-repository": "Нравится плагин? Поставьте Star на GitHub!",
+  "requests-unit": "запр.",
+  "model-distribution": "Доля моделей",
+  "sort-by-usage": "Объём",
+  "sort-by-speed": "Скорость",
+  "heatmap-active-days": "{0} дн. активности"
 }

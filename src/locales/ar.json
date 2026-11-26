@@ -41,7 +41,7 @@
   "model-speed-description": "متوسط سرعة الإخراج وفق سجلات الجلسات",
   "model-speed-list": "متوسط سرعة الإخراج حسب النموذج، من الأسرع إلى الأبطأ",
   "empty-model-speeds": "لا توجد نماذج لها طلبات كافية في هذه الفترة",
-  "usage-heatmap": "خريطة الاستخدام الحرارية",
+  "usage-heatmap": "خريطة نجوم النشاط",
   "heatmap-description": "الاستخدام اليومي خلال آخر 365 يومًا (M، يشمل الذاكرة المؤقتة)",
   "heatmap-label": "خريطة حرارية للاستخدام اليومي خلال آخر 365 يومًا (M)",
   "heatmap-less": "أقل",
@@ -287,5 +287,10 @@
   "settings-bg-zoom": "التكبير",
   "settings-bg-reset-position": "إعادة ضبط الموضع",
   "open-repository": "فتح مستودع GitHub",
-  "star-repository": "هل أعجبك الإضافة؟ ادعمنا بنجمة على GitHub!"
+  "star-repository": "هل أعجبك الإضافة؟ ادعمنا بنجمة على GitHub!",
+  "requests-unit": "طلب",
+  "model-distribution": "توزيع النماذج",
+  "sort-by-usage": "الاستخدام",
+  "sort-by-speed": "السرعة",
+  "heatmap-active-days": "{0} يوم نشاط"
 }
