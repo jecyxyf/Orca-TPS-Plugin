@@ -399,8 +399,7 @@
     .ladder-controls-main { flex: 1; min-width: 0; }
     .ladder-controls-actions { display: flex; align-items: center; gap: 6px; flex: none; min-height: 28px; }
     .ladder-personal-data { min-width: 0; }
-    .ladder-rank-card { scrollbar-width: thin; scrollbar-gutter: stable; }
-    .ladder-rank-card { display: flex; flex: 1; flex-direction: column; min-block-size: 224px; overflow: hidden; }
+    .ladder-rank-card { display: flex; flex: 1; flex-direction: column; min-block-size: 224px; overflow: hidden; padding: 2px 0 0; }
     .ladder-account-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
     .ladder-upload-sub {
       display: inline-flex; align-items: center; gap: 4px; min-width: 0;
@@ -429,7 +428,7 @@
     #ladder-ranking-notice { overflow-y: auto; scrollbar-width: thin; }
     #ladder-ranking-content { display: flex; flex: 1; flex-direction: column; min-block-size: 0; }
     #ladder-ranking-content > :not(.ladder-ranking-scroll) { flex: none; }
-    .ladder-ranking-scroll { flex: 1; min-block-size: 0; scrollbar-gutter: stable; padding-inline-end: 6px; }
+    .ladder-ranking-scroll { flex: 1; min-block-size: 0; }
     .war-tabs.ladder-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 8px; }
     .ladder-tabs .war-tab { min-width: 0; padding: 6px 4px; font-size: 13px; overflow-wrap: anywhere; }
     html:lang(zh-CN) .ladder-tabs { grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); }
@@ -579,7 +578,7 @@
     .ladder-preview { padding: 9px 11px; border-radius: 13px; background: var(--button-bg); }
     .ladder-preview p { margin: 0 0 6px; }
     .ladder-preview .ladder-note { margin-bottom: 8px; }
-    .ladder-rows { margin: 6px 0 0; padding: 0; list-style: none; }
+    .ladder-rows { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
     .ladder-rows:empty { margin: 0; }
     .ladder-rows li {
       --ladder-row-size: 28px;
@@ -590,15 +589,19 @@
         "rank   .      name   total"
         "recent recent recent recent"
         "time   time   time   time";
-      row-gap: 4px; align-items: center; padding: 9px 2px;
-      border-top: 1px solid var(--line); font-variant-numeric: tabular-nums;
+      row-gap: 4px; align-items: center; padding: 10px 12px;
+      border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line));
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--record-card-bg, var(--surface)) var(--record-card-opacity, 100%), transparent);
+      backdrop-filter: var(--record-card-blur, none);
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), var(--shadow);
+      font-variant-numeric: tabular-nums;
     }
     .ladder-rows li.ladder-self {
-      padding-inline: 8px; border-radius: 12px; border-top-color: transparent;
-      background: color-mix(in srgb, var(--blue) 9%, transparent);
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 28%, transparent);
+      border-color: color-mix(in srgb, var(--blue) 48%, var(--line));
+      background: color-mix(in srgb, var(--blue) 11%, color-mix(in srgb, var(--record-card-bg, var(--surface)) var(--record-card-opacity, 100%), transparent));
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 20%, transparent), var(--shadow);
     }
-    .ladder-rows li.ladder-self + li { border-top-color: transparent; }
     .ladder-rank {
       grid-area: rank; display: grid; place-items: center; min-width: 2ch; height: 100%;
       padding-inline: 2px; color: var(--muted); font-size: 14px; font-weight: 850;
@@ -627,7 +630,6 @@
     .ladder-time { grid-area: time; color: var(--muted); font-size: 10.5px; }
     .ladder-rows .ladder-speed-row { --ladder-row-size: 28px; }
     .ladder-speed-row .ladder-total { color: var(--speed); white-space: nowrap; }
-    .ladder-speed-row .ladder-recent-meta { margin-top: 0; }
     .ladder-speed-tokens { flex: none; color: var(--blue); font-weight: 650; white-space: nowrap; }
     .ladder-recent { grid-area: recent; display: flex; flex-direction: column; min-width: 0; }
     .ladder-chart {
@@ -635,7 +637,8 @@
       background: transparent; color: var(--blue);
     }
     .ladder-chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; margin-top: 3px; }
-    .ladder-recent-meta { order: -1; display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+    .ladder-recent-meta { order: -1; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 6px; margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+    .ladder-speed-row .ladder-recent-meta { margin: 0; }
     .ladder-recent-tools { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .ladder-recent-tools span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .ladder-recent-tools .war-agent-icon { width: 16px; height: 16px; }
@@ -645,26 +648,22 @@
     /* Day-1 heartbeat ECG stage + side-profile Royal chibi character */
     .hb-stage {
       display: flex; align-items: center; gap: 8px; margin-top: 1px;
-      padding: 4px 8px; border-radius: 12px;
-      background: color-mix(in srgb, var(--tag-bg) 78%, transparent);
-      border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+      padding: 2px 0;
     }
     .hb-runner-box {
       position: relative; width: 44px; height: 32px; flex: none;
       display: grid; place-items: center;
-      border-bottom: 1px solid var(--line);
     }
     .hb-char { width: 36px; height: 30px; overflow: visible; }
     .hb-ecg-wrap { flex: 1; min-width: 0; position: relative; }
     .hb-ecg-svg { width: 100%; height: 28px; display: block; overflow: visible; }
     .hb-ecg-scan { animation: ecg-sweep var(--ecg-dur, 2.2s) linear infinite; }
     .hb-meta-right {
-      flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+      flex: none; display: flex; flex-direction: column; align-items: flex-end; justify-content: center;
       font-variant-numeric: tabular-nums;
     }
     .hb-bpm { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; line-height: 1.1; }
     .hb-heart { display: inline-block; animation: heart-beat var(--beat-dur, .9s) ease-in-out infinite; }
-    .hb-pose-tag { font-size: 9.5px; color: var(--muted); font-weight: 650; line-height: 1.1; white-space: nowrap; }
     .hb-bpm.is-flat { color: var(--muted); }
     .hb-bpm.is-flat .hb-heart { animation: none; opacity: .5; }
     .hb-bpm.is-low { color: var(--blue); }
@@ -1545,7 +1544,7 @@
           </dl>
         </div>
       </div>
-      <section class="ladder-card ladder-rank-card" aria-labelledby="ladder-rank-title">
+      <section class="ladder-rank-card" aria-labelledby="ladder-rank-title">
         <div class="ladder-toolbar ladder-rank-toolbar is-off" id="ladder-rank-toolbar">
           <h2 class="section-title" id="ladder-rank-title" data-i18n="period-rankings" data-i18n-title="period-rankings"></h2>
           <button class="ladder-rank-toggle" id="ladder-rank-toggle" type="button" role="switch" aria-checked="false"
@@ -3596,6 +3595,7 @@
         ecgWrap.append(ecgWaveSvg(pose, bpm));
         const meta = document.createElement('div');
         meta.className = 'hb-meta-right';
+        meta.title = t(pose.i18n);
         const bpmEl = document.createElement('span');
         bpmEl.className = `hb-bpm ${pose.cls}`;
         const heart = document.createElement('span');
@@ -3606,10 +3606,7 @@
         num.className = 'hb-bpm-num';
         num.textContent = String(bpm);
         bpmEl.append(heart, ' ', num);
-        const poseTag = document.createElement('span');
-        poseTag.className = 'hb-pose-tag';
-        poseTag.textContent = t(pose.i18n);
-        meta.append(bpmEl, poseTag);
+        meta.append(bpmEl);
         stage.append(runner, ecgWrap, meta);
         heartbeatObserver?.observe(stage);
         return stage;
@@ -3752,11 +3749,14 @@
             const label = toolText(recent?.topModel, recent?.topCli);
             tools.title = label;
             if (typeof document.createElementNS === 'function' && recent?.topCli) {
-              const nameText = document.createElement('span');
-              nameText.textContent = label;
-              tools.append(createHarnessIconBadge(recent.topCli, 16), nameText);
+              tools.append(createHarnessIconBadge(recent.topCli, 16));
+              if (recent?.topModel) {
+                const nameText = document.createElement('span');
+                nameText.textContent = recent.topModel;
+                tools.append(nameText);
+              }
             } else {
-              tools.textContent = label;
+              tools.textContent = recent?.topModel || label;
             }
           }
           speed.className = 'ladder-recent-speed';
@@ -3846,11 +3846,14 @@
               const label = toolText(row.topModel, row.topCli);
               tools.title = label;
               if (typeof document.createElementNS === 'function' && row.topCli) {
-                const nameText = document.createElement('span');
-                nameText.textContent = label;
-                tools.append(createHarnessIconBadge(row.topCli, 16), nameText);
+                tools.append(createHarnessIconBadge(row.topCli, 16));
+                if (row.topModel) {
+                  const nameText = document.createElement('span');
+                  nameText.textContent = row.topModel;
+                  tools.append(nameText);
+                }
               } else {
-                tools.textContent = label;
+                tools.textContent = row.topModel || label;
               }
             }
             meta.append(tools);

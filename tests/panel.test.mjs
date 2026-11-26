@@ -240,6 +240,7 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.equal(css.get('.ladder-total').background, 'transparent');
   assert.equal(css.get('.ladder-tabs .war-tab')['font-size'], '13px');
   assert.equal(css.get('.ladder-recent-meta').order, '-1');
+  assert.equal(css.get('.ladder-recent-meta')['flex-direction'], 'row');
   assert.deepEqual([...html.matchAll(/data-ladder-mode="([^"]+)" aria-pressed="([^"]+)"/g)]
     .map(match => match.slice(1)), expectedModes);
   assert.match(html, /usageMode = 'calendar'/);
@@ -481,7 +482,8 @@ test('today usage renders a heartbeat ECG stage with royal characters driven by 
     recent: { topModel: 'claude-opus', topCli: 'claude', points: [{ submittedAt: now - 10_000, deltaTokens: 100, avgTps: 88 }] }
   }, now, Infinity);
   assert.match(active.children[1].children[0].children[0].innerHTML, /pose-walk|ch-body/);
-  assert.equal(active.children[1].children[2].children[1].textContent, 'pose-walk');
+  assert.equal(active.children[1].children[2].title, 'pose-walk');
+  assert.equal(active.children[1].children[2].children.length, 1);
 
   const rocket = usageCard({
     rank: 1,
@@ -573,9 +575,11 @@ test('non-interactive transfer indicators sit beside the last successful times',
   assert.equal(css.get('.ladder-upload-sub').display, 'inline-flex');
   assert.equal(css.get('.ladder-logout-btn').width, '28px');
   assert.match(html, /id="ladder-controls"[\s\S]*?id="ladder-upload-wrap"[\s\S]*?id="ladder-logout"[\s\S]*?id="ladder-personal-data"/);
-  assert.equal(css.get('.ladder-rank-card')['scrollbar-gutter'], 'stable');
-  assert.equal(css.get('.ladder-ranking-scroll')['scrollbar-gutter'], 'stable');
-  assert.equal(css.get('.ladder-ranking-scroll')['padding-inline-end'], '6px');
+  assert.match(html, /<section class="ladder-rank-card"/);
+  assert.equal(css.get('.ladder-rank-card').padding, '2px 0 0');
+  assert.equal(css.get('.ladder-rows').display, 'flex');
+  assert.equal(css.get('.ladder-rows li')['border-radius'], '16px');
+  assert.equal(css.get('.hb-stage').background, undefined);
   assert.equal(css.get('.ladder-transfer.is-spinning .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
   assert.match(html, /transferSpinTimers\.set\(indicator, setTimeout\([\s\S]*?classList\.add\('is-spinning'\)[\s\S]*?\}, 1000\)\)/);
   assert.equal(css.get('.ladder-transfer.is-failed .ladder-transfer-error').color, 'var(--error)');
