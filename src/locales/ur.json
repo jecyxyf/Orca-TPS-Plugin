@@ -299,5 +299,17 @@
   "model-distribution": "ماڈل ڈیٹا",
   "sort-by-usage": "استعمال",
   "sort-by-speed": "رفتار",
-  "heatmap-active-days": "{0} دن فعال"
+  "heatmap-active-days": "{0} دن فعال",
+  "tier-king": "بادشاہ",
+  "tier-prince": "شہزادہ",
+  "tier-knight": "نائٹ",
+  "tier-mage": "بڑا جادوگر",
+  "tier-ranger": "رینجر",
+  "tier-squire": "شاگرد",
+  "tier-traveler": "مسافر",
+  "pose-sprint": "تیز دوڑ",
+  "pose-run": "جاگنگ",
+  "pose-walk": "چلنا",
+  "pose-idle": "آرام",
+  "pose-flat": "لیٹا ہوا"
 }

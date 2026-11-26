@@ -406,81 +406,82 @@ test('Personal Stats counts up top totals and shows model deltas before counting
   assert.match(html, /usageViewSnapshots\.set\(viewKey,/);
 });
 
-test('today usage draws a full zero line and animates real-time pulses once', async () => {
+test('today usage renders a heartbeat ECG stage with royal characters driven by recent activity', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const source = /const chartVerticalPadding = 4;[\s\S]*?(?=\n      function renderRows)/.exec(html)?.[0];
-  assert.ok(source);
-  assert.equal(cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]).get('.ladder-chart').background, 'transparent');
-  const frames = [], painters = new WeakMap(), paths = [], areas = [], stops = [];
-  class TestPath {
-    constructor(path) { this.points = path ? [...path.points] : []; }
-    moveTo(...point) { this.points.push(point); }
-    lineTo(...point) { this.points.push(point); }
-    bezierCurveTo(...points) { this.points.push(points.slice(-2)); }
-    closePath() { this.points.push('closed'); }
+  const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(css.get('.ladder-chart').background, 'transparent');
+  assert.match(html, /\.hb-stage:not\(\.is-in-view\) \*, #leaderboard\[hidden\] \.hb-stage \* \{ animation-play-state: paused !important; \}/);
+  assert.match(html, /@keyframes ch-sprint-bob\b[\s\S]*?@keyframes ecg-sweep\b/);
+
+  const hbBlock = /const ROYAL_TIERS = [\s\S]*?(?=\n      const usageChartLabel = )/.exec(html)?.[0];
+  const usageCardSrc = /function usageCard\([\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(hbBlock && usageCardSrc);
+
+  const observed = [];
+  function createEl() {
+    const attrs = new Map();
+    return {
+      attributes: attrs, dataset: {}, children: [], style: { setProperty() {} },
+      classList: { toggle() {}, add() {}, remove() {} },
+      setAttribute(k, v) { attrs.set(k, v); },
+      getAttribute(k) { return attrs.get(k); },
+      append(...items) { this.children.push(...items); },
+      addEventListener() {}
+    };
   }
-  let path, savedAlpha;
-  const ctx = {
-    globalAlpha: 1,
-    setTransform() {}, clearRect() { paths.length = areas.length = 0; }, beginPath() { path = []; },
-    createLinearGradient() { return { addColorStop(...stop) { stops.push(stop); } }; },
-    save() { savedAlpha = this.globalAlpha; },
-    restore() { this.globalAlpha = savedAlpha; },
-    stroke(line) { paths.push(line.points); },
-    arc(...point) { path.push(point.slice(0, 3)); },
-    fill(area) {
-      if (area) areas.push({ points: area.points, opacity: this.globalAlpha, style: this.fillStyle });
-      else paths.push(path);
-    }
+  const IntersectionObserver = function() {
+    return { observe(target) { observed.push(target); }, disconnect() {} };
   };
-  let width = 300;
-  const chart = { width: 320, height: 60, isConnected: true,
-    getBoundingClientRect: () => ({ width, height: 30 }), getContext: () => ctx };
-  function createElement(tag) {
-    return { ...(tag === 'canvas' ? chart : {}), children: [], setAttribute() {},
-      append(...children) { this.children.push(...children); } };
-  }
-  const { draw, pulseX, usageCard } = new Function('usagePainters', 'requestAnimationFrame', 'lifetime', 'window', 'document', 'Path2D', `
-    const RECENT_STATS_MS = 300000, rankDays = 1;
-    const usageChartLabel = () => 'Recent usage', toolText = () => '', t = key => key;
-    const formatMillionTokens = tokens => tokens + ' M', speedText = speed => speed + ' tokens/s';
-    ${source}
-    return { draw: drawSubmissionPulses, pulseX, usageCard };
-  `)(painters, callback => frames.push(callback), { signal: { aborted: false } }, {
-    devicePixelRatio: 2, matchMedia: () => ({ matches: false }),
-    getComputedStyle: () => ({ getPropertyValue: name => name === '--usage-wave-low' ? '#60a589' : '#ff6b72' })
-  }, { documentElement: {}, createElement }, TestPath);
-  assert.equal(pulseX({ submittedAt: 1_000 }, 1_000, width), 0);
-  assert.equal(pulseX({ submittedAt: 301_000 }, 1_000, width), width);
-  draw(chart, [{ submittedAt: 20_000, deltaTokens: 100 }, { submittedAt: 40_000, deltaTokens: 0 },
-    { submittedAt: 93_000, deltaTokens: 200 }], 0, 40_000);
-  frames.shift()(1000);
-  assert.deepEqual([chart.width, chart.height], [600, 60]);
-  assert.deepEqual(stops, [[0, '#60a589'], [1, '#ff6b72']]);
-  assert.deepEqual([paths[0][0], paths[0].at(-1)], [[0, 26], [300, 26]]);
-  assert.deepEqual(paths[0].slice(2, 7), [[20, 15], [23.25, 26], [40, 26], [89.75, 26], [93, 26]]);
-  assert.deepEqual(paths[1][0], [40, 26, 1.4]);
-  assert.deepEqual(areas[0].points, [...paths[0], [300, 26], [0, 26], 'closed']);
-  assert.equal(areas[0].opacity, 0.5);
-  assert.equal(areas[0].style, ctx.strokeStyle);
-  assert.equal(ctx.globalAlpha, 1);
-  frames.shift()(1200);
-  assert.deepEqual(paths[0][6], [93, 4]);
-  assert.deepEqual(areas[0].points[6], [93, 4]);
-  assert.equal(frames.length, 0);
-  width = 150;
-  painters.get(chart)();
-  frames.shift()(1400);
-  assert.deepEqual([chart.width, chart.height], [300, 60]);
-  assert.deepEqual(paths[0][6], [46.5, 4]);
-  assert.equal(frames.length, 0);
-  const empty = usageCard({}, 301_000, Infinity);
-  const [emptyChart, emptyMeta] = empty.children;
+  const { recentHeartbeatBpm, poseFromBpm, usageCard } = new Function(
+    'document', 'group', 'IntersectionObserver', 'SVG_NS', 't', 'formatMillionTokens', 'speedText', 'shortClock', 'toolText', 'createHarnessIconBadge', 'usageChartLabel', `
+      const RECENT_STATS_MS = 300000, DAY_MS = 86400000, rankDays = 1, rankingMode = 'calendar', chartVerticalPadding = 4;
+      const locale = { date: () => '11/26' }, usagePainters = new WeakMap();
+      function dailyUsagePoints() { return []; }
+      function dailyUsagePath() { return {}; }
+      function paintUsagePath() {}
+      ${hbBlock}
+      ${usageCardSrc}
+      return { recentHeartbeatBpm, poseFromBpm, usageCard };
+    `
+  )(
+    { createElement: createEl, createElementNS: () => createEl() },
+    { querySelector: () => ({}) },
+    IntersectionObserver,
+    'http://www.w3.org/2000/svg',
+    key => key,
+    v => `${v} M`,
+    v => `${v} tokens/s`,
+    () => '12:00:00',
+    (m, c) => `${m} · ${c}`,
+    () => createEl(),
+    () => 'Recent usage'
+  );
+
+  const now = 1_000_000;
+  assert.equal(recentHeartbeatBpm([], now), 0);
+  assert.equal(poseFromBpm(0).key, 'flat');
+  assert.equal(poseFromBpm(45).key, 'idle');
+  assert.equal(poseFromBpm(78).key, 'walk');
+  assert.equal(poseFromBpm(108).key, 'run');
+  const sprintBpm = recentHeartbeatBpm([
+    { submittedAt: now - 40_000 }, { submittedAt: now - 20_000 }, { submittedAt: now - 5_000 }
+  ], now);
+  assert.ok(sprintBpm >= 130, 'dense recent uploads trigger sprinting BPM');
+  assert.equal(poseFromBpm(sprintBpm).key, 'sprint');
+
+  const empty = usageCard({ rank: 1, recent: { points: [] } }, now, Infinity);
+  const [emptyMeta, emptyStage] = empty.children;
+  assert.equal(emptyMeta.children[0].children.length, 0, 'missing model and CLI omits placeholder dashes');
   assert.equal(emptyMeta.children.at(-1).textContent, '0 tokens/s');
-  assert.equal(emptyChart.title, 'Recent usage\n0 M · 0 tokens/s');
-  frames.shift()(1600);
-  assert.deepEqual(paths, [[[0, 26], [150, 26]]]);
-  assert.equal(frames.length, 0);
+  assert.equal(emptyStage.title, 'Recent usage\n0 M · 0 tokens/s');
+  assert.equal(observed.length, 1);
+
+  const active = usageCard({
+    rank: 1,
+    recent: { topModel: 'claude-opus', topCli: 'claude', points: [{ submittedAt: now - 10_000, deltaTokens: 100, avgTps: 88 }] }
+  }, now, Infinity);
+  assert.match(active.children[1].children[0].children[0].innerHTML, /pose-walk|ch-body/);
+  assert.equal(active.children[1].children[2].children[1].textContent, 'pose-walk');
 });
 
 test('usage rankings omit the subtitle beneath the period selector', async () => {
@@ -489,51 +490,42 @@ test('usage rankings omit the subtitle beneath the period selector', async () =>
   assert.match(html, /chart\.setAttribute\('aria-label', usageChartLabel\(\)\)/);
 });
 
-test('the speed ranking uses S medals for the first three places', async () => {
+test('leaderboard ranks assign royal tier badges and speed tab marks top three with S', async () => {
   const html = await readFile(panelPath, 'utf8');
-  const speed = /const speedPeriod = \{[^\n]*\};/.exec(html)?.[0];
-  const podium = /const podium = \[[^\n]*\];/.exec(html)?.[0];
-  const render = /const playedMedals = new Set\(\);\s*function medal\(rank, period, owner = ''\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
-  const period = /const period = speedBoard \? speedPeriod : periods\.find\(entry => entry\.days === rankDays\);/.exec(html)?.[0];
-  assert.ok(speed && podium && render && period);
+  const tiers = /const ROYAL_TIERS = \[[\s\S]*?\];/.exec(html)?.[0];
+  const tierOf = /const royalTierOf = [^\n]+;/.exec(html)?.[0];
+  const badgeFn = /function rankBadge\(rank, speedBoard = false\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(tiers && tierOf && badgeFn);
+
   const document = { createElement() {
+    const attrs = {};
     return {
-      attributes: {}, dataset: {}, children: [], style: { setProperty() {} }, classes: new Set(),
-      classList: { add(name) { this.owner.classes.add(name); } },
-      setAttribute(key, value) { this.attributes[key] = value; },
-      append(...children) { this.children.push(...children); },
-      cloneNode() { return { ...this }; }
+      attributes: attrs, dataset: {},
+      setAttribute(k, v) { attrs[k] = v; }
     };
   } };
-  const createElement = document.createElement;
-  document.createElement = () => { const node = createElement(); node.classList.owner = node; return node; };
-  const t = (key, ...args) => [key, ...args].join(' ');
-  const badgeFor = new Function('document', 't', `
-    ${speed}
-    ${podium}
-    ${render}
-    const periods = [{ days: 30, mark: '30', title: 'thirty-day-period' }];
-    return (rank, rankDays) => {
-      const speedBoard = rankDays === 0;
-      ${period}
-      return medal(rank, period);
-    };
-  `)(document, t);
-  for (const [index, color] of ['gold', 'silver', 'bronze'].entries()) {
-    const badge = badgeFor(index + 1, 0);
-    assert.equal(badge.dataset.place, index + 1);
-    assert.equal(badge.children.at(-1).children[0].textContent, 'S');
-    assert.equal(badge.attributes['aria-label'], `medal-position leaderboard-speed-tab ${color}-medal`);
-  }
-  assert.equal(badgeFor(4, 0), null);
-  assert.equal(badgeFor(1, 0).classes.has('is-settled'), true, 'a redrawn medal for the same rank stays still');
-  assert.equal(badgeFor(1, 30).children.at(-1).children[0].textContent, '30');
+  const makeBadge = new Function('document', 't', `
+    ${tiers}
+    ${tierOf}
+    ${badgeFn}
+    return rankBadge;
+  `)(document, key => key);
+
+  assert.equal(makeBadge(1, false).textContent, 'tier-king');
+  assert.equal(makeBadge(2, false).textContent, 'tier-prince');
+  assert.equal(makeBadge(3, false).textContent, 'tier-knight');
+  assert.equal(makeBadge(18, false).textContent, 'tier-mage');
+  assert.equal(makeBadge(42, false).textContent, 'tier-ranger');
+  assert.equal(makeBadge(76, false).textContent, 'tier-squire');
+  assert.equal(makeBadge(120, false).textContent, 'tier-traveler');
+  assert.equal(makeBadge(1, true).textContent, 'S · tier-king');
+  assert.equal(makeBadge(3, true).textContent, 'S · tier-knight');
+  assert.equal(makeBadge(4, true).textContent, 'tier-mage');
+  assert.equal(makeBadge(0, false), null);
+
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
-  assert.match(css.get('.ladder-medal::before').animation, / 3 both$/);
-  assert.match(css.get('.ladder-medal-emblem::before').animation, / 3 both$/);
-  assert.equal(css.get('.ladder-medal.is-settled::before').animation, 'none');
-  assert.match(html, /prefers-reduced-motion: no-preference\) \{\s*\.ladder-medal:hover::before, \.ladder-medal:hover::after \{\s*animation: medal-twinkle[^;]*infinite;/);
-  assert.equal(css.get('.ladder-rows .ladder-speed-row:not(:has(.ladder-medal))')['--ladder-row-size'], '32px');
+  assert.equal(css.get('.ladder-user-stats').display, 'grid');
+  assert.equal(css.get('.ladder-rows .ladder-speed-row')['--ladder-row-size'], '28px');
 });
 
 test('non-interactive transfer indicators sit beside the last successful times', async () => {

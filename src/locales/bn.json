@@ -299,5 +299,17 @@
   "model-distribution": "মডেল ডেটা",
   "sort-by-usage": "ব্যবহার",
   "sort-by-speed": "গতি",
-  "heatmap-active-days": "{0} দিন সক্রিয়"
+  "heatmap-active-days": "{0} দিন সক্রিয়",
+  "tier-king": "রাজা",
+  "tier-prince": "যুবরাজ",
+  "tier-knight": "নাইট",
+  "tier-mage": "মহাযাদুকর",
+  "tier-ranger": "রেঞ্জার",
+  "tier-squire": "শিক্ষানবিশ",
+  "tier-traveler": "ভ্রমণকারী",
+  "pose-sprint": "দৌড়াচ্ছে",
+  "pose-run": "জগিং",
+  "pose-walk": "হাঁটছে",
+  "pose-idle": "বিশ্রাম",
+  "pose-flat": "শুয়ে আছে"
 }

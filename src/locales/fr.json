@@ -299,5 +299,17 @@
   "model-distribution": "Données des modèles",
   "sort-by-usage": "Usage",
   "sort-by-speed": "Vitesse",
-  "heatmap-active-days": "{0} jours actifs"
+  "heatmap-active-days": "{0} jours actifs",
+  "tier-king": "Roi",
+  "tier-prince": "Prince",
+  "tier-knight": "Chevalier",
+  "tier-mage": "Archimage",
+  "tier-ranger": "Rôdeur",
+  "tier-squire": "Écuyer",
+  "tier-traveler": "Voyageur",
+  "pose-sprint": "Sprinte",
+  "pose-run": "Trotte",
+  "pose-walk": "Marche",
+  "pose-idle": "Se repose",
+  "pose-flat": "Allongé"
 }

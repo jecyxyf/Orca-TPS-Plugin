@@ -299,5 +299,17 @@
   "model-distribution": "Modelldaten",
   "sort-by-usage": "Nutzung",
   "sort-by-speed": "Tempo",
-  "heatmap-active-days": "{0} aktive Tage"
+  "heatmap-active-days": "{0} aktive Tage",
+  "tier-king": "König",
+  "tier-prince": "Prinz",
+  "tier-knight": "Ritter",
+  "tier-mage": "Erzmagier",
+  "tier-ranger": "Waldläufer",
+  "tier-squire": "Knappe",
+  "tier-traveler": "Reisender",
+  "pose-sprint": "Sprintet",
+  "pose-run": "Joggt",
+  "pose-walk": "Geht",
+  "pose-idle": "Ruht",
+  "pose-flat": "Liegt flach"
 }

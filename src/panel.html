@@ -383,10 +383,13 @@
     .stacked-seg:last-child { border-start-end-radius: 999px; border-end-end-radius: 999px; }
     .share-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
     .section-detail { margin: 0; color: var(--muted); font-size: 11px; }
-    .ladder-card { padding: 12px 16px; }
+    .ladder-card { padding: 11px 14px; }
     #leaderboard {
-      --ladder-medal-size: 48px; --ladder-medal-scale: .72;
       display: flex; flex-direction: column; gap: 8px; min-block-size: 0;
+    }
+    #leaderboard .ladder-card {
+      border-color: color-mix(in srgb, var(--blue) 28%, var(--line));
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), var(--shadow);
     }
     #ladder-controls, .ladder-personal-data { flex: none; }
     .ladder-controls-head {
@@ -475,123 +478,66 @@
     .ladder-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .ladder-avatar svg { display: block; width: 78%; height: 78%; }
     .ladder-account-name .ladder-avatar { width: 32px; height: 32px; }
-    .ladder-user-stats { margin: 0; }
-    .ladder-user-stat {
+    .ladder-user-stats {
       display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-      align-items: center; column-gap: 8px; min-height: 30px; padding-block: 1px;
-      border-block-end: 1px solid var(--line); line-height: 1.25;
+      gap: 6px; margin: 0;
     }
-    .ladder-user-stat dt { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+    .ladder-user-stat {
+      display: grid; grid-template-columns: minmax(0, 1fr);
+      gap: 2px; padding: 5px 7px; border-radius: 10px;
+      background: var(--tag-bg); line-height: 1.25;
+    }
+    .ladder-user-stat-top {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 4px; min-width: 0;
+    }
+    .ladder-user-stat dt { color: var(--muted); font-size: 11px; font-weight: 650; white-space: nowrap; }
     .ladder-user-stat dd { min-width: 0; margin: 0; font-variant-numeric: tabular-nums; }
-    .ladder-user-position { display: flex; align-items: center; justify-content: flex-end; gap: 4px; text-align: end; }
-    .ladder-user-position .ladder-medal, .ladder-row-user .ladder-medal { zoom: var(--ladder-medal-scale); }
-    .ladder-user-rank { font-size: 16px; font-weight: 750; overflow-wrap: anywhere; }
-    .ladder-user-tokens { color: var(--blue); font-size: 14px; font-weight: 650; text-align: start; overflow-wrap: anywhere; }
+    .ladder-user-position { display: flex; align-items: center; justify-content: flex-end; gap: 3px; text-align: end; }
+    .ladder-user-rank { font-size: 11px; font-weight: 800; color: var(--ink); overflow-wrap: anywhere; white-space: nowrap; }
+    .ladder-user-tokens { color: var(--blue); font-size: 13px; font-weight: 800; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ladder-mine {
-      min-width: 0; margin: 0; color: var(--purple); font-size: 17px; font-weight: 800; line-height: 1.25;
+      min-width: 0; margin: 0; color: var(--purple); font-size: 16px; font-weight: 800; line-height: 1.25;
       letter-spacing: -.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .ladder-badge-slot { display: inline-flex; flex: none; }
     .ladder-badge-slot:empty { display: none; }
-    .ladder-medal {
-      position: relative; display: inline-block; flex-shrink: 0;
-      width: var(--ladder-medal-size); height: var(--ladder-medal-size);
-      filter: drop-shadow(0 1px 1px rgb(0 0 0 / 25%));
+    .rank-badge {
+      display: inline-flex; align-items: center; gap: 3px; flex: none;
+      padding: 1.5px 7px; border-radius: 999px;
+      font-size: 10.5px; font-weight: 850; letter-spacing: .02em; white-space: nowrap;
+      border: 1px solid transparent;
     }
-    .ladder-medal-7 { --medal-phase: -1.2s; }
-    .ladder-medal-30 { --medal-phase: -2.4s; }
-    .ladder-medal[data-place="1"] {
-      --medal-light: #fff3bc; --medal-mid: #e6b541; --medal-dark: #8b5515;
-      --medal-face-light: #ffedb0; --medal-face-dark: #cf9b36;
-      --medal-ink: #4c2e0c; --medal-sheen: rgb(255 249 217 / 95%);
+    .ladder-user-position .rank-badge { padding: 1px 5px; font-size: 9.5px; }
+    .rk-1 {
+      background: linear-gradient(135deg, #fef08a, #f59e0b);
+      color: #451a03; border-color: rgb(255 243 188 / 75%);
+      box-shadow: 0 0 8px rgb(251 191 36 / 38%);
     }
-    .ladder-medal[data-place="2"] {
-      --medal-light: #f6f9fc; --medal-mid: #bac5d0; --medal-dark: #65727f;
-      --medal-face-light: #edf3f9; --medal-face-dark: #a6b2bf;
-      --medal-ink: #2e3947; --medal-sheen: rgb(243 250 255 / 85%);
+    .rk-2 {
+      background: linear-gradient(135deg, #f8fafc, #94a3b8);
+      color: #0f172a; border-color: rgb(248 250 252 / 70%);
     }
-    .ladder-medal[data-place="3"] {
-      --medal-light: #f9c9a0; --medal-mid: #c18356; --medal-dark: #794527;
-      --medal-face-light: #f3c7a7; --medal-face-dark: #bb7952;
-      --medal-ink: #44281a; --medal-sheen: rgb(255 230 204 / 76%);
+    .rk-3 {
+      background: linear-gradient(135deg, #fed7aa, #c26d38);
+      color: #3b1706; border-color: rgb(254 215 170 / 60%);
     }
-    .ladder-medal-crown {
-      position: absolute; top: 1px; left: 13px; width: 22px; height: 13px;
-      clip-path: polygon(0 25%, 24% 54%, 24% 7%, 41% 40%, 50% 0, 59% 40%, 76% 7%, 76% 54%, 100% 25%,
-        85% 92%, 69% 100%, 31% 100%, 15% 92%);
-      background: linear-gradient(180deg, transparent 68%, var(--medal-dark) 77%, var(--medal-light) 85%, var(--medal-mid) 95%),
-        linear-gradient(107deg, var(--medal-dark), var(--medal-light) 23%, var(--medal-mid) 41%, var(--medal-light) 62%, var(--medal-dark));
+    .rk-4 {
+      background: color-mix(in srgb, #a855f7 22%, transparent);
+      color: #e9d5ff; border-color: color-mix(in srgb, #a855f7 48%, transparent);
     }
-    .ladder-medal-branch { position: absolute; inset: 7px 4px 1px; }
-    .ladder-medal-branch + .ladder-medal-branch { transform: scaleX(-1); }
-    .ladder-medal-branch::before {
-      content: ""; position: absolute; inset: 1px; border: 1px solid var(--medal-mid); border-radius: 50%;
-      clip-path: polygon(50% 50%, 0 1%, 0 100%, 53% 100%);
+    html:not(.dark) .rk-4 { color: #6b21a8; }
+    .rk-5 {
+      background: color-mix(in srgb, #10b981 20%, transparent);
+      color: #6ee7b7; border-color: color-mix(in srgb, #10b981 45%, transparent);
     }
-    .ladder-medal-branch::after {
-      content: ""; position: absolute; left: 43%; bottom: 1.5px; width: 7px; height: 1px;
-      background: var(--medal-mid); transform: rotate(21deg);
+    html:not(.dark) .rk-5 { color: #047857; }
+    .rk-6 {
+      background: color-mix(in srgb, #38bdf8 18%, transparent);
+      color: #7dd3fc; border-color: color-mix(in srgb, #38bdf8 40%, transparent);
     }
-    .ladder-medal-leaf {
-      position: absolute; top: 50%; left: 50%;
-      transform: rotate(var(--leaf-angle)) translateY(19px);
-    }
-    .ladder-medal-leaf::before, .ladder-medal-leaf::after {
-      content: ""; position: absolute; top: -1.5px; right: -.5px; width: 6px; height: 3px;
-      border-radius: 85% 5% 85% 5%; transform-origin: right center;
-      background: linear-gradient(160deg, var(--medal-light), var(--medal-mid) 56%, var(--medal-dark));
-    }
-    .ladder-medal-leaf::before { transform: rotate(-33deg); }
-    .ladder-medal-leaf::after { transform: rotate(44deg) scale(.9); }
-    .ladder-medal-emblem {
-      position: absolute; top: 14px; left: 10px; width: 28px; height: 28px; display: grid; padding: 2.5px;
-      overflow: hidden; border-radius: 50%; box-shadow: 0 0 0 .5px var(--medal-dark);
-      background: conic-gradient(from -30deg, var(--medal-light), var(--medal-dark) 28%, var(--medal-light) 48%,
-        var(--medal-dark) 69%, var(--medal-mid) 83%, var(--medal-light));
-    }
-    .ladder-medal-emblem::before {
-      content: ""; position: absolute; inset-block: 0; left: 0; width: 48%; pointer-events: none;
-      background: linear-gradient(90deg, transparent, var(--medal-sheen) 45%, var(--medal-light) 52%, transparent);
-      animation: medal-sweep 3.6s ease-in-out var(--medal-phase, 0s) 3 both;
-    }
-    .ladder-medal-mark {
-      position: relative; display: grid; place-items: center; border-radius: 50%;
-      background: linear-gradient(150deg, var(--medal-face-light) 20%, var(--medal-face-dark) 85%);
-      box-shadow: 0 0 0 .5px var(--medal-dark), inset 0 .75px 0 var(--medal-light);
-      color: var(--medal-ink); font: 700 14px/1 Georgia, serif; font-variant-numeric: lining-nums tabular-nums;
-      text-shadow: 0 .75px 0 var(--medal-light);
-    }
-    .ladder-medal::before, .ladder-medal::after {
-      content: ""; position: absolute; z-index: 1; opacity: 0; pointer-events: none;
-      clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
-      background: radial-gradient(circle, var(--medal-light), var(--medal-sheen));
-      animation: medal-twinkle 3.6s ease-in-out var(--medal-phase, 0s) 3 both;
-    }
-    .ladder-medal::before { left: 9px; top: 13px; width: 10px; height: 10px; }
-    .ladder-medal::after {
-      right: 8px; top: 31px; width: 8px; height: 8px;
-      animation-delay: calc(var(--medal-phase, 0s) + .55s);
-    }
-    /* A medal that already shimmered for this rank stays still when its row is redrawn. */
-    .ladder-medal.is-settled::before, .ladder-medal.is-settled::after { animation: none; }
-    .ladder-medal.is-settled .ladder-medal-emblem::before { animation: none; transform: translateX(280%) skewX(-22deg); }
-    @media (prefers-reduced-motion: no-preference) {
-      .ladder-medal:hover::before, .ladder-medal:hover::after {
-        animation: medal-twinkle 3.6s ease-in-out var(--medal-phase, 0s) infinite;
-      }
-      .ladder-medal:hover::after { animation-delay: calc(var(--medal-phase, 0s) + .55s); }
-      .ladder-medal:hover .ladder-medal-emblem::before {
-        animation: medal-sweep 3.6s ease-in-out var(--medal-phase, 0s) infinite;
-      }
-    }
-    @keyframes medal-sweep {
-      0%, 34% { transform: translateX(-160%) skewX(-22deg); }
-      74%, 100% { transform: translateX(280%) skewX(-22deg); }
-    }
-    @keyframes medal-twinkle {
-      0%, 37%, 66%, 100% { opacity: 0; transform: scale(.35); }
-      50% { opacity: 1; transform: scale(1); }
-    }
+    html:not(.dark) .rk-6 { color: #0369a1; }
+    .rk-7 { background: var(--tag-bg); color: var(--muted); border-color: var(--line); }
+    .ladder-badge-slot:empty { display: none; }
     .ladder-transfer {
       display: inline-flex; align-items: center; justify-content: flex-end;
       width: var(--ladder-toolbar-action-width); min-height: var(--ladder-toolbar-action-width);
@@ -603,38 +549,50 @@
     .ladder-rows { margin: 6px 0 0; padding: 0; list-style: none; }
     .ladder-rows:empty { margin: 0; }
     .ladder-rows li {
-      --ladder-row-size: calc(var(--ladder-medal-size) * var(--ladder-medal-scale));
-      --ladder-row-gap: 8px;
+      --ladder-row-size: 28px;
+      --ladder-row-gap: 6px;
       display: grid; grid-template-columns: auto var(--ladder-row-gap) minmax(0, 1fr) auto;
       grid-template-rows: var(--ladder-row-size) auto auto;
       grid-template-areas:
         "rank   .      name   total"
         "recent recent recent recent"
         "time   time   time   time";
-      row-gap: 4px; align-items: center; padding: 10px 0;
+      row-gap: 4px; align-items: center; padding: 9px 2px;
       border-top: 1px solid var(--line); font-variant-numeric: tabular-nums;
     }
-    .ladder-rank {
-      grid-area: rank; display: grid; place-items: center; min-width: 2.2ch; height: 100%;
-      padding-inline: 2px; color: var(--muted); font-size: 17px; font-weight: 750;
+    .ladder-rows li.ladder-self {
+      padding-inline: 8px; border-radius: 12px; border-top-color: transparent;
+      background: color-mix(in srgb, var(--blue) 9%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 28%, transparent);
     }
-    .ladder-self .ladder-rank { color: var(--ladder-own-rank); }
+    .ladder-rows li.ladder-self + li { border-top-color: transparent; }
+    .ladder-rank {
+      grid-area: rank; display: grid; place-items: center; min-width: 2ch; height: 100%;
+      padding-inline: 2px; color: var(--muted); font-size: 14px; font-weight: 850;
+    }
+    .ladder-rank[data-place="1"] { color: #fbbf24; }
+    .ladder-rank[data-place="2"] { color: #cbd5e1; }
+    .ladder-rank[data-place="3"] { color: #f59e0b; }
+    html:not(.dark) .ladder-rank[data-place="1"] { color: #b45309; }
+    html:not(.dark) .ladder-rank[data-place="2"] { color: #475569; }
+    html:not(.dark) .ladder-rank[data-place="3"] { color: #9a3412; }
+    .ladder-self .ladder-rank:not([data-place]) { color: var(--ladder-own-rank); }
     .ladder-row-user { grid-area: name; display: flex; gap: 6px; align-items: center; min-width: 0; margin-inline-end: var(--ladder-row-gap); }
     .ladder-row-user .ladder-avatar {
-      --ladder-row-avatar-size: calc(var(--ladder-row-size) * .86);
+      --ladder-row-avatar-size: 22px;
       width: var(--ladder-row-avatar-size); height: var(--ladder-row-avatar-size);
     }
     .ladder-name {
-      min-width: 0; font-size: 16px; line-height: var(--ladder-row-size); color: var(--purple); font-weight: 750;
+      min-width: 0; font-size: 15px; line-height: var(--ladder-row-size); color: var(--purple); font-weight: 800;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .ladder-total {
       grid-area: total; display: grid; align-content: center; height: 100%;
       padding-inline: 0; border-radius: 0; background: transparent; color: var(--blue);
-      font-size: 16px; line-height: 1.15; font-weight: 800; text-align: end; overflow-wrap: anywhere; max-width: 15ch;
+      font-size: 15px; line-height: 1.15; font-weight: 800; text-align: end; overflow-wrap: anywhere; max-width: 15ch;
     }
-    .ladder-time { grid-area: time; color: var(--muted); font-size: 11px; }
-    .ladder-rows .ladder-speed-row:not(:has(.ladder-medal)) { --ladder-row-size: 32px; }
+    .ladder-time { grid-area: time; color: var(--muted); font-size: 10.5px; }
+    .ladder-rows .ladder-speed-row { --ladder-row-size: 28px; }
     .ladder-speed-row .ladder-total { color: var(--speed); white-space: nowrap; }
     .ladder-speed-row .ladder-recent-meta { margin-top: 0; }
     .ladder-speed-tokens { flex: none; color: var(--blue); font-weight: 650; white-space: nowrap; }
@@ -650,6 +608,69 @@
     .ladder-recent-tools .war-agent-icon { width: 16px; height: 16px; }
     .ladder-recent-tools .war-agent-icon svg { width: 15px; height: 15px; }
     .ladder-recent-speed { flex: none; color: var(--speed); font-weight: 700; white-space: nowrap; }
+
+    /* Day-1 heartbeat ECG stage + side-profile Royal chibi character */
+    .hb-stage {
+      display: flex; align-items: center; gap: 8px; margin-top: 1px;
+      padding: 4px 8px; border-radius: 12px;
+      background: color-mix(in srgb, var(--tag-bg) 78%, transparent);
+      border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+    }
+    .hb-runner-box {
+      position: relative; width: 44px; height: 32px; flex: none;
+      display: grid; place-items: center;
+      border-bottom: 1px solid var(--line);
+    }
+    .hb-char { width: 36px; height: 30px; overflow: visible; }
+    .hb-ecg-wrap { flex: 1; min-width: 0; position: relative; }
+    .hb-ecg-svg { width: 100%; height: 28px; display: block; overflow: visible; }
+    .hb-ecg-scan { animation: ecg-sweep var(--ecg-dur, 2.2s) linear infinite; }
+    .hb-meta-right {
+      flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+      font-variant-numeric: tabular-nums;
+    }
+    .hb-bpm { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; line-height: 1.1; }
+    .hb-heart { display: inline-block; animation: heart-beat var(--beat-dur, .9s) ease-in-out infinite; }
+    .hb-pose-tag { font-size: 9.5px; color: var(--muted); font-weight: 650; line-height: 1.1; white-space: nowrap; }
+    .hb-bpm.is-flat { color: var(--muted); }
+    .hb-bpm.is-flat .hb-heart { animation: none; opacity: .5; }
+    .hb-bpm.is-low { color: var(--blue); }
+    .hb-bpm.is-walk { color: var(--green); }
+    .hb-bpm.is-run { color: var(--orange); }
+    .hb-bpm.is-sprint { color: var(--speed); }
+    .hb-stage:not(.is-in-view) *, #leaderboard[hidden] .hb-stage * { animation-play-state: paused !important; }
+    .pose-sprint .ch-body { transform-origin: 20px 24px; animation: ch-sprint-bob .24s ease-in-out infinite alternate; }
+    .pose-sprint .ch-cape { transform-origin: 15px 17px; animation: ch-cape-flap .22s ease-in-out infinite alternate; }
+    .pose-sprint .ch-leg-a { transform-origin: 20px 25px; animation: ch-leg-a .24s ease-in-out infinite alternate; }
+    .pose-sprint .ch-leg-b { transform-origin: 20px 25px; animation: ch-leg-b .24s ease-in-out infinite alternate; }
+    .pose-sprint .ch-fx { animation: ch-wind-streak .34s linear infinite; }
+    .pose-run .ch-body { transform-origin: 20px 24px; animation: ch-jog-bob .4s ease-in-out infinite alternate; }
+    .pose-run .ch-cape { transform-origin: 15px 17px; animation: ch-cape-flap .38s ease-in-out infinite alternate; }
+    .pose-run .ch-leg-a { transform-origin: 20px 25px; animation: ch-jog-a .4s ease-in-out infinite alternate; }
+    .pose-run .ch-leg-b { transform-origin: 20px 25px; animation: ch-jog-b .4s ease-in-out infinite alternate; }
+    .pose-walk .ch-body { transform-origin: 20px 24px; animation: ch-walk-bob .65s ease-in-out infinite alternate; }
+    .pose-walk .ch-leg-a { transform-origin: 20px 25px; animation: ch-walk-a .65s ease-in-out infinite alternate; }
+    .pose-walk .ch-leg-b { transform-origin: 20px 25px; animation: ch-walk-b .65s ease-in-out infinite alternate; }
+    .pose-idle .ch-body { transform-origin: 20px 30px; animation: ch-breathe 1.6s ease-in-out infinite; }
+    .pose-idle .ch-head { transform-origin: 20px 14px; animation: ch-nod 2.4s ease-in-out infinite; }
+    .pose-flat .ch-body { transform-origin: 20px 21px; transform: translate(0, 5px) rotate(-86deg) scale(.86); }
+    .pose-flat .ch-zzz { animation: ch-float-zzz 2.2s ease-out infinite; }
+    @keyframes ch-sprint-bob { 0% { transform: translateY(0) rotate(9deg); } 100% { transform: translateY(-3px) rotate(13deg); } }
+    @keyframes ch-jog-bob { 0% { transform: translateY(0) rotate(4deg); } 100% { transform: translateY(-2px) rotate(7deg); } }
+    @keyframes ch-walk-bob { 0% { transform: translateY(0); } 100% { transform: translateY(-1.2px); } }
+    @keyframes ch-cape-flap { 0% { transform: rotate(0deg) scaleX(1); } 100% { transform: rotate(12deg) scaleX(1.12); } }
+    @keyframes ch-leg-a { 0% { transform: rotate(-38deg); } 100% { transform: rotate(38deg); } }
+    @keyframes ch-leg-b { 0% { transform: rotate(38deg); } 100% { transform: rotate(-38deg); } }
+    @keyframes ch-jog-a { 0% { transform: rotate(-24deg); } 100% { transform: rotate(24deg); } }
+    @keyframes ch-jog-b { 0% { transform: rotate(24deg); } 100% { transform: rotate(-24deg); } }
+    @keyframes ch-walk-a { 0% { transform: rotate(-14deg); } 100% { transform: rotate(14deg); } }
+    @keyframes ch-walk-b { 0% { transform: rotate(14deg); } 100% { transform: rotate(-14deg); } }
+    @keyframes ch-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.94); } }
+    @keyframes ch-nod { 0%, 72%, 100% { transform: rotate(0deg); } 86% { transform: rotate(8deg) translateY(1px); } }
+    @keyframes ch-wind-streak { 0% { opacity: .9; transform: translateX(0); } 100% { opacity: 0; transform: translateX(-6px); } }
+    @keyframes ch-float-zzz { 0% { opacity: 0; transform: translate(0, 2px) scale(.75); } 35% { opacity: 1; } 100% { opacity: 0; transform: translate(3px, -7px) scale(1.08); } }
+    @keyframes heart-beat { 0%, 100% { transform: scale(1); } 20% { transform: scale(1.32); } 40% { transform: scale(.96); } 60% { transform: scale(1.2); } }
+    @keyframes ecg-sweep { 0% { stroke-dashoffset: 220; } 100% { stroke-dashoffset: 0; } }
     .ladder-transfer .ladder-transfer-spinner,
     .ladder-transfer .ladder-transfer-error,
     .ladder-transfer.is-spinning .ladder-transfer-icon,
@@ -1092,20 +1113,18 @@
       .speed { gap: 3px; }
       .speed-value { font-size: 17px; }
       .war, .heat, .ladder-card { padding-inline: 12px; }
-      .ladder-mine { font-size: 16px; }
-      .ladder-user-stat { grid-template-columns: minmax(0, .85fr) repeat(2, minmax(0, 1.4fr)); column-gap: 6px; }
-      .ladder-user-stat dt { font-size: 12px; }
-      .ladder-user-position { gap: 2px; }
-      #leaderboard { --ladder-medal-scale: .65; }
-      .ladder-user-rank, .ladder-user-tokens { font-size: 13px; }
+      .ladder-mine { font-size: 15px; }
+      .ladder-user-stats { gap: 4px; }
+      .ladder-user-stat { padding: 4px 5px; }
+      .ladder-user-rank { font-size: 10px; }
+      .ladder-user-tokens { font-size: 12px; }
       .ladder-toolbar {
         --ladder-toolbar-action-width: 36px;
         --ladder-toolbar-toggle-width: 24px;
       }
-      .ladder-rows li { --ladder-row-gap: 6px; }
+      .ladder-rows li { --ladder-row-gap: 5px; }
       .ladder-rows .ladder-speed-row { --ladder-row-gap: 4px; }
-      .ladder-speed-row .ladder-rank { min-width: 2ch; font-size: 15px; }
-      .ladder-speed-row .ladder-avatar { --ladder-row-avatar-size: 22px; }
+      .ladder-rank { min-width: 1.8ch; font-size: 13px; }
       .ladder-tabs .war-tab { padding: 5px 3px; font-size: 12px; }
       .ladder-total { font-size: 14px; }
       .ladder-name { font-size: 14px; }
@@ -1151,14 +1170,14 @@
       .panel-title-link, .panel-star-link, .settings-toggle, .settings-toggle svg, .settings-close { transition: none; }
       .panel-star-link:hover { transform: none; }
       .panel-star-svg .star-core, .panel-star-svg .star-spark { animation: none; }
-      .ladder-medal::before, .ladder-medal::after, .ladder-medal-emblem::before { animation: none; opacity: 0; }
       .heat-cell, .stacked-seg { transition: none; }
       .heat-cell, .heat-cell:hover::before, .heat-cell:hover::after, .heat-star-grid.is-waking .heat-cell { animation: none !important; }
       .heat-cell::after, .war-delta, .war-row-flash, .war-row-flash::before { animation: none !important; opacity: 0; }
       .war-value.is-counting, .war-amount.is-counting, .war-meta-tokens.is-counting,
       .war-meta-item.is-counting > span:not(.war-delta),
       .war-row.is-jackpot .war-agent-icon, .record-card.is-entering .model-icon,
-      .record-card .model-icon[class*="is-acting-"] { animation: none !important; }
+      .record-card .model-icon[class*="is-acting-"],
+      .hb-stage *, .hb-stage .hb-ecg-scan, .hb-stage .hb-heart { animation: none !important; }
     }
   </style>
 </head>
@@ -1451,28 +1470,34 @@
       <div class="ladder-card ladder-personal-data" id="ladder-personal-data" hidden>
         <dl class="ladder-user-stats" id="ladder-personal-ranks" data-i18n-aria-label="personal-ranking" hidden>
           <div class="ladder-user-stat">
-            <dt data-ladder-range="1" data-localized-text></dt>
+            <div class="ladder-user-stat-top">
+              <dt data-ladder-range="1" data-localized-text></dt>
+              <dd class="ladder-user-position">
+                <span class="ladder-badge-slot" id="ladder-user-badge-1"></span>
+                <span class="ladder-user-rank" id="ladder-user-rank-1" data-localized-text>—</span>
+              </dd>
+            </div>
             <dd class="ladder-user-tokens" id="ladder-user-tokens-1" data-i18n-title="daily-ranked-usage">—</dd>
-            <dd class="ladder-user-position">
-              <span class="ladder-badge-slot" id="ladder-user-badge-1"></span>
-              <span class="ladder-user-rank" id="ladder-user-rank-1" data-localized-text>—</span>
-            </dd>
           </div>
           <div class="ladder-user-stat">
-            <dt data-ladder-range="7" data-localized-text></dt>
+            <div class="ladder-user-stat-top">
+              <dt data-ladder-range="7" data-localized-text></dt>
+              <dd class="ladder-user-position">
+                <span class="ladder-badge-slot" id="ladder-user-badge-7"></span>
+                <span class="ladder-user-rank" id="ladder-user-rank-7" data-localized-text>—</span>
+              </dd>
+            </div>
             <dd class="ladder-user-tokens" id="ladder-user-tokens-7" data-i18n-title="weekly-ranked-usage">—</dd>
-            <dd class="ladder-user-position">
-              <span class="ladder-badge-slot" id="ladder-user-badge-7"></span>
-              <span class="ladder-user-rank" id="ladder-user-rank-7" data-localized-text>—</span>
-            </dd>
           </div>
           <div class="ladder-user-stat">
-            <dt data-ladder-range="30" data-localized-text></dt>
+            <div class="ladder-user-stat-top">
+              <dt data-ladder-range="30" data-localized-text></dt>
+              <dd class="ladder-user-position">
+                <span class="ladder-badge-slot" id="ladder-user-badge-30"></span>
+                <span class="ladder-user-rank" id="ladder-user-rank-30" data-localized-text>—</span>
+              </dd>
+            </div>
             <dd class="ladder-user-tokens" id="ladder-user-tokens-30" data-i18n-title="monthly-ranked-usage">—</dd>
-            <dd class="ladder-user-position">
-              <span class="ladder-badge-slot" id="ladder-user-badge-30"></span>
-              <span class="ladder-user-rank" id="ladder-user-rank-30" data-localized-text>—</span>
-            </dd>
           </div>
         </dl>
         <div class="ladder-toolbar ladder-upload-toolbar">
@@ -3254,8 +3279,6 @@
         { days: 1, mark: 'Ⅰ', title: 'last-twenty-four-hours' }, { days: 7, mark: '7', title: 'seven-day-period' },
         { days: 30, mark: '30', title: 'thirty-day-period' }
       ];
-      const speedPeriod = { days: 0, mark: 'S', title: 'leaderboard-speed-tab' };
-      const podium = ['gold-medal', 'silver-medal', 'bronze-medal'];
       const messages = {
         unavailable: 'leaderboard-unavailable', github_unavailable: 'github-login-unavailable',
         login_required: 'login-required', banned: 'account-banned', server_update_required: 'leaderboard-server-update-required',
@@ -3282,7 +3305,6 @@
       let busy = false, restoringSession = false;
       let revision = 0, drawnRows = '', renderedDay = '', loginProblem = '', messageCode = '';
       let rankingNodes = new Map(), leaderboardFrame, nextRecentExpiry = Infinity;
-      let animateToday = false, pulseDay = '', latestPulses = new Map();
       const usagePainters = new WeakMap();
 
       async function request(action, payload = {}, signal = lifetime.signal) {
@@ -3400,35 +3422,144 @@
       });
       const setAvatar = (avatar, username, options) => avatarView.set(avatar, username, options);
 
-      const playedMedals = new Set();
-      function medal(rank, period, owner = '') {
-        const place = podium[rank - 1];
-        if (!place) return null;
+      const ROYAL_TIERS = [
+        { max: 1, cls: 'rk-1', key: 'tier-king', gear: 'crown', main: '#ef4444', dark: '#991b1b', trim: '#fbbf24', gem: '#38bdf8' },
+        { max: 2, cls: 'rk-2', key: 'tier-prince', gear: 'tiara', main: '#3b82f6', dark: '#1e40af', trim: '#e2e8f0', gem: '#a855f7' },
+        { max: 3, cls: 'rk-3', key: 'tier-knight', gear: 'plume', main: '#f59e0b', dark: '#92400e', trim: '#fde68a', gem: '#ef4444' },
+        { max: 30, cls: 'rk-4', key: 'tier-mage', gear: 'wizard', main: '#8b5cf6', dark: '#5b21b6', trim: '#fde047', gem: '#c084fc' },
+        { max: 50, cls: 'rk-5', key: 'tier-ranger', gear: 'hood', main: '#10b981', dark: '#065f46', trim: '#a7f3d0', gem: '#34d399' },
+        { max: 100, cls: 'rk-6', key: 'tier-squire', gear: 'cap', main: '#38bdf8', dark: '#0369a1', trim: '#e0f2fe', gem: '#60a5fa' },
+        { max: Infinity, cls: 'rk-7', key: 'tier-traveler', gear: 'none', main: '#64748b', dark: '#334155', trim: '#cbd5e1', gem: '#94a3b8' }
+      ];
+      const royalTierOf = rank => ROYAL_TIERS.find(tier => (rank > 0 ? rank : Infinity) <= tier.max);
+      const HEARTBEAT_POSES = [
+        { minBpm: 130, key: 'sprint', i18n: 'pose-sprint', cls: 'is-sprint', color: 'var(--speed)', beatDur: '.42s', ecgDur: '1.1s', spikes: 6 },
+        { minBpm: 95, key: 'run', i18n: 'pose-run', cls: 'is-run', color: 'var(--orange)', beatDur: '.62s', ecgDur: '1.6s', spikes: 4 },
+        { minBpm: 60, key: 'walk', i18n: 'pose-walk', cls: 'is-walk', color: 'var(--green)', beatDur: '.88s', ecgDur: '2.2s', spikes: 3 },
+        { minBpm: 1, key: 'idle', i18n: 'pose-idle', cls: 'is-low', color: 'var(--blue)', beatDur: '1.35s', ecgDur: '3.0s', spikes: 2 },
+        { minBpm: 0, key: 'flat', i18n: 'pose-flat', cls: 'is-flat', color: 'var(--muted)', beatDur: '0s', ecgDur: '0s', spikes: 0 }
+      ];
+      let ecgCounter = 0, lastHeartbeatTick = 0;
+      const heartbeatScroll = group.querySelector('.ladder-ranking-scroll');
+      const heartbeatObserver = typeof IntersectionObserver === 'function'
+        ? new IntersectionObserver(entries => {
+            for (const { target, isIntersecting } of entries) target.classList.toggle('is-in-view', isIntersecting);
+          }, { root: heartbeatScroll, rootMargin: '24px 0px' })
+        : null;
+
+      function recentHeartbeatBpm(points, now) {
+        if (!Array.isArray(points) || !points.length) return 0;
+        const active = points.filter(point => Number.isFinite(point?.submittedAt) &&
+          point.submittedAt > now - RECENT_STATS_MS && point.submittedAt <= now);
+        if (!active.length) return 0;
+        const latest = active.reduce((max, point) => Math.max(max, point.submittedAt), -Infinity);
+        const idleSec = Math.max(0, (now - latest) / 1000);
+        const inLastMin = active.filter(point => now - point.submittedAt <= 60_000).length;
+        const inLast3Min = active.filter(point => now - point.submittedAt <= 180_000).length;
+        const raw = 58 + inLastMin * 24 + inLast3Min * 9 + active.length * 4 - idleSec * 0.18;
+        return Math.max(38, Math.min(168, Math.round(raw)));
+      }
+      const poseFromBpm = bpm => HEARTBEAT_POSES.find(pose => bpm >= pose.minBpm) ?? HEARTBEAT_POSES.at(-1);
+
+      function rankBadge(rank, speedBoard = false) {
+        if (!Number.isFinite(rank) || rank < 1) return null;
+        const tier = royalTierOf(rank);
         const badge = document.createElement('span');
-        badge.className = 'ladder-medal ladder-medal-' + period.days;
-        const playedKey = JSON.stringify([period.days, rank, owner]);
-        if (playedMedals.has(playedKey)) badge.classList.add('is-settled');
-        else playedMedals.add(playedKey);
-        badge.dataset.place = rank;
-        badge.title = t('medal-position', t(period.title), t(place));
+        badge.className = `rank-badge ${tier.cls}`;
+        badge.dataset.place = String(rank);
+        const title = t(tier.key);
+        badge.textContent = speedBoard && rank <= 3 ? `S · ${title}` : title;
+        badge.title = title;
         badge.setAttribute('role', 'img');
-        badge.setAttribute('aria-label', badge.title);
-        const crown = document.createElement('span'), branch = document.createElement('span');
-        const emblem = document.createElement('span'), mark = document.createElement('span');
-        crown.className = 'ladder-medal-crown';
-        branch.className = 'ladder-medal-branch';
-        for (let angle = 15; angle <= 135; angle += 20) {
-          const leaf = document.createElement('span');
-          leaf.className = 'ladder-medal-leaf';
-          leaf.style.setProperty('--leaf-angle', `${angle}deg`);
-          branch.append(leaf);
-        }
-        emblem.className = 'ladder-medal-emblem';
-        mark.className = 'ladder-medal-mark';
-        mark.textContent = period.mark;
-        emblem.append(mark);
-        badge.append(crown, branch, branch.cloneNode(true), emblem);
+        badge.setAttribute('aria-label', title);
         return badge;
+      }
+
+      function royalCharacterSvg(pose, rank) {
+        const tier = royalTierOf(rank);
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('class', `hb-char pose-${pose.key}`);
+        svg.setAttribute('viewBox', '0 0 38 34');
+        svg.setAttribute('aria-hidden', 'true');
+        const gear = tier.gear === 'crown'
+          ? `<path d="M13 10.5l-1-5.2 4 2.5 3-4.3 3 4.3 4-2.5-1 5.2z" fill="#fbbf24" stroke="#92400e" stroke-width=".7" stroke-linejoin="round"/><circle cx="19" cy="8.2" r="1.1" fill="${tier.gem}"/>`
+          : tier.gear === 'tiara'
+          ? `<path d="M13.5 10.5l1-4.2 4.5 2.1 4.5-2.1 1 4.2z" fill="#e2e8f0" stroke="#475569" stroke-width=".7" stroke-linejoin="round"/><circle cx="19" cy="8.5" r="1" fill="${tier.gem}"/>`
+          : tier.gear === 'plume'
+          ? `<path d="M13.5 10.5c1-4.2 5-5.5 9.5-3.2-2.8-3.4-8.2-3.4-9.5 3.2z" fill="#fbbf24"/><path d="M14 11c0-3 2.5-5 5.5-5s5.2 2 5.2 5z" fill="#94a3b8"/>`
+          : tier.gear === 'wizard'
+          ? `<path d="M11 11.2h16l-8-8.2z" fill="${tier.dark}" stroke="${tier.trim}" stroke-width=".7" stroke-linejoin="round"/><path d="M10 11.2h18" stroke="${tier.trim}" stroke-width="1.6" stroke-linecap="round"/>`
+          : tier.gear === 'hood'
+          ? `<path d="M12.5 13c0-5 3.5-7 7.5-7 3.5 0 5.5 2 5.5 5-2-.8-4.5-1-7-1-2.5 0-4.2 1.2-6 3z" fill="${tier.dark}"/>`
+          : `<path d="M14 11c0-2.6 2.2-4.4 5-4.4s5 1.8 5 4.4z" fill="${tier.dark}"/>`;
+        const eye = pose.key === 'flat'
+          ? `<path d="M19.8 14.2q1.2 1 2.4 0" stroke="#1e1b2e" stroke-width="1.3" fill="none" stroke-linecap="round"/>`
+          : pose.key === 'sprint'
+          ? `<path d="M20.2 13.5l2.2.8-2.2.8" stroke="#1e1b2e" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23.8" cy="11.2" r=".95" fill="#38bdf8"/>`
+          : `<ellipse cx="21.5" cy="14" rx="1.15" ry="1.45" fill="#1e1b2e"/><circle cx="21.9" cy="13.5" r=".45" fill="#fff"/>`;
+        const fx = pose.key === 'sprint'
+          ? `<g class="ch-fx" stroke="${tier.trim}" stroke-width="1.4" stroke-linecap="round" opacity=".85"><line x1="2" y1="13" x2="8" y2="13"/><line x1="0" y1="18" x2="7" y2="18"/><line x1="3" y1="23" x2="8" y2="23"/></g>`
+          : pose.key === 'flat'
+          ? `<text class="ch-zzz" x="24" y="10" fill="var(--muted)" font-size="8" font-weight="800">Zzz</text>`
+          : '';
+        svg.innerHTML = `${fx}<g class="ch-body"><path class="ch-cape" d="M16 17.5c-4 1.2-7.5 3.8-8.2 7.2 3.2.5 6.8-.2 9.2-2z" fill="${tier.dark}"/><g class="ch-leg-b"><rect x="17" y="24" width="3" height="6.2" rx="1.5" fill="#334155"/><ellipse cx="19" cy="30.2" rx="2.4" ry="1.3" fill="#0f172a"/></g><g class="ch-leg-a"><rect x="20" y="24" width="3" height="6.2" rx="1.5" fill="#475569"/><ellipse cx="22.3" cy="30.2" rx="2.4" ry="1.3" fill="#1e293b"/></g><path d="M15 17.5c0-1.2 1.2-2 4.5-2s4.5.8 4.5 2l1 7.2h-11z" fill="${tier.main}"/><path d="M15.2 17.6q4.3 2 8.6 0" stroke="#f8fafc" stroke-width="2.1" stroke-linecap="round" fill="none"/><rect x="14.5" y="22.5" width="10" height="1.6" rx=".8" fill="${tier.trim}"/><g class="ch-head"><circle cx="19.5" cy="13.8" r="5.3" fill="#ffdfc4"/><path d="M14.2 13.5c0-3 2.3-5.1 5.3-5.1 1.4 0 2.7.5 3.6 1.3-2.5-.2-4.6.6-6.2 2.4-.7.8-1.8 1.4-2.7 1.4z" fill="#473849"/><ellipse cx="20.4" cy="15.9" rx="1.2" ry=".7" fill="#fb7185" opacity=".48"/>${eye}${gear}</g></g>`;
+        return svg;
+      }
+
+      function ecgWaveSvg(pose, bpm) {
+        const id = `ecg-${++ecgCounter}`;
+        const w = 220, h = 28, mid = 17;
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('class', 'hb-ecg-svg');
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.setAttribute('aria-hidden', 'true');
+        if (bpm <= 0) {
+          svg.innerHTML = `<line x1="0" y1="${mid}" x2="${w}" y2="${mid}" stroke="${pose.color}" stroke-width="1.6" stroke-dasharray="5 4" opacity=".65"/>`;
+          return svg;
+        }
+        const n = pose.spikes, segW = w / n;
+        const amp = pose.key === 'sprint' ? 13 : pose.key === 'run' ? 11 : pose.key === 'walk' ? 9 : 6;
+        let d = `M0,${mid}`;
+        for (let i = 0; i < n; i++) {
+          const c = i * segW + segW * 0.55;
+          d += ` L${(c - 10).toFixed(1)},${mid} L${(c - 7).toFixed(1)},${mid - 2.2} L${(c - 4.5).toFixed(1)},${mid} L${(c - 2.5).toFixed(1)},${mid + 3.2} L${c.toFixed(1)},${(mid - amp).toFixed(1)} L${(c + 2.8).toFixed(1)},${mid + 4.5} L${(c + 5).toFixed(1)},${mid} L${(c + 8.5).toFixed(1)},${mid - 2.8} L${(c + 12).toFixed(1)},${mid}`;
+        }
+        d += ` L${w},${mid}`;
+        svg.innerHTML = `<defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="${pose.color}" stop-opacity=".18"/><stop offset="85%" stop-color="${pose.color}" stop-opacity=".95"/><stop offset="100%" stop-color="#fff" stop-opacity="1"/></linearGradient></defs><path d="${d}" fill="none" stroke="${pose.color}" stroke-width="1.2" opacity=".24"/><path class="hb-ecg-scan" d="${d}" fill="none" stroke="url(#${id})" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="140 80" style="--ecg-dur:${pose.ecgDur}"/>`;
+        return svg;
+      }
+
+      function heartbeatStage(row, now) {
+        const bpm = row._hb?.bpm ?? recentHeartbeatBpm(row.recent?.points, now);
+        const pose = row._hb?.pose ?? poseFromBpm(bpm);
+        const stage = document.createElement('div');
+        stage.className = heartbeatObserver ? 'hb-stage' : 'hb-stage is-in-view';
+        const runner = document.createElement('div');
+        runner.className = 'hb-runner-box';
+        runner.append(royalCharacterSvg(pose, row.rank));
+        const ecgWrap = document.createElement('div');
+        ecgWrap.className = 'hb-ecg-wrap';
+        ecgWrap.append(ecgWaveSvg(pose, bpm));
+        const meta = document.createElement('div');
+        meta.className = 'hb-meta-right';
+        const bpmEl = document.createElement('span');
+        bpmEl.className = `hb-bpm ${pose.cls}`;
+        const heart = document.createElement('span');
+        heart.className = 'hb-heart';
+        heart.style.setProperty('--beat-dur', pose.beatDur);
+        heart.textContent = '♥';
+        const num = document.createElement('span');
+        num.className = 'hb-bpm-num';
+        num.textContent = String(bpm);
+        bpmEl.append(heart, ' ', num);
+        const poseTag = document.createElement('span');
+        poseTag.className = 'hb-pose-tag';
+        poseTag.textContent = t(pose.i18n);
+        meta.append(bpmEl, poseTag);
+        stage.append(runner, ecgWrap, meta);
+        heartbeatObserver?.observe(stage);
+        return stage;
       }
 
       const usageChartLabel = () => t(rankDays === 1 ? 'leaderboard-five-minute-usage' : 'leaderboard-daily-usage');
@@ -3498,74 +3629,10 @@
         ctx.stroke(line);
       }
 
-      function pulseX(point, left, width) {
-        const offset = Math.max(0, Math.min(1, (point.submittedAt - left) / RECENT_STATS_MS));
-        return width * offset;
-      }
-
-      function drawSubmissionPulses(chart, points, left, animateAfter) {
-        const maximum = Math.max(1, ...points.map(point => point.deltaTokens));
-        const animate = points.some(point => point.submittedAt > animateAfter) &&
-          !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        let frame, startedAt;
-
-        function schedule() {
-          if (frame === undefined) frame = requestAnimationFrame(draw);
-        }
-
-        function draw(time) {
-          frame = undefined;
-          if (!chart.isConnected || lifetime.signal.aborted) return;
-          const { width, height } = chart.getBoundingClientRect(), density = window.devicePixelRatio || 1;
-          if (width <= 0 || height <= 2 * chartVerticalPadding) return;
-          const pixelWidth = Math.round(width * density), pixelHeight = Math.round(height * density);
-          if (chart.width !== pixelWidth) chart.width = pixelWidth;
-          if (chart.height !== pixelHeight) chart.height = pixelHeight;
-          const ctx = chart.getContext('2d');
-          if (!ctx) return;
-          ctx.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
-          ctx.clearRect(0, 0, width, height);
-          const baseline = height - chartVerticalPadding;
-          ctx.lineWidth = 1.4;
-          ctx.lineCap = ctx.lineJoin = 'round';
-          const halfWidth = Math.min(3.25, width / 70);
-          startedAt ??= time;
-          const progress = animate ? Math.min(1, (time - startedAt) / 200) : 1;
-          const riseAt = point => point.submittedAt > animateAfter ? 1 - (1 - progress) ** 2 : 1;
-          const line = new Path2D();
-          line.moveTo(0, baseline);
-          for (const point of points) {
-            const x = pulseX(point, left, width);
-            if (point.deltaTokens > 0) {
-              const peak = baseline - Math.max(1.5, (baseline - chartVerticalPadding) * point.deltaTokens / maximum) * riseAt(point);
-              line.lineTo(Math.max(0, x - halfWidth), baseline);
-              line.bezierCurveTo(x - halfWidth * 0.54, baseline, x - halfWidth * 0.38, peak, x, peak);
-              line.bezierCurveTo(x + halfWidth * 0.38, peak, x + halfWidth * 0.54, baseline, x + halfWidth, baseline);
-            } else line.lineTo(x, baseline);
-          }
-          line.lineTo(width, baseline);
-          paintUsagePath(ctx, line, baseline, 0, width);
-          for (const point of points) {
-            if (point.deltaTokens > 0) continue;
-            ctx.beginPath();
-            ctx.arc(pulseX(point, left, width), baseline, 1.4 * riseAt(point), 0, Math.PI * 2);
-            ctx.fill();
-          }
-          if (progress < 1) schedule();
-        }
-
-        usagePainters.set(chart, schedule);
-        schedule();
-      }
-
-      function usageCard({ recent, daily }, now, animateAfter, windowStart) {
-        const container = document.createElement('div'), chart = document.createElement('canvas');
+      function usageCard(row, now, _animateAfter, windowStart) {
+        const { recent, daily } = row;
+        const container = document.createElement('div');
         container.className = 'ladder-recent';
-        chart.className = 'ladder-chart';
-        chart.width = 320;
-        chart.height = 60;
-        chart.setAttribute('role', 'img');
-        chart.setAttribute('aria-label', usageChartLabel());
         const byDay = rankDays > 1;
         const dateLabel = time => locale.date(time, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' });
         const timeOf = point => byDay ? point.at : point.submittedAt;
@@ -3580,9 +3647,15 @@
           (point.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '')
           : `${shortClock(point.submittedAt)} · ${formatMillionTokens(point.deltaTokens)} · ${speedText(point.avgTps)}`;
         const emptyTitle = byDay ? usageChartLabel() : `${usageChartLabel()}\n${formatMillionTokens(0)} · ${speedText(0)}`;
-        chart.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : emptyTitle;
-        container.append(chart);
         if (byDay) {
+          const chart = document.createElement('canvas');
+          chart.className = 'ladder-chart';
+          chart.width = 320;
+          chart.height = 60;
+          chart.setAttribute('role', 'img');
+          chart.setAttribute('aria-label', usageChartLabel());
+          chart.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : emptyTitle;
+          container.append(chart);
           const axis = document.createElement('div');
           axis.className = 'ladder-chart-axis';
           for (const offset of [0, Math.round((rankDays - 1) / 2), rankDays - 1]) {
@@ -3621,28 +3694,25 @@
           const speed = document.createElement('strong');
           meta.className = 'ladder-recent-meta';
           tools.className = 'ladder-recent-tools';
-          const label = toolText(recent?.topModel, recent?.topCli);
-          tools.title = label;
-          if (typeof document.createElementNS === 'function' && recent?.topCli) {
-            const nameText = document.createElement('span');
-            nameText.textContent = label;
-            tools.append(createHarnessIconBadge(recent.topCli, 16), nameText);
-          } else {
-            tools.textContent = label;
+          const hasTool = Boolean(recent?.topModel || recent?.topCli);
+          if (hasTool) {
+            const label = toolText(recent?.topModel, recent?.topCli);
+            tools.title = label;
+            if (typeof document.createElementNS === 'function' && recent?.topCli) {
+              const nameText = document.createElement('span');
+              nameText.textContent = label;
+              tools.append(createHarnessIconBadge(recent.topCli, 16), nameText);
+            } else {
+              tools.textContent = label;
+            }
           }
           speed.className = 'ladder-recent-speed';
           speed.textContent = speedText(latestPoint?.avgTps ?? 0);
           speed.title = t('leaderboard-average-speed');
           meta.append(tools, speed);
-          container.append(meta);
-          drawSubmissionPulses(chart, points, left, animateAfter);
-          if (!latestPoint) return container;
-          chart.addEventListener('pointermove', event => {
-            const { left: edge, width } = chart.getBoundingClientRect();
-            const distance = point => Math.abs(pulseX(point, left, width) - (event.clientX - edge));
-            const nearest = points.reduce((a, b) => distance(a) <= distance(b) ? a : b);
-            chart.title = distance(nearest) <= 10 ? pointTitle(nearest) : emptyTitle;
-          });
+          const stage = heartbeatStage(row, now);
+          stage.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : emptyTitle;
+          container.append(meta, stage);
         }
         return container;
       }
@@ -3650,6 +3720,8 @@
       function renderRows(rows, username, ranking) {
         const now = Date.now();
         const speedBoard = rankDays === 0;
+        const todayBoard = rankDays === 1;
+        if (todayBoard) lastHeartbeatTick = now;
         nextRecentExpiry = Infinity;
         if (speedBoard) {
           const offset = ranking?.clockOffset ?? 0;
@@ -3663,19 +3735,23 @@
           for (const row of rows) nextRecentExpiry = Math.min(nextRecentExpiry, expiry(row));
         }
         rows = rows.map(row => {
-          if (!row.recent) return row;
-          const points = row.recent.points.filter(point => point.submittedAt > now - RECENT_STATS_MS && point.submittedAt <= now);
+          const points = row.recent
+            ? row.recent.points.filter(point => point.submittedAt > now - RECENT_STATS_MS && point.submittedAt <= now)
+            : [];
           if (points.length) nextRecentExpiry = Math.min(nextRecentExpiry, points[0].submittedAt + RECENT_STATS_MS);
-          return { ...row, recent: { ...row.recent, points } };
+          const updated = row.recent ? { ...row, recent: { ...row.recent, points } } : row;
+          if (!todayBoard) return updated;
+          const bpm = recentHeartbeatBpm(points, now);
+          return { ...updated, _hb: { bpm, pose: poseFromBpm(bpm) } };
         });
-        const previousPulses = animateToday && pulseDay === renderedDay ? latestPulses : null;
-        pulseDay = rankDays === 1 ? renderedDay : '';
-        latestPulses = new Map(rankDays === 1 ? rows.map(row => [row.username, row.recent?.points.at(-1)?.submittedAt ?? -Infinity]) : []);
         const signature = JSON.stringify([rankingMode, rankDays, ranking?.windowStart, username, rows]);
         if (signature === drawnRows) return;
-        const period = speedBoard ? speedPeriod : periods.find(entry => entry.days === rankDays);
         drawnRows = signature;
-        const keyOf = row => JSON.stringify([rankingMode, rankDays, ranking?.windowStart, username === row.username, row]);
+        const keyOf = row => JSON.stringify([
+          rankingMode, rankDays, ranking?.windowStart, username === row.username,
+          todayBoard ? row._hb?.pose?.key : null,
+          { ...row, _hb: undefined }
+        ]);
         rankingNodes = updateList(element('rows'), rows, rankingNodes, keyOf, row => {
           const item = document.createElement('li');
           if (username && row.username === username) item.classList.add('ladder-self');
@@ -3683,6 +3759,7 @@
           const rank = document.createElement('span'), name = document.createElement('span'), user = document.createElement('div');
           const total = document.createElement('strong'), time = document.createElement('time');
           rank.className = 'ladder-rank';
+          if (row.rank >= 1 && row.rank <= 3) rank.dataset.place = String(row.rank);
           name.className = 'ladder-name';
           user.className = 'ladder-row-user';
           total.className = 'ladder-total';
@@ -3695,7 +3772,7 @@
           avatar.className = 'ladder-avatar';
           avatar.setAttribute('aria-hidden', 'true');
           setAvatar(avatar, row.username);
-          const badge = period && medal(row.rank, period, row.username);
+          const badge = rankBadge(row.rank, speedBoard);
           if (badge) user.append(badge);
           user.append(avatar, name);
           total.textContent = speedBoard ? speedText(row.avgTps) : formatMillionTokens(row.tokens);
@@ -3712,14 +3789,16 @@
             const tools = document.createElement('span');
             meta.className = 'ladder-recent ladder-recent-meta';
             tools.className = 'ladder-recent-tools';
-            const label = toolText(row.topModel, row.topCli);
-            tools.title = label;
-            if (typeof document.createElementNS === 'function' && row.topCli) {
-              const nameText = document.createElement('span');
-              nameText.textContent = label;
-              tools.append(createHarnessIconBadge(row.topCli, 16), nameText);
-            } else {
-              tools.textContent = label;
+            if (row.topModel || row.topCli) {
+              const label = toolText(row.topModel, row.topCli);
+              tools.title = label;
+              if (typeof document.createElementNS === 'function' && row.topCli) {
+                const nameText = document.createElement('span');
+                nameText.textContent = label;
+                tools.append(createHarnessIconBadge(row.topCli, 16), nameText);
+              } else {
+                tools.textContent = label;
+              }
             }
             meta.append(tools);
             if (Number.isSafeInteger(row.deltaTokens)) {
@@ -3729,10 +3808,19 @@
               meta.append(tokens);
             }
             item.append(meta);
-          } else item.append(usageCard(row, now, previousPulses?.get(row.username) ?? Infinity, ranking.windowStart));
+          } else item.append(usageCard(row, now, Infinity, ranking.windowStart));
           item.append(time);
           return item;
         });
+        if (todayBoard) {
+          for (const [key, node] of rankingNodes) {
+            const matched = rows.find(row => keyOf(row) === key);
+            const bpmNum = matched ? node.querySelector('.hb-bpm-num') : null;
+            if (bpmNum && bpmNum.textContent !== String(matched._hb.bpm)) {
+              bpmNum.textContent = String(matched._hb.bpm);
+            }
+          }
+        }
         // Rows changed after a sync: give a still-default account avatar another chance too.
         setAvatar(element('account-avatar'), username, { retry: true });
       }
@@ -3751,12 +3839,12 @@
           else if (username && ranking && !rankingProblem) rankText = t('rank-not-listed');
           element('user-rank-' + period.days).textContent = rankText;
           element('user-tokens-' + period.days).textContent = formatMillionTokens(row?.tokens);
-          const place = row?.rank >= 1 && row.rank <= podium.length ? row.rank : 0;
+          const place = row?.rank >= 1 ? row.rank : 0;
           const slot = element('user-badge-' + period.days);
           if (Number(slot.dataset.place ?? 0) === place) continue;
           slot.dataset.place = place;
-          slot.querySelector('.ladder-medal')?.remove();
-          if (place) slot.append(medal(place, period, ':self'));
+          slot.replaceChildren();
+          if (place) slot.append(rankBadge(place, false));
         }
       }
 
@@ -3937,7 +4025,6 @@
             : updated && result.nextAt - result.cutoffAt === 3_600_000 && next > result.updatedAt
               ? next : (updated ? result.updatedAt : startedAt) + RANK_REFRESH_MS;
           render();
-          if (updated && rankDays === 1) animateToday = true;
         })().finally(() => {
           if (rankingPending !== pending) return;
           rankingPending = undefined;
@@ -3954,7 +4041,6 @@
       }
 
       function showCachedRanking() {
-        animateToday = false;
         render('');
         if (!session) void refreshSession();
         if (!rankingAccess) return;
@@ -4045,14 +4131,12 @@
         if (days === rankDays) return;
         rankDays = days;
         for (const tab of rankTabs) tab.setAttribute('aria-pressed', String(Number(tab.dataset.rankDays) === days));
-        animateToday = false;
         render('');
         if (!cachedRankings.size) void showCache(days);
         void refresh(days);
       });
       group.addEventListener('tps-view-opened', showCachedRanking);
       window.addEventListener('online', () => {
-        animateToday = false;
         void refresh(rankDays, true);
       }, { signal: lifetime.signal });
       function redrawUsageCharts() {
@@ -4151,13 +4235,15 @@
       void refreshSession();
       const interval = setInterval(() => {
         if (group.hidden) return;
-        if (Date.now() >= nextRecentExpiry) render();
+        const now = Date.now();
+        if (now >= nextRecentExpiry || (rankDays === 1 && now - lastHeartbeatTick >= 10_000)) render();
         if (rankingAccess) void refresh();
       }, 1000);
       window.addEventListener('pagehide', () => {
         lifetime.abort();
         rankingAccess?.abort();
         avatarView.dispose();
+        heartbeatObserver?.disconnect();
         usageResize.disconnect();
         usageTheme.disconnect();
         rankingSubscription?.dispose();

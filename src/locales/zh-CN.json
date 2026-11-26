@@ -299,5 +299,17 @@
   "model-distribution": "模型数据",
   "sort-by-usage": "按用量",
   "sort-by-speed": "按均速",
-  "heatmap-active-days": "{0} 天活跃"
+  "heatmap-active-days": "{0} 天活跃",
+  "tier-king": "国王",
+  "tier-prince": "亲王",
+  "tier-knight": "骑士长",
+  "tier-mage": "大法师",
+  "tier-ranger": "游侠",
+  "tier-squire": "见习生",
+  "tier-traveler": "旅人",
+  "pose-sprint": "狂奔冲刺",
+  "pose-run": "小跑赶路",
+  "pose-walk": "稳步散步",
+  "pose-idle": "喘气歇息",
+  "pose-flat": "直接躺平"
 }

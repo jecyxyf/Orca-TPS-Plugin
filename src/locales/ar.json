@@ -299,5 +299,17 @@
   "model-distribution": "بيانات النماذج",
   "sort-by-usage": "الاستخدام",
   "sort-by-speed": "السرعة",
-  "heatmap-active-days": "{0} يوم نشاط"
+  "heatmap-active-days": "{0} يوم نشاط",
+  "tier-king": "الملك",
+  "tier-prince": "الأمير",
+  "tier-knight": "الفارس",
+  "tier-mage": "الساحر",
+  "tier-ranger": "الجوال",
+  "tier-squire": "المتدرب",
+  "tier-traveler": "الرحالة",
+  "pose-sprint": "عدو سريع",
+  "pose-run": "هرولة",
+  "pose-walk": "مشي",
+  "pose-idle": "استراحة",
+  "pose-flat": "مستلقٍ"
 }

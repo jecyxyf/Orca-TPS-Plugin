@@ -299,5 +299,17 @@
   "model-distribution": "Model data",
   "sort-by-usage": "Usage",
   "sort-by-speed": "Speed",
-  "heatmap-active-days": "{0} active days"
+  "heatmap-active-days": "{0} active days",
+  "tier-king": "King",
+  "tier-prince": "Prince",
+  "tier-knight": "Knight",
+  "tier-mage": "Archmage",
+  "tier-ranger": "Ranger",
+  "tier-squire": "Squire",
+  "tier-traveler": "Traveler",
+  "pose-sprint": "Sprinting",
+  "pose-run": "Jogging",
+  "pose-walk": "Walking",
+  "pose-idle": "Resting",
+  "pose-flat": "Flatline"
 }

@@ -299,5 +299,17 @@
   "model-distribution": "モデルデータ",
   "sort-by-usage": "使用量",
   "sort-by-speed": "平均速度",
-  "heatmap-active-days": "{0} 日稼働"
+  "heatmap-active-days": "{0} 日稼働",
+  "tier-king": "国王",
+  "tier-prince": "親王",
+  "tier-knight": "騎士長",
+  "tier-mage": "大魔導士",
+  "tier-ranger": "レンジャー",
+  "tier-squire": "見習い",
+  "tier-traveler": "旅人",
+  "pose-sprint": "猛ダッシュ",
+  "pose-run": "ジョギング",
+  "pose-walk": "お散歩",
+  "pose-idle": "ひと休み",
+  "pose-flat": "ごろ寝"
 }

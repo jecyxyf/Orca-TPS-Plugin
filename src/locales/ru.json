@@ -299,5 +299,17 @@
   "model-distribution": "Данные моделей",
   "sort-by-usage": "Объём",
   "sort-by-speed": "Скорость",
-  "heatmap-active-days": "{0} дн. активности"
+  "heatmap-active-days": "{0} дн. активности",
+  "tier-king": "Король",
+  "tier-prince": "Принц",
+  "tier-knight": "Рыцарь",
+  "tier-mage": "Архимаг",
+  "tier-ranger": "Следопыт",
+  "tier-squire": "Оруженосец",
+  "tier-traveler": "Странник",
+  "pose-sprint": "Спринт",
+  "pose-run": "Бег трусцой",
+  "pose-walk": "Прогулка",
+  "pose-idle": "Отдых",
+  "pose-flat": "Лежит пластом"
 }

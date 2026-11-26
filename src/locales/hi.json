@@ -299,5 +299,17 @@
   "model-distribution": "मॉडल डेटा",
   "sort-by-usage": "उपयोग",
   "sort-by-speed": "गति",
-  "heatmap-active-days": "{0} दिन सक्रिय"
+  "heatmap-active-days": "{0} दिन सक्रिय",
+  "tier-king": "राजा",
+  "tier-prince": "राजकुमार",
+  "tier-knight": "योद्धा",
+  "tier-mage": "महाजादूगर",
+  "tier-ranger": "रेंजर",
+  "tier-squire": "प्रशिक्षु",
+  "tier-traveler": "यात्री",
+  "pose-sprint": "तेज़ दौड़",
+  "pose-run": "जॉगिंग",
+  "pose-walk": "टहलना",
+  "pose-idle": "सुस्ताना",
+  "pose-flat": "पसर गया"
 }

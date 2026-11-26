@@ -299,5 +299,17 @@
   "model-distribution": "Data model",
   "sort-by-usage": "Pemakaian",
   "sort-by-speed": "Kecepatan",
-  "heatmap-active-days": "{0} hari aktif"
+  "heatmap-active-days": "{0} hari aktif",
+  "tier-king": "Raja",
+  "tier-prince": "Pangeran",
+  "tier-knight": "Ksatria",
+  "tier-mage": "Penyihir Agung",
+  "tier-ranger": "Penjelajah",
+  "tier-squire": "Pengawal",
+  "tier-traveler": "Musafir",
+  "pose-sprint": "Lari cepat",
+  "pose-run": "Lari kecil",
+  "pose-walk": "Jalan",
+  "pose-idle": "Istirahat",
+  "pose-flat": "Rebahan"
 }
