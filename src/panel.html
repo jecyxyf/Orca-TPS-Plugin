@@ -392,14 +392,40 @@
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), var(--shadow);
     }
     #ladder-controls, .ladder-personal-data { flex: none; }
+    #leaderboard #ladder-controls { padding: 12px 13px; }
     .ladder-controls-head {
       display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0;
     }
     .ladder-controls-main { flex: 1; min-width: 0; }
-    .ladder-controls-actions { display: flex; align-items: center; gap: 6px; flex: none; }
-    .ladder-personal-data, .ladder-rank-card { scrollbar-width: thin; scrollbar-gutter: stable; }
-    .ladder-personal-data { max-block-size: 208px; padding-block-end: 8px; overflow-y: auto; }
+    .ladder-controls-actions { display: flex; align-items: center; gap: 6px; flex: none; min-height: 28px; }
+    .ladder-personal-data { min-width: 0; }
+    .ladder-rank-card { scrollbar-width: thin; scrollbar-gutter: stable; }
     .ladder-rank-card { display: flex; flex: 1; flex-direction: column; min-block-size: 224px; overflow: hidden; }
+    .ladder-account-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .ladder-upload-sub {
+      display: inline-flex; align-items: center; gap: 4px; min-width: 0;
+      color: var(--muted); font-size: 11px; line-height: 1.2; font-variant-numeric: tabular-nums;
+    }
+    .ladder-upload-sub::before {
+      content: ""; width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--green);
+    }
+    .ladder-upload-sub:has([aria-busy="true"])::before { background: var(--blue); }
+    .ladder-upload-sub:has(.is-failed) { color: var(--error); }
+    .ladder-upload-sub:has(.is-failed)::before { background: var(--error); }
+    .ladder-upload-sub .ladder-transfer { width: auto; min-height: 14px; justify-content: center; }
+    .ladder-upload-sub .ladder-transfer svg { width: 12.5px; height: 12.5px; }
+    .ladder-upload-sub .ladder-toolbar-value { font-size: 11px; line-height: 1.2; color: inherit; }
+    .ladder-logout-btn {
+      display: inline-grid; place-items: center; flex: none;
+      width: 28px; height: 28px; padding: 0;
+      border: 0; border-radius: 9px;
+      background: var(--tag-bg); color: var(--icon-color, var(--muted));
+      cursor: pointer; transition: color .15s ease, background-color .15s ease;
+    }
+    .ladder-logout-btn svg { width: 14px; height: 14px; }
+    .ladder-logout-btn:hover { background: rgb(128 128 128 / 20%); color: var(--ink); }
+    .ladder-logout-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .ladder-logout-btn:disabled { cursor: default; opacity: .55; }
     #ladder-ranking-notice { overflow-y: auto; scrollbar-width: thin; }
     #ladder-ranking-content { display: flex; flex: 1; flex-direction: column; min-block-size: 0; }
     #ladder-ranking-content > :not(.ladder-ranking-scroll) { flex: none; }
@@ -469,7 +495,7 @@
     .ladder-status { margin: 8px 0 0; font-size: 12px; overflow-wrap: anywhere; }
     .ladder-status:empty, .ladder-mine:empty { display: none; }
     .ladder-identity { display: flex; justify-content: space-between; gap: 8px; align-items: center; min-width: 0; }
-    .ladder-account-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .ladder-account-name { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 34px; }
     .ladder-avatar {
       display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px;
       border-radius: 50%; overflow: hidden; background: var(--button-bg);
@@ -477,26 +503,32 @@
     }
     .ladder-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .ladder-avatar svg { display: block; width: 78%; height: 78%; }
-    .ladder-account-name .ladder-avatar { width: 32px; height: 32px; }
+    .ladder-account-name .ladder-avatar { width: 34px; height: 34px; }
     .ladder-user-stats {
       display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 6px; margin: 0;
+      gap: 0; margin: 11px 0 0; padding-top: 10px;
+      border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
     }
     .ladder-user-stat {
-      display: grid; grid-template-columns: minmax(0, 1fr);
-      gap: 2px; padding: 5px 7px; border-radius: 10px;
-      background: var(--tag-bg); line-height: 1.25;
+      display: flex; flex-direction: column;
+      gap: 3px; padding: 0 9px; border-radius: 0;
+      background: transparent; line-height: 1.25; min-width: 0;
     }
+    .ladder-user-stat:first-child { padding-inline-start: 0; }
+    .ladder-user-stat:last-child { padding-inline-end: 0; }
+    .ladder-user-stat + .ladder-user-stat { border-inline-start: 1px solid color-mix(in srgb, var(--line) 75%, transparent); }
     .ladder-user-stat-top {
       display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 4px; min-width: 0;
     }
     .ladder-user-stat dt { color: var(--muted); font-size: 11px; font-weight: 650; white-space: nowrap; }
     .ladder-user-stat dd { min-width: 0; margin: 0; font-variant-numeric: tabular-nums; }
+    .ladder-user-stat .ladder-badge-slot { align-self: flex-start; margin-top: 1px; }
+    .ladder-user-stat .ladder-badge-slot .rank-badge { padding: 1px 6px; font-size: 9.5px; }
     .ladder-user-position { display: flex; align-items: center; justify-content: flex-end; gap: 3px; text-align: end; }
     .ladder-user-rank { font-size: 11px; font-weight: 800; color: var(--ink); overflow-wrap: anywhere; white-space: nowrap; }
-    .ladder-user-tokens { color: var(--blue); font-size: 13px; font-weight: 800; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ladder-user-tokens { color: var(--blue); font-size: 13.5px; font-weight: 800; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ladder-mine {
-      min-width: 0; margin: 0; color: var(--purple); font-size: 16px; font-weight: 800; line-height: 1.25;
+      min-width: 0; margin: 0; color: var(--purple); font-size: 15px; font-weight: 800; line-height: 1.25;
       letter-spacing: -.2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .ladder-badge-slot { display: inline-flex; flex: none; }
@@ -1113,9 +1145,9 @@
       .speed { gap: 3px; }
       .speed-value { font-size: 17px; }
       .war, .heat, .ladder-card { padding-inline: 12px; }
-      .ladder-mine { font-size: 15px; }
-      .ladder-user-stats { gap: 4px; }
-      .ladder-user-stat { padding: 4px 5px; }
+      .ladder-mine { font-size: 14px; }
+      .ladder-account-name .ladder-avatar { width: 30px; height: 30px; }
+      .ladder-user-stat { padding: 0 6px; }
       .ladder-user-rank { font-size: 10px; }
       .ladder-user-tokens { font-size: 12px; }
       .ladder-toolbar {
@@ -1441,73 +1473,76 @@
               <div class="ladder-identity">
                 <div class="ladder-account-name">
                   <span class="ladder-avatar" id="ladder-account-avatar" aria-hidden="true"></span>
-                  <p class="ladder-mine" id="ladder-mine" dir="auto"></p>
+                  <div class="ladder-account-meta">
+                    <p class="ladder-mine" id="ladder-mine" dir="auto"></p>
+                    <span class="ladder-upload-sub" id="ladder-upload-wrap" hidden>
+                      <span class="ladder-transfer" id="ladder-upload-state" role="img" aria-busy="false" data-i18n-aria-label="data-upload" data-i18n-title="data-upload">
+                        <svg class="ladder-transfer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-.4-8 6 6 0 0 1 11.5-1.7A4.8 4.8 0 0 1 18 18h-1M12 19v-8m-3 3 3-3 3 3"/></svg>
+                        <svg class="ladder-transfer-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
+                        <svg class="ladder-transfer-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v8m0 6h.01"/></svg>
+                      </span>
+                      <time class="ladder-toolbar-value" id="ladder-sync-result" data-i18n-title="last-upload-time" data-localized-text>—</time>
+                    </span>
+                  </div>
                 </div>
-                <button class="refresh ladder-control ladder-secondary" id="ladder-logout" type="button"><span data-i18n="sign-out"></span></button>
               </div>
             </div>
           </div>
-          <div class="war-tabs war-mode-tabs usage-mode-tabs" role="group" data-i18n-aria-label="ranking-update-mode">
-            <button class="war-tab" type="button" data-ladder-mode="calendar" aria-pressed="true"
-                    data-i18n-title="ranking-update-daily" data-i18n-aria-label="ranking-update-daily">
+          <div class="ladder-controls-actions">
+            <div class="war-tabs war-mode-tabs usage-mode-tabs" role="group" data-i18n-aria-label="ranking-update-mode">
+              <button class="war-tab" type="button" data-ladder-mode="calendar" aria-pressed="true"
+                      data-i18n-title="ranking-update-daily" data-i18n-aria-label="ranking-update-daily">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="17" rx="2"/>
+                  <path d="M8 2v4M16 2v4M3 10h18"/>
+                </svg>
+              </button>
+              <button class="war-tab" type="button" data-ladder-mode="hourly" aria-pressed="false"
+                      data-i18n-title="ranking-update-hourly" data-i18n-aria-label="ranking-update-hourly">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"/>
+                  <path d="M12 7v5l3.2 2"/>
+                </svg>
+              </button>
+            </div>
+            <button class="ladder-logout-btn" id="ladder-logout" type="button" data-i18n-title="sign-out" data-i18n-aria-label="sign-out" hidden>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="17" rx="2"/>
-                <path d="M8 2v4M16 2v4M3 10h18"/>
-              </svg>
-            </button>
-            <button class="war-tab" type="button" data-ladder-mode="hourly" aria-pressed="false"
-                    data-i18n-title="ranking-update-hourly" data-i18n-aria-label="ranking-update-hourly">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9"/>
-                <path d="M12 7v5l3.2 2"/>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <path d="M16 17l5-5-5-5"/>
+                <path d="M21 12H9"/>
               </svg>
             </button>
           </div>
         </div>
         <p class="ladder-status" id="ladder-status" role="status" data-localized-text></p>
         <p class="ladder-note" id="ladder-logout-pending" role="status" data-localized-text hidden></p>
-      </div>
-      <div class="ladder-card ladder-personal-data" id="ladder-personal-data" hidden>
-        <dl class="ladder-user-stats" id="ladder-personal-ranks" data-i18n-aria-label="personal-ranking" hidden>
-          <div class="ladder-user-stat">
-            <div class="ladder-user-stat-top">
-              <dt data-ladder-range="1" data-localized-text></dt>
-              <dd class="ladder-user-position">
-                <span class="ladder-badge-slot" id="ladder-user-badge-1"></span>
-                <span class="ladder-user-rank" id="ladder-user-rank-1" data-localized-text>—</span>
-              </dd>
+        <div class="ladder-personal-data" id="ladder-personal-data" hidden>
+          <dl class="ladder-user-stats" id="ladder-personal-ranks" data-i18n-aria-label="personal-ranking" hidden>
+            <div class="ladder-user-stat">
+              <div class="ladder-user-stat-top">
+                <dt data-ladder-range="1" data-localized-text></dt>
+                <dd class="ladder-user-rank" id="ladder-user-rank-1" data-localized-text>—</dd>
+              </div>
+              <dd class="ladder-user-tokens" id="ladder-user-tokens-1" data-i18n-title="daily-ranked-usage">—</dd>
+              <dd class="ladder-badge-slot" id="ladder-user-badge-1"></dd>
             </div>
-            <dd class="ladder-user-tokens" id="ladder-user-tokens-1" data-i18n-title="daily-ranked-usage">—</dd>
-          </div>
-          <div class="ladder-user-stat">
-            <div class="ladder-user-stat-top">
-              <dt data-ladder-range="7" data-localized-text></dt>
-              <dd class="ladder-user-position">
-                <span class="ladder-badge-slot" id="ladder-user-badge-7"></span>
-                <span class="ladder-user-rank" id="ladder-user-rank-7" data-localized-text>—</span>
-              </dd>
+            <div class="ladder-user-stat">
+              <div class="ladder-user-stat-top">
+                <dt data-ladder-range="7" data-localized-text></dt>
+                <dd class="ladder-user-rank" id="ladder-user-rank-7" data-localized-text>—</dd>
+              </div>
+              <dd class="ladder-user-tokens" id="ladder-user-tokens-7" data-i18n-title="weekly-ranked-usage">—</dd>
+              <dd class="ladder-badge-slot" id="ladder-user-badge-7"></dd>
             </div>
-            <dd class="ladder-user-tokens" id="ladder-user-tokens-7" data-i18n-title="weekly-ranked-usage">—</dd>
-          </div>
-          <div class="ladder-user-stat">
-            <div class="ladder-user-stat-top">
-              <dt data-ladder-range="30" data-localized-text></dt>
-              <dd class="ladder-user-position">
-                <span class="ladder-badge-slot" id="ladder-user-badge-30"></span>
-                <span class="ladder-user-rank" id="ladder-user-rank-30" data-localized-text>—</span>
-              </dd>
+            <div class="ladder-user-stat">
+              <div class="ladder-user-stat-top">
+                <dt data-ladder-range="30" data-localized-text></dt>
+                <dd class="ladder-user-rank" id="ladder-user-rank-30" data-localized-text>—</dd>
+              </div>
+              <dd class="ladder-user-tokens" id="ladder-user-tokens-30" data-i18n-title="monthly-ranked-usage">—</dd>
+              <dd class="ladder-badge-slot" id="ladder-user-badge-30"></dd>
             </div>
-            <dd class="ladder-user-tokens" id="ladder-user-tokens-30" data-i18n-title="monthly-ranked-usage">—</dd>
-          </div>
-        </dl>
-        <div class="ladder-toolbar ladder-upload-toolbar">
-          <h2 class="section-title" data-i18n="data-upload" data-i18n-title="data-upload"></h2>
-          <span class="ladder-transfer" id="ladder-upload-state" role="img" aria-busy="false" data-i18n-aria-label="data-upload" data-i18n-title="data-upload">
-            <svg class="ladder-transfer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-.4-8 6 6 0 0 1 11.5-1.7A4.8 4.8 0 0 1 18 18h-1M12 19v-8m-3 3 3-3 3 3"/></svg>
-            <svg class="ladder-transfer-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/></svg>
-            <svg class="ladder-transfer-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v8m0 6h.01"/></svg>
-          </span>
-          <time class="ladder-toolbar-value" id="ladder-sync-result" data-i18n-title="last-upload-time" data-localized-text>—</time>
+          </dl>
         </div>
       </div>
       <section class="ladder-card ladder-rank-card" aria-labelledby="ladder-rank-title">
@@ -3947,7 +3982,9 @@
         element('login').disabled = busy;
         element('login-wait').hidden = !pendingLogin;
         element('account').hidden = !signedIn;
+        element('upload-wrap').hidden = !signedIn;
         element('personal-data').hidden = !signedIn;
+        element('logout').hidden = !signedIn;
         element('logout').disabled = busy;
         const logoutNote = element('logout-pending');
         const logoutText = snapshot.logoutStorageFailed ? t('logout-storage-failed')

@@ -541,9 +541,12 @@ test('non-interactive transfer indicators sit beside the last successful times',
   assert.equal(css.get('.ladder-toolbar-value')['font-size'], css.get('.ladder-toolbar .section-title')['font-size']);
   assert.equal(css.get('.ladder-toolbar-value')['grid-area'], 'last');
   assert.match(html, /\.ladder-rank-toolbar\.is-off :is\(\.ladder-transfer, \.ladder-toolbar-value\) \{ display: none; \}/);
-  assert.equal(css.get('.ladder-personal-data')['scrollbar-gutter'], 'stable');
-  assert.equal(css.get('.ladder-personal-data')['max-block-size'], '208px');
-  assert.equal(css.get('.ladder-personal-data')['padding-block-end'], '8px');
+  assert.equal(css.get('.ladder-user-stat').display, 'flex');
+  assert.equal(css.get('.ladder-user-stat').background, 'transparent');
+  assert.equal(css.get('.ladder-controls-actions').display, 'flex');
+  assert.equal(css.get('.ladder-upload-sub').display, 'inline-flex');
+  assert.equal(css.get('.ladder-logout-btn').width, '28px');
+  assert.match(html, /id="ladder-controls"[\s\S]*?id="ladder-upload-wrap"[\s\S]*?id="ladder-logout"[\s\S]*?id="ladder-personal-data"/);
   assert.equal(css.get('.ladder-rank-card')['scrollbar-gutter'], 'stable');
   assert.equal(css.get('.ladder-transfer.is-spinning .ladder-transfer-spinner').animation, 'spin 1s linear infinite');
   assert.match(html, /transferSpinTimers\.set\(indicator, setTimeout\([\s\S]*?classList\.add\('is-spinning'\)[\s\S]*?\}, 1000\)\)/);
