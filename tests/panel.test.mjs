@@ -208,6 +208,11 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.equal(css.get('.heat-tip')['white-space'], 'nowrap');
   assert.equal(css.get('.heat-tip').width, 'max-content');
   assert.match(html, /heatTip\.style\.left = '0px';\s*heatTip\.hidden = false;/);
+  assert.match(html, /@keyframes star-fall\b[\s\S]*?@keyframes star-twinkle\b[\s\S]*?@keyframes star-ripple\b/);
+  assert.match(html, /function playStarMapIntro\(\)/);
+  assert.match(html, /clearTimeout\(starIntroTimer\)/);
+  assert.match(css.get('.heat-cell.lv2').animation, /star-twinkle/);
+  assert.match(css.get('.heat-cell:hover::after').animation, /star-ripple/);
   assert.match(html, /class="ladder-controls-head"/);
   assert.equal(css.get('.ladder-total').background, 'transparent');
   assert.equal(css.get('.ladder-tabs .war-tab')['font-size'], '13px');

@@ -864,19 +864,58 @@
       align-items: center;
     }
     .heat-cell {
-      width: 100%; aspect-ratio: 1; border-radius: 50%; background: var(--heat-0);
+      position: relative; width: 100%; aspect-ratio: 1; border-radius: 50%; background: var(--heat-0);
       transition: transform .12s ease;
     }
     .heat-cell.lv1 { background: #2d4c7c; }
-    .heat-cell.lv2 { background: #3b82f6; box-shadow: 0 0 3px rgb(59 130 246 / 45%); }
-    .heat-cell.lv3 { background: #60a5fa; box-shadow: 0 0 5px rgb(96 165 250 / 75%); }
-    .heat-cell.lv4 { background: #dbeafe; box-shadow: 0 0 7px rgb(125 211 252 / 95%), 0 0 12px rgb(56 189 248 / 50%); }
+    .heat-cell.lv2 {
+      background: #3b82f6; box-shadow: 0 0 3px rgb(59 130 246 / 45%);
+      animation: star-twinkle var(--star-dur, 3.6s) ease-in-out var(--star-delay, 0s) infinite;
+    }
+    .heat-cell.lv3 {
+      background: #60a5fa; box-shadow: 0 0 5px rgb(96 165 250 / 75%);
+      animation: star-twinkle var(--star-dur, 3.2s) ease-in-out var(--star-delay, 0s) infinite;
+    }
+    .heat-cell.lv4 {
+      background: #dbeafe; box-shadow: 0 0 7px rgb(125 211 252 / 95%), 0 0 12px rgb(56 189 248 / 50%);
+      animation: star-twinkle-bright var(--star-dur, 2.8s) ease-in-out var(--star-delay, 0s) infinite;
+    }
     html:not(.dark) .heat-cell { background: var(--heat-0); }
     html:not(.dark) .heat-cell.lv1 { background: var(--heat-1); }
     html:not(.dark) .heat-cell.lv2 { background: var(--heat-2); box-shadow: none; }
     html:not(.dark) .heat-cell.lv3 { background: var(--heat-3); box-shadow: 0 0 3px rgb(59 130 230 / 40%); }
     html:not(.dark) .heat-cell.lv4 { background: var(--heat-4); box-shadow: 0 0 5px rgb(29 79 184 / 55%); }
-    .heat-cell:hover { transform: scale(1.45); outline: 1px solid var(--blue); outline-offset: 0; }
+    .heat-star-grid.is-waking .heat-cell {
+      animation: star-fall .45s cubic-bezier(.22, 1, .36, 1) var(--star-order, 0s) both;
+    }
+    .heat-cell:hover { animation: none; transform: scale(1.45); outline: 1px solid var(--blue); outline-offset: 0; z-index: 2; }
+    .heat-cell:hover::before, .heat-cell:hover::after {
+      content: ""; position: absolute; inset: -3px; border-radius: 50%;
+      border: 2px solid #7dd3fc; box-shadow: 0 0 8px rgb(56 189 248 / 85%);
+      pointer-events: none;
+      animation: star-ripple 1s ease-out infinite;
+    }
+    .heat-cell:hover::after { animation-delay: .45s; }
+    html:not(.dark) .heat-cell:hover::before, html:not(.dark) .heat-cell:hover::after {
+      border-color: var(--blue); box-shadow: 0 0 6px rgb(0 102 230 / 45%);
+    }
+    @keyframes star-fall {
+      0% { opacity: 0; transform: translateY(-26px) scale(.55); }
+      72% { opacity: 1; transform: translateY(3px) scale(1.06); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes star-twinkle {
+      0%, 100% { opacity: .38; transform: scale(.82); }
+      50% { opacity: 1; transform: scale(1.14); box-shadow: 0 0 8px rgb(96 165 250 / 85%); }
+    }
+    @keyframes star-twinkle-bright {
+      0%, 100% { opacity: .45; transform: scale(.86); }
+      50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 11px rgb(125 211 252 / 98%), 0 0 18px rgb(56 189 248 / 75%); }
+    }
+    @keyframes star-ripple {
+      0% { opacity: .95; transform: scale(.85); }
+      100% { opacity: 0; transform: scale(2.4); }
+    }
     .heat-tip { position: absolute; z-index: 5; width: max-content; max-width: calc(100% - 8px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 5px 8px; border-radius: 8px; background: var(--ink); color: var(--surface); font-size: 11px; line-height: 1.4; pointer-events: none; transform: translate(-50%, -100%); box-shadow: var(--shadow); }
     .heat-tip[hidden] { display: none; }
     @media (max-width: 339px) {
@@ -946,6 +985,7 @@
       .panel-star-svg .star-core, .panel-star-svg .star-spark { animation: none; }
       .ladder-medal::before, .ladder-medal::after, .ladder-medal-emblem::before { animation: none; opacity: 0; }
       .heat-cell, .stacked-seg { transition: none; }
+      .heat-cell, .heat-cell:hover::before, .heat-cell:hover::after, .heat-star-grid.is-waking .heat-cell { animation: none !important; }
     }
   </style>
 </head>
@@ -2398,7 +2438,12 @@
           if (rebuild || cell.dataset.tokens !== String(tokens) || cell.dataset.requests !== String(requests)) {
             cell.dataset.tokens = String(tokens);
             cell.dataset.requests = String(requests);
-            if (rebuild) cell.dataset.label = dayLabel(date);
+            if (rebuild) {
+              cell.dataset.label = dayLabel(date);
+              cell.style.setProperty('--star-order', `${((15 - Math.floor(offset / 23)) * 0.028 + ((offset * 7) % 23) * 0.005).toFixed(3)}s`);
+              cell.style.setProperty('--star-delay', `-${((offset * 1.17) % 3.2).toFixed(2)}s`);
+              cell.style.setProperty('--star-dur', `${(1.8 + ((offset * 0.73) % 1.4)).toFixed(2)}s`);
+            }
             cell.setAttribute('aria-label', tokens > 0
               ? t('heatmap-day-usage', cell.dataset.label, formatMillionTokens(tokens), formatCount(requests))
               : t('heatmap-day-empty', cell.dataset.label));
@@ -2431,8 +2476,20 @@
       });
       byId('heat-grid').addEventListener('pointerleave', () => { heatTip.hidden = true; });
       byId('heat').addEventListener('scroll', () => { heatTip.hidden = true; }, { capture: true, passive: true });
+      let starIntroTimer;
+      function playStarMapIntro() {
+        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+        const grid = byId('heat-grid');
+        grid.classList.remove('is-waking');
+        void grid.offsetWidth;
+        grid.classList.add('is-waking');
+        clearTimeout(starIntroTimer);
+        starIntroTimer = setTimeout(() => grid.classList.remove('is-waking'), 1050);
+        starIntroTimer.unref?.();
+      }
       usageGroup.addEventListener('tps-view-opened', () => {
         renderUsage();
+        playStarMapIntro();
         if (!usageSummary) void loadUsage();
       });
       ui['current-data'].addEventListener('tps-view-opened', render);
@@ -2562,6 +2619,7 @@
         lifetime.abort();
         for (const subscription of subscriptions) subscription?.dispose();
         clearInterval(usageTimer);
+        clearTimeout(starIntroTimer);
         cancelAnimationFrame(currentFrame);
         cancelAnimationFrame(usageFrame);
       }
