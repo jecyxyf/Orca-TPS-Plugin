@@ -869,6 +869,14 @@
       width: 22px; height: 22px; color: var(--icon-color, var(--ink));
     }
     .war-agent-icon svg { width: 20px; height: 20px; display: block; }
+    .war-row.is-jackpot .war-agent-icon,
+    .record-card.is-entering .model-icon {
+      transform-origin: center bottom;
+      animation: war-harness-jump 1.6s ease-out 1;
+    }
+    .record-card.is-entering .model-icon { animation-delay: .34s; }
+    .war-row.is-jackpot .war-agent-icon:nth-of-type(2) { animation-delay: .08s; }
+    .war-row.is-jackpot .war-agent-icon:nth-of-type(3) { animation-delay: .16s; }
     .war-model { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--purple); font-size: 15px; font-weight: 700; }
     .war-amount { position: relative; flex-shrink: 0; color: var(--blue); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .war-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px 10px; margin-top: 3px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -905,6 +913,16 @@
     @keyframes war-jackpot-sweep {
       0% { transform: translateX(-130%) skewX(-20deg); }
       100% { transform: translateX(340%) skewX(-20deg); }
+    }
+    @keyframes war-harness-jump {
+      0%, 100% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+      8% { transform: translateY(2px) scale(1.16, .84) rotate(0deg); }
+      22% { transform: translateY(-9px) scale(.92, 1.12) rotate(-9deg); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--green) 70%, transparent)); }
+      34% { transform: translateY(1.5px) scale(1.13, .87) rotate(0deg); }
+      48% { transform: translateY(-7px) scale(.94, 1.09) rotate(9deg); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--green) 60%, transparent)); }
+      60% { transform: translateY(1px) scale(1.08, .92) rotate(0deg); }
+      74% { transform: translateY(-3px) scale(.97, 1.04) rotate(-4deg); }
+      86% { transform: translateY(0) scale(1.03, .98) rotate(0deg); }
     }
     @keyframes war-value-surge {
       0% { transform: scale(1); }
@@ -1086,7 +1104,8 @@
       .heat-cell, .heat-cell:hover::before, .heat-cell:hover::after, .heat-star-grid.is-waking .heat-cell { animation: none !important; }
       .heat-cell::after, .war-delta, .war-row-flash, .war-row-flash::before { animation: none !important; opacity: 0; }
       .war-value.is-counting, .war-amount.is-counting, .war-meta-tokens.is-counting,
-      .war-meta-item.is-counting > span:not(.war-delta) { animation: none !important; }
+      .war-meta-item.is-counting > span:not(.war-delta),
+      .war-row.is-jackpot .war-agent-icon, .record-card.is-entering .model-icon { animation: none !important; }
     }
   </style>
 </head>
@@ -2332,6 +2351,7 @@
         for (const entry of activeUsageCounters.values()) entry.pulseEl?.classList.remove('is-counting');
         activeUsageCounters.clear();
         for (const node of usageGroup.querySelectorAll('.is-counting')) node.classList.remove('is-counting');
+        for (const row of usageGroup.querySelectorAll('.war-row.is-jackpot')) row.classList.remove('is-jackpot');
         for (const badge of usageGroup.querySelectorAll('.war-delta, .war-row-flash')) badge.remove();
       }
       function stepUsageCounters(now) {
@@ -2379,10 +2399,16 @@
       function attachWarRowFlash(rowEl) {
         if (!rowEl) return;
         for (const stale of rowEl.querySelectorAll('.war-row-flash')) stale.remove();
+        rowEl.classList?.remove('is-jackpot');
+        void rowEl.offsetWidth;
+        rowEl.classList?.add('is-jackpot');
         const flash = document.createElement('span');
         flash.className = 'war-row-flash';
         flash.setAttribute('aria-hidden', 'true');
-        const clear = () => flash.remove();
+        const clear = () => {
+          flash.remove();
+          rowEl.classList?.remove('is-jackpot');
+        };
         flash.addEventListener('animationend', event => { if (event.target === flash) clear(); });
         setTimeout(clear, 2600).unref?.();
         rowEl.prepend(flash);

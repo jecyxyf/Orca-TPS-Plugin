@@ -321,6 +321,8 @@ test('Personal Stats counts up top totals and shows model deltas before counting
   assert.match(css.get('.war-row-flash').animation, /^war-jackpot-bg 2\.4s /);
   assert.match(html, /@keyframes war-delta-pop\b/);
   assert.match(html, /@keyframes war-jackpot-sweep\b/);
+  assert.match(html, /@keyframes war-harness-jump\b/);
+  assert.match(html, /\.war-row\.is-jackpot \.war-agent-icon,\s*\.record-card\.is-entering \.model-icon \{[^}]*animation: war-harness-jump 1\.6s ease-out 1;/);
   assert.match(html, /@keyframes war-value-surge\b/);
   assert.match(html, /const USAGE_COUNT_MS = 2000;/);
 
@@ -382,6 +384,7 @@ test('Personal Stats counts up top totals and shows model deltas before counting
   run.attachWarRowFlash(rowEl);
   run.attachWarDelta(rowAmount, '+10.00 M');
   run.scheduleUsageCounter('row:tokens:m', { node: rowAmount, from: 50_000_000, to: 60_000_000, apply: v => run.setNodeText(rowAmount, `${(v / 1e6).toFixed(2)} M`) });
+  assert.equal(rowEl.classList.contains('is-jackpot'), true);
   assert.equal(rowEl.children.filter(c => c.className === 'war-row-flash').length, 1);
   assert.equal(rowAmount.children.filter(c => c.className === 'war-delta')[0].textContent, '+10.00 M');
   assert.equal(rowAmount.classList.contains('is-counting'), true);
