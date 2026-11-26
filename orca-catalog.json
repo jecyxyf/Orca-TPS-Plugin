@@ -17,6 +17,78 @@
       ],
       "releases": [
         {
+          "version": "1.6.7",
+          "commit": "1720edcd9595d7f966cc00fe9a7b5e95e5c3a988",
+          "contentHash": "d8f788d4a71e6b87dadffd056d1978161431998f76c2adbc0df6284a6ab59a92",
+          "execution": "trusted-worker",
+          "minimumOrca": "1.4.251",
+          "name": "TPS Plugin",
+          "contributes": [
+            {
+              "kind": "panels",
+              "name": "TPS Plugin"
+            },
+            {
+              "kind": "commands",
+              "name": "Refresh TPS Data"
+            },
+            {
+              "kind": "events",
+              "name": "workspace.changed"
+            },
+            {
+              "kind": "statusBarItems",
+              "name": "🚀 — tokens/s · 🍪 Cache hit —"
+            }
+          ],
+          "capabilities": [
+            "storage:own",
+            "workspace:read",
+            "secrets:own",
+            "settings:own"
+          ],
+          "images": {
+            "icon": {
+              "path": "assets/1.6.3/icon.png",
+              "alt": "TPS Plugin",
+              "sha256": "1472b8516e267e29fa651aa50c600eb1f7739610463137237cbd9f147abac353",
+              "width": 128,
+              "height": 128
+            },
+            "cover": {
+              "path": "assets/1.6.7/cover.jpg",
+              "alt": "TPS Plugin 1.6.7 overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar",
+              "sha256": "17d37fe25bb81609745d21c3cdf07d9b6bd19a8c82aa9b4983a84fc38e9ac52a",
+              "width": 800,
+              "height": 500
+            },
+            "screenshots": [
+              {
+                "path": "assets/1.6.7/current-data.jpg",
+                "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate across 16 harnesses",
+                "sha256": "2a3c10238950c3135450f1ccd8658ad2a7e9ffed3a9d735e024d0bf6b1284685",
+                "width": 1280,
+                "height": 800
+              },
+              {
+                "path": "assets/1.6.7/personal-stats.jpg",
+                "alt": "Personal Stats shows usage totals, segmented model share bar, average generation speeds, and a 365-day activity star map",
+                "sha256": "da1fe80e3eda4f85c18b9011862dc958920badd3775681ae9f62e116950b48b6",
+                "width": 1280,
+                "height": 800
+              },
+              {
+                "path": "assets/1.6.7/leaderboard.jpg",
+                "alt": "Orca sidebar showing 1-day royal tier badges and live ECG heartbeat waves alongside the Speed tab",
+                "sha256": "69f061d3f4101c0272e89dcd193c8010ed587f9afa3581ef2e135adcff74c1e7",
+                "width": 1280,
+                "height": 800
+              }
+            ]
+          },
+          "changelog": "Adds live theme customization, Korean and Traditional Chinese locales, animated card/star-map effects, 7 royal leaderboard tiers with live ECG heartbeats, and multi-device heartbeat retention."
+        },
+        {
           "version": "1.6.6",
           "commit": "fb9b65953822d9be7020c4ef818f840f9dec31a8",
           "contentHash": "bd93512f04593eb23b5353f3ffaad3ff6a342af85fc9097880ead8deabe0ccec",
