@@ -511,21 +511,28 @@ test('leaderboard ranks assign royal tier badges and speed tab marks top three w
     return rankBadge;
   `)(document, key => key);
 
-  assert.equal(makeBadge(1, false).textContent, 'tier-king');
-  assert.equal(makeBadge(2, false).textContent, 'tier-prince');
-  assert.equal(makeBadge(3, false).textContent, 'tier-knight');
-  assert.equal(makeBadge(18, false).textContent, 'tier-mage');
-  assert.equal(makeBadge(42, false).textContent, 'tier-ranger');
-  assert.equal(makeBadge(76, false).textContent, 'tier-squire');
-  assert.equal(makeBadge(120, false).textContent, 'tier-traveler');
-  assert.equal(makeBadge(1, true).textContent, 'S · tier-king');
-  assert.equal(makeBadge(3, true).textContent, 'S · tier-knight');
-  assert.equal(makeBadge(4, true).textContent, 'tier-mage');
+  assert.equal(makeBadge(1, false).textContent, 'tier-challenger');
+  assert.equal(makeBadge(2, false).textContent, 'tier-grandmaster');
+  assert.equal(makeBadge(3, false).textContent, 'tier-master');
+  assert.equal(makeBadge(8, false).textContent, 'tier-diamond');
+  assert.equal(makeBadge(24, false).textContent, 'tier-emerald');
+  assert.equal(makeBadge(48, false).textContent, 'tier-platinum');
+  assert.equal(makeBadge(88, false).textContent, 'tier-gold');
+  assert.equal(makeBadge(1, true).textContent, 'S · tier-challenger');
+  assert.equal(makeBadge(3, true).textContent, 'S · tier-master');
+  assert.equal(makeBadge(4, true).textContent, 'tier-diamond');
   assert.equal(makeBadge(0, false), null);
 
   const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
   assert.equal(css.get('.ladder-user-stats').display, 'grid');
   assert.equal(css.get('.ladder-rows .ladder-speed-row')['--ladder-row-size'], '28px');
+  assert.equal(css.get('.rank-badge').height, '18px');
+  assert.equal(css.get('.rank-badge')['justify-content'], 'center');
+  assert.equal(css.get('.rank-badge')['min-width'], 'var(--ladder-badge-width, 0px)');
+  assert.equal(css.get('.ladder-user-stat .ladder-badge-slot .rank-badge').height, '18px');
+  assert.match(html, /function alignLadderBadges\(container\)/);
+  assert.match(html, /alignLadderBadges\(element\('rows'\)\)/);
+  assert.match(html, /alignLadderBadges\(element\('personal-ranks'\)\)/);
 });
 
 test('non-interactive transfer indicators sit beside the last successful times', async () => {
