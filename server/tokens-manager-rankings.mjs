@@ -230,6 +230,7 @@ export function createTokensRankings(bans = new Map()) {
     expireSpeeds(midnight, 1);
     const touched = new Map();
     const earliest = cutoff - RANKING_HOURS.at(-1) * HOUR_MS;
+    const recentFrom = at - RECENT_STATS_MS;
     for (const { account, packet, receivedAt, sequence } of entries) {
       const ban = bans.get(account.id);
       // Uploads queued before a ban or unban must not restore an evicted account.
@@ -241,6 +242,8 @@ export function createTokensRankings(bans = new Map()) {
       }
       const accepted = recordDevice(row, packet, receivedAt, sequence);
       if (!accepted) continue;
+      const recent = packet.samples.filter(sample => sample[1] > recentFrom && sample[1] <= at);
+      if (recent.length) accepted.recentSamples = recent;
       let fresh = touched.get(row);
       if (!fresh) touched.set(row, fresh = new Map());
       fresh.set(packet.deviceGuid, packet.samples);
@@ -251,8 +254,25 @@ export function createTokensRankings(bans = new Map()) {
       }
     }
     for (const [row, fresh] of touched) {
+      const recentSamples = [];
+      const seenRecent = new Set();
       for (const [deviceGuid, device] of row.devices) {
-        if (device.publishedAt < earliest) row.devices.delete(deviceGuid);
+        if (device.publishedAt < earliest) {
+          row.devices.delete(deviceGuid);
+          continue;
+        }
+        if (!device.recentSamples) continue;
+        const live = device.recentSamples.filter(sample => sample[1] > recentFrom && sample[1] <= at);
+        if (live.length) {
+          device.recentSamples = live;
+          for (const sample of live) {
+            if (seenRecent.has(sample[0])) continue;
+            seenRecent.add(sample[0]);
+            recentSamples.push(sample);
+          }
+        } else {
+          device.recentSamples = undefined;
+        }
       }
       const scores = usageScores(row.devices, cutoff, midnight);
       for (let i = 0; i < scores.length; i++) if (scores[i] !== row.scores[i]) dirty[i] = true;
@@ -264,7 +284,7 @@ export function createTokensRankings(bans = new Map()) {
       row.submittedAt = newest.publishedAt;
       // Merge speed samples across sources in this round, then retain only the winning point.
       const samples = fresh.size === 1 ? fresh.values().next().value : Array.from(fresh.values()).flat();
-      row.recent = recentStats(samples, at);
+      row.recent = recentStats(recentSamples, at);
       const speeds = aggregateBestSpeeds(samples, hourlyFrom, cutoff, midnight, at);
       for (const [index, speed] of speeds.entries()) {
         const board = usageBoardCount + index;

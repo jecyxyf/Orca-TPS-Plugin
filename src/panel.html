@@ -3483,9 +3483,9 @@
       ];
       const royalTierOf = rank => ROYAL_TIERS.find(tier => (rank > 0 ? rank : Infinity) <= tier.max);
       const HEARTBEAT_POSES = [
-        { minBpm: 130, key: 'sprint', i18n: 'pose-sprint', cls: 'is-sprint', color: 'var(--speed)', beatDur: '.42s', ecgDur: '1.1s', spikes: 6 },
-        { minBpm: 95, key: 'run', i18n: 'pose-run', cls: 'is-run', color: 'var(--orange)', beatDur: '.62s', ecgDur: '1.6s', spikes: 4 },
-        { minBpm: 60, key: 'walk', i18n: 'pose-walk', cls: 'is-walk', color: 'var(--green)', beatDur: '.88s', ecgDur: '2.2s', spikes: 3 },
+        { minBpm: 151, key: 'sprint', i18n: 'pose-sprint', cls: 'is-sprint', color: 'var(--speed)', beatDur: '.42s', ecgDur: '1.1s', spikes: 6 },
+        { minBpm: 101, key: 'run', i18n: 'pose-run', cls: 'is-run', color: 'var(--orange)', beatDur: '.62s', ecgDur: '1.6s', spikes: 4 },
+        { minBpm: 51, key: 'walk', i18n: 'pose-walk', cls: 'is-walk', color: 'var(--green)', beatDur: '.88s', ecgDur: '2.2s', spikes: 3 },
         { minBpm: 1, key: 'idle', i18n: 'pose-idle', cls: 'is-low', color: 'var(--blue)', beatDur: '1.35s', ecgDur: '3.0s', spikes: 2 },
         { minBpm: 0, key: 'flat', i18n: 'pose-flat', cls: 'is-flat', color: 'var(--muted)', beatDur: '0s', ecgDur: '0s', spikes: 0 }
       ];
@@ -3548,7 +3548,7 @@
         const inLastMin = active.filter(point => now - point.submittedAt <= 60_000).length;
         const inLast3Min = active.filter(point => now - point.submittedAt <= 180_000).length;
         const raw = 58 + inLastMin * 24 + inLast3Min * 9 + active.length * 4 - idleSec * 0.18;
-        return Math.max(38, Math.round(raw));
+        return Math.max(38, Math.min(200, Math.round(raw)));
       }
       const poseFromBpm = bpm => HEARTBEAT_POSES.find(pose => bpm >= pose.minBpm) ?? HEARTBEAT_POSES.at(-1);
 

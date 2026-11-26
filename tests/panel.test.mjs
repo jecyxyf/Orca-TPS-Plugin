@@ -469,16 +469,23 @@ test('today usage renders a heartbeat ECG stage with royal characters driven by 
   const now = 1_000_000;
   assert.equal(recentHeartbeatBpm([], now), 0);
   assert.equal(poseFromBpm(0).key, 'flat');
+  assert.equal(poseFromBpm(1).key, 'idle');
   assert.equal(poseFromBpm(45).key, 'idle');
+  assert.equal(poseFromBpm(50).key, 'idle');
+  assert.equal(poseFromBpm(51).key, 'walk');
   assert.equal(poseFromBpm(78).key, 'walk');
+  assert.equal(poseFromBpm(100).key, 'walk');
+  assert.equal(poseFromBpm(101).key, 'run');
   assert.equal(poseFromBpm(108).key, 'run');
+  assert.equal(poseFromBpm(150).key, 'run');
+  assert.equal(poseFromBpm(151).key, 'sprint');
   const sprintBpm = recentHeartbeatBpm([
     { submittedAt: now - 40_000 }, { submittedAt: now - 20_000 }, { submittedAt: now - 5_000 }
   ], now);
-  assert.ok(sprintBpm >= 130, 'dense recent uploads trigger sprinting BPM');
+  assert.ok(sprintBpm >= 151 && sprintBpm <= 200, 'dense recent uploads trigger sprinting BPM within cap');
   assert.equal(poseFromBpm(sprintBpm).key, 'sprint');
-  const uncappedBpm = recentHeartbeatBpm(Array.from({ length: 6 }, (_, i) => ({ submittedAt: now - (i + 1) * 5_000 })), now);
-  assert.ok(uncappedBpm > 168, 'rocket heartbeat BPM is uncapped above 168');
+  const cappedBpm = recentHeartbeatBpm(Array.from({ length: 6 }, (_, i) => ({ submittedAt: now - (i + 1) * 5_000 })), now);
+  assert.equal(cappedBpm, 200, 'rocket heartbeat BPM is capped at 200');
 
   const empty = usageCard({ rank: 1, recent: { points: [] } }, now, Infinity);
   const [emptyMeta, emptyStage] = empty.children;

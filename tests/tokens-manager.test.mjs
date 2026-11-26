@@ -385,6 +385,38 @@ test('combines device samples and retains separate speed winners until each wind
   assert.deepEqual(rankings.publish([], at + day + hour, TOKENS_DEFAULT_INTERVALS).boards[0].rows, []);
 });
 
+test('keeps active recent heartbeat points when another idle device of the same account uploads', () => {
+  const rankings = createTokensRankings();
+  const account = { id: 11, username: 'multi-device' };
+  const activeDevice = randomUUID(), idleDevice = randomUUID();
+  const sharedSampleId = 's'.repeat(24);
+  const first = rankings.publish([
+    { account, receivedAt: at, sequence: 1, packet: { ...packet(activeDevice, 100, at),
+      samples: [[sharedSampleId, at - 10_000, 600, 95, 'gpt-5.4', 'codex']] } }
+  ], at, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(first.boards[24].rows[0].recent.points.length, 1);
+
+  const idleRound = rankings.publish([
+    { account, receivedAt: at + 3000, sequence: 2, packet: { ...packet(idleDevice, 50, at + 3000), samples: [] } }
+  ], at + 3000, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(idleRound.boards[24].rows[0].recent.points.length, 1, 'idle device upload must not wipe active device recent points');
+  assert.equal(idleRound.boards[24].rows[0].recent.topModel, 'gpt-5.4');
+
+  // If the second device relays the exact same sample ID, it is counted once rather than doubled.
+  const relayedRound = rankings.publish([
+    { account, receivedAt: at + 6000, sequence: 3, packet: { ...packet(idleDevice, 50, at + 6000),
+      samples: [[sharedSampleId, at - 10_000, 600, 95, 'gpt-5.4', 'codex']] } }
+  ], at + 6000, TOKENS_DEFAULT_INTERVALS);
+  assert.equal(relayedRound.boards[24].rows[0].recent.points.length, 1);
+  assert.equal(relayedRound.boards[24].rows[0].recent.points[0].deltaTokens, 600);
+
+  // Once 5 minutes have elapsed, expired recent samples are pruned cleanly.
+  const expiredRound = rankings.publish([
+    { account, receivedAt: at + 300_000, sequence: 4, packet: { ...packet(idleDevice, 50, at + 300_000), samples: [] } }
+  ], at + 300_000, TOKENS_DEFAULT_INTERVALS);
+  assert.deepEqual(expiredRound.boards[24].rows[0].recent.points, []);
+});
+
 test('uploads speed samples from the oldest hour the completed-hour board can include', () => {
   const publishedAt = Date.parse('2026-06-15T12:59:00Z');
   const firstCompleteHour = Date.parse('2026-06-14T12:00:00Z');
