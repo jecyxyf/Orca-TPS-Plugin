@@ -859,12 +859,18 @@
     .war-meta-item { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
     .war-meta-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .war-meta-item svg { width: 13px; height: 13px; flex: none; color: var(--icon-color, currentColor); }
+    /* Keep every speed icon in a single vertical column sized to the widest row in #war-rows. */
+    .war-meta-item.is-speed { min-width: min(var(--war-speed-width, 0px), 55%); }
     .war-meta-item.is-speed svg { color: var(--icon-color, var(--speed)); }
     .war-meta-tokens { color: var(--blue); font-weight: 650; }
     .war-empty { margin: 10px 2px 2px; color: var(--muted); font-size: 12px; text-align: center; }
     .war-empty[hidden] { display: none; }
     .rank-index { flex-shrink: 0; min-width: 16px; color: var(--muted); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .rank-tps { display: inline-flex; align-items: baseline; gap: 2px; flex-shrink: 0; color: var(--speed); background: transparent; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rank-tps {
+      display: inline-flex; align-items: baseline; gap: 2px; flex-shrink: 0;
+      min-width: min(var(--war-speed-width, 0px), 45%);
+      color: var(--speed); background: transparent; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums;
+    }
     .rank-tps svg { width: 13px; height: 13px; align-self: center; flex: none; color: var(--icon-color, currentColor); }
     .rank-tps small { margin-inline-start: 1px; color: var(--muted); font-size: 11px; font-weight: 600; }
     .heat { position: relative; }
@@ -2382,7 +2388,21 @@
         const hasVisibleRows = usageSort === 'speed' ? speeds.length > 0 : list.length > 0;
         emptyEl.firstElementChild.textContent = t(usageSort === 'speed' ? 'empty-model-speeds' : 'empty-usage');
         emptyEl.hidden = !range || hasVisibleRows;
+        alignWarSpeedIcons();
         renderHeatmap();
+      }
+      function alignWarSpeedIcons() {
+        const warRows = byId('war-rows');
+        if (!warRows || usageGroup.hidden) return;
+        const items = [...warRows.querySelectorAll('.war-meta-item.is-speed, .rank-tps')];
+        warRows.style.removeProperty('--war-speed-width');
+        if (!items.length) return;
+        let maxWidth = 0;
+        for (const item of items) {
+          const width = Math.ceil(item.getBoundingClientRect().width);
+          if (width > maxWidth) maxWidth = width;
+        }
+        if (maxWidth > 0) warRows.style.setProperty('--war-speed-width', `${maxWidth}px`);
       }
       // 模型均速: mean per-request TPS per model over the selected window, fastest first; ranking comes from tps.summary.
       function speedText(tps) {
@@ -2695,9 +2715,24 @@
           if (!disposed) { busy = false; render(); }
         }
       }
+      let lastWarRowsWidth = 0;
+      const warResizeObserver = typeof ResizeObserver === 'function'
+        ? new ResizeObserver(() => {
+            if (disposed || usageGroup.hidden) return;
+            const warRows = byId('war-rows');
+            const width = Math.round(warRows?.getBoundingClientRect().width ?? 0);
+            if (width > 0 && width !== lastWarRowsWidth) {
+              lastWarRowsWidth = width;
+              alignWarSpeedIcons();
+            }
+          })
+        : null;
+      warResizeObserver?.observe(byId('war-rows'));
+
       function cleanup() {
         if (disposed) return;
         disposed = true;
+        warResizeObserver?.disconnect();
         lifetime.abort();
         for (const subscription of subscriptions) subscription?.dispose();
         clearInterval(usageTimer);

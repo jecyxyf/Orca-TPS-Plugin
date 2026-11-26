@@ -290,6 +290,26 @@ test('model usage rows show the speed icon with a value or a dash', async () => 
     assert.equal(icon.kind, 'speed');
     assert.equal(text.textContent, expected);
   }
+
+  const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(css.get('.war-meta-item.is-speed')['min-width'], 'min(var(--war-speed-width, 0px), 55%)');
+  assert.equal(css.get('.rank-tps')['min-width'], 'min(var(--war-speed-width, 0px), 45%)');
+  const alignFn = /function alignWarSpeedIcons\(\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
+  assert.ok(alignFn, 'alignWarSpeedIcons helper must exist');
+  const props = new Map();
+  const warRows = {
+    style: {
+      removeProperty(name) { props.delete(name); },
+      setProperty(name, value) { props.set(name, value); }
+    },
+    querySelectorAll() {
+      return [68.2, 74.1, 21.4].map(width => ({ getBoundingClientRect: () => ({ width }) }));
+    }
+  };
+  new Function('byId', 'usageGroup', `${alignFn}; alignWarSpeedIcons();`)(() => warRows, { hidden: false });
+  assert.equal(props.get('--war-speed-width'), '75px');
+  assert.match(html, /alignWarSpeedIcons\(\);\s*renderHeatmap\(\);/);
+  assert.match(html, /warResizeObserver[\s\S]*?alignWarSpeedIcons\(\)/);
 });
 
 test('today usage draws a full zero line and animates real-time pulses once', async () => {
