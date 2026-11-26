@@ -259,7 +259,9 @@ async function connectManager(root, entry) {
   try { return await dial(root); } catch (error) {
     if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
   }
-  const child = spawn(process.execPath, [entry, '--serve'], {
+  // A small young generation and a capped old generation make V8 collect scan garbage promptly;
+  // the manager keeps only a few MB of live data, so this mainly trims idle memory.
+  const child = spawn(process.execPath, ['--max-semi-space-size=4', '--max-old-space-size=384', entry, '--serve'], {
     detached: true, windowsHide: true, stdio: 'ignore',
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ORCA_TPS_TOKENS_ROOT: root }
   });

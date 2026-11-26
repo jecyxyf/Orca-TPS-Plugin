@@ -922,3 +922,8 @@ test('scans real Copilot, WorkBuddy and Hermes fixtures and ignores a broken log
   assert.deepEqual(rows.map(([provider]) => provider), ['copilot', 'hermes', 'workbuddy']);
   assert.equal(rows.find(([provider]) => provider === 'workbuddy')[1], project);
 });
+
+test('the manager process starts with prompt garbage collection limits', async () => {
+  const source = await readFile(new URL('../src/orca_connection.mjs', import.meta.url), 'utf8');
+  assert.match(source, /spawn\(process\.execPath, \['--max-semi-space-size=4', '--max-old-space-size=384', entry, '--serve'\]/);
+});

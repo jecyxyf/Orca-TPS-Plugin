@@ -219,6 +219,15 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.match(html, /function playStarMapIntro\(\)/);
   assert.match(html, /clearTimeout\(starIntroTimer\)/);
   assert.match(css.get('.heat-cell.lv2').animation, /star-twinkle/);
+  for (const name of ['star-twinkle', 'star-twinkle-bright']) {
+    const frames = new RegExp(`@keyframes ${name} \\{([\\s\\S]*?)\\n    \\}`).exec(html)?.[1] ?? '';
+    assert.match(frames, /opacity[\s\S]*transform/, `${name} keeps its brightness and size pulse`);
+    assert.doesNotMatch(frames, /box-shadow/, `${name} must not repaint a shadow every frame`);
+  }
+  assert.match(html, /\.heat-cell\.lv2::after, \.heat-cell\.lv3::after, \.heat-cell\.lv4::after \{[^}]*box-shadow: 0 0 8px rgb\(96 165 250 \/ 85%\);[^}]*animation: star-glow /);
+  assert.match(html, /\.heat-cell\.lv4::after \{\s*box-shadow: 0 0 11px rgb\(125 211 252 \/ 98%\), 0 0 18px rgb\(56 189 248 \/ 75%\);/);
+  assert.match(html, /@keyframes star-glow \{\s*0%, 100% \{ opacity: 0; \}\s*50% \{ opacity: 1; \}/);
+  assert.match(html, /\.heat-cell\.is-still::after, \.heat-star-grid\.is-waking \.heat-cell::after \{ animation: none; opacity: 0; \}/);
   for (const level of ['.heat-cell.lv2', '.heat-cell.lv3', '.heat-cell.lv4']) {
     assert.match(css.get(level).animation, /calc\(var\(--star-dur, [\d.]+s\) \/ var\(--star-speed, 1\)\)/);
   }
@@ -246,6 +255,41 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.equal(formatFor('zh-CN')(365, false), '365天');
   assert.equal(formatFor('en')(365, false), '365 days');
   assert.doesNotMatch(html, /war-mode-help|war-mode-hint|usage-update-(?:help|hint)/);
+});
+
+test('model usage rows show the speed icon with a value or a dash', async () => {
+  const html = await readFile(panelPath, 'utf8');
+  const sources = [
+    /const numeric = [^\n]+/,
+    /function number\(value, fraction = 0\) \{[\s\S]*?\n      \}/,
+    /function speedText\(tps\) \{[\s\S]*?\n      \}/,
+    /function warMetaMetric\([\s\S]*?\n      \}/,
+    /function usageRow\([\s\S]*?\n      \}/
+  ].map(pattern => pattern.exec(html)?.[0]);
+  assert.ok(sources.every(Boolean));
+
+  const createElement = () => ({
+    children: [],
+    append(...children) { this.children.push(...children); },
+    setAttribute() {}
+  });
+  const locale = { number: (value, options) => new Intl.NumberFormat('en-US', options).format(value) };
+  const render = new Function('document', 'locale', 'metricSvg', 'harnessBadge', [
+    'const t = String, formatCount = String, formatMillionTokens = String;',
+    ...sources,
+    'return usageRow;'
+  ].join('\n'))({ createElement }, locale, kind => ({ kind }), createElement);
+
+  const row = { model: 'example', provider: 'codex', requests: 2, tokens: 1_000 };
+  for (const [value, expected] of [[undefined, '-'], [0, '-'], [72.5, '73 tokens/s'], [0.5, '0.5 tokens/s']]) {
+    const speeds = value === undefined ? new Map() : new Map([[row.model, value]]);
+    const [, meta] = render(row, speeds).children;
+    const [, metric] = meta.children;
+    assert.ok(metric, 'every model row must include the speed metric');
+    const [icon, text] = metric.children;
+    assert.equal(icon.kind, 'speed');
+    assert.equal(text.textContent, expected);
+  }
 });
 
 test('today usage draws a full zero line and animates real-time pulses once', async () => {

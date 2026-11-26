@@ -897,6 +897,18 @@
       animation: star-twinkle-bright calc(var(--star-dur, 2.8s) / var(--star-speed, 1)) ease-in-out calc(var(--star-delay, 0s) / var(--star-speed, 1)) infinite;
     }
     .heat-cell.is-still { animation: none; }
+    /* The twinkle's peak glow is a fixed layer whose opacity follows the twinkle, so no frame repaints a shadow. */
+    .heat-cell.lv2::after, .heat-cell.lv3::after, .heat-cell.lv4::after {
+      content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; opacity: 0;
+      box-shadow: 0 0 8px rgb(96 165 250 / 85%);
+      animation: star-glow calc(var(--star-dur, 3.6s) / var(--star-speed, 1)) ease-in-out calc(var(--star-delay, 0s) / var(--star-speed, 1)) infinite;
+    }
+    .heat-cell.lv3::after { animation-duration: calc(var(--star-dur, 3.2s) / var(--star-speed, 1)); }
+    .heat-cell.lv4::after {
+      box-shadow: 0 0 11px rgb(125 211 252 / 98%), 0 0 18px rgb(56 189 248 / 75%);
+      animation-duration: calc(var(--star-dur, 2.8s) / var(--star-speed, 1));
+    }
+    .heat-cell.is-still::after, .heat-star-grid.is-waking .heat-cell::after { animation: none; opacity: 0; }
     html:not(.dark) .heat-cell { background: var(--heat-0); }
     html:not(.dark) .heat-cell.lv1 { background: var(--heat-1); }
     html:not(.dark) .heat-cell.lv2 { background: var(--heat-2); box-shadow: none; }
@@ -923,11 +935,15 @@
     }
     @keyframes star-twinkle {
       0%, 100% { opacity: .38; transform: scale(.82); }
-      50% { opacity: 1; transform: scale(1.14); box-shadow: 0 0 8px rgb(96 165 250 / 85%); }
+      50% { opacity: 1; transform: scale(1.14); }
     }
     @keyframes star-twinkle-bright {
       0%, 100% { opacity: .45; transform: scale(.86); }
-      50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 11px rgb(125 211 252 / 98%), 0 0 18px rgb(56 189 248 / 75%); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+    @keyframes star-glow {
+      0%, 100% { opacity: 0; }
+      50% { opacity: 1; }
     }
     @keyframes star-ripple {
       0% { opacity: .95; transform: scale(.85); }
@@ -1006,6 +1022,7 @@
       .ladder-medal::before, .ladder-medal::after, .ladder-medal-emblem::before { animation: none; opacity: 0; }
       .heat-cell, .stacked-seg { transition: none; }
       .heat-cell, .heat-cell:hover::before, .heat-cell:hover::after, .heat-star-grid.is-waking .heat-cell { animation: none !important; }
+      .heat-cell::after { animation: none !important; opacity: 0; }
     }
   </style>
 </head>
@@ -2317,9 +2334,8 @@
         const reqText = `${formatCount(row.requests)} ${t('requests-unit')}`.trim();
         meta.append(warMetaMetric('requests', reqText, t('requests-counted', formatCount(row.requests))));
         const avgTps = speedByModel.get(row.model);
-        if (numeric(avgTps) && avgTps > 0) {
-          meta.append(warMetaMetric('speed', `${speedText(avgTps)} tokens/s`, t('leaderboard-average-speed')));
-        }
+        const speed = numeric(avgTps) && avgTps > 0 ? `${speedText(avgTps)} tokens/s` : '-';
+        meta.append(warMetaMetric('speed', speed, t('leaderboard-average-speed')));
         item.append(head, meta);
         return item;
       }
