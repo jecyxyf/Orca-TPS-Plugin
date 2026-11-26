@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.7] - 2026-11-27
+
+### Added
+
+- Added a live **Theme** customization dialog with custom background image upload and pan/zoom editor, independent font and icon colors, translucent frosted-glass card color and opacity, star map twinkle controls, and randomized Harness icon motion intervals.
+- Added Korean (`ko`) and Traditional Chinese (`zh-TW`) interface languages with country flags, bringing total supported locales to 17.
+- Added aurora border sweep and rainbow stardust burst animations on incoming request cards, randomized idle Harness icon animations, spinning refresh indicators, and header links to star the GitHub repository.
+- Added count-up animations, row flash highlights, and `+Δ` delta badges on Personal Stats updates, plus drop-in entrance, twinkling, and hover ripple animations on the 365-day **Activity star map**.
+- Added 7 League-style royal tier badges, animated royal character poses (rocket, sports car, running, panting, flatline), and tier-colored live ECG heartbeat waves on the 1-day Leaderboard, plus animated 7-day curves and 30-day dot-matrix equalizers.
+
+### Changed
+
+- Redesigned **Current Data** cards with larger 36px Harness icons, compact metric rows, and unified card styling across all panels.
+- Compacted **Personal Stats** into a By Day / By Hour icon capsule, `1 day / 7 days / 30 days / 365 days` tabs, iconized summary metrics, and a unified **Model data** card with a segmented share bar and Usage / Speed sort toggle.
+- Combined the Leaderboard account header and `1 / 7 / 30 day` rank summary into one card, aligned Speed board rows, and capped heartbeat BPM at 200 across the five pose tiers (`0`, `1–50`, `51–100`, `101–150`, `151–200`).
+- Refreshed both READMEs with single-row animated GIF previews, Theme Customization documentation, and `.gitattributes` `export-ignore` to keep release archives compact.
+
+### Fixed
+
+- Preserved active device 5-minute heartbeat samples on the leaderboard server when another idle device of the same account uploads, deduplicating relayed sample IDs.
+- Backfilled Codex record IDs when `session_meta` arrives in a later chunk, removed the old-generation heap cap on the background Tokens Manager process, and unobserved removed ranking rows in the panel.
+
 ## [1.6.6] - 2026-11-25
 
 ### Changed

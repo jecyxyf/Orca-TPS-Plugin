@@ -14,26 +14,26 @@
   "homepage": "https://github.com/jecyxyf/Orca-TPS-Plugin#readme",
   "icon": "assets/1.6.3/icon.png",
   "cover": {
-    "path": "assets/1.6.5/cover.jpg",
-    "alt": "TPS Plugin overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar"
+    "path": "assets/1.6.7/cover.jpg",
+    "alt": "TPS Plugin 1.6.7 overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar"
   },
   "screenshots": [
     {
-      "path": "assets/1.6.5/current-data.jpg",
-      "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate",
+      "path": "assets/1.6.7/current-data.jpg",
+      "alt": "Orca sidebar request cards showing generation speed, first-token latency, output, and cache hit rate across 16 harnesses",
       "caption": "Current Data · Check how each AI request ran",
       "theme": "dark"
     },
     {
-      "path": "assets/1.6.5/personal-stats.jpg",
-      "alt": "Personal Stats shows usage by model, average generation speeds, and a usage heatmap",
-      "caption": "Personal Stats · Compare model usage and explore daily trends",
+      "path": "assets/1.6.7/personal-stats.jpg",
+      "alt": "Personal Stats shows usage totals, segmented model share bar, average generation speeds, and a 365-day activity star map",
+      "caption": "Personal Stats · Compare model data and explore your activity star map",
       "theme": "dark"
     },
     {
-      "path": "assets/1.6.5/leaderboard.jpg",
-      "alt": "Orca sidebar showing 30-day usage trends and the Speed tab with Day and Hour modes",
-      "caption": "Leaderboard · Compare usage and speed by day or by hour",
+      "path": "assets/1.6.7/leaderboard.jpg",
+      "alt": "Orca sidebar showing 1-day royal tier badges and live ECG heartbeat waves alongside the Speed tab",
+      "caption": "Leaderboard · Live heartbeat ECGs, usage curves, and speed ranks",
       "theme": "dark"
     }
   ],
