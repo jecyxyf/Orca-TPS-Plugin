@@ -342,6 +342,24 @@ test('createJsonlCursor extracts sessionId and cwd across fed chunks and scanTok
   assert.equal(cursor.cwd, '/proj/split');
   assert.equal(cursor.finish().length, 1);
 
+  // A Codex session_meta row can arrive in a batch after the parser was built (empty first read, or a
+  // chunk boundary before the header). Record IDs must still carry the real id, not the placeholder.
+  const codexUsage = line({ type: 'event_msg', timestamp: new Date(Date.now() - 1000).toISOString(),
+    payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 42, cached_input_tokens: 12, output_tokens: 220 } } } });
+  const codexMeta = line({ type: 'session_meta', payload: { id: 'codex-late', cwd: '/proj/codex' } });
+  for (const chunks of [[codexMeta, codexUsage], [codexUsage, codexMeta]]) {
+    const codexCursor = createJsonlCursor('', 'codex', '', { limit: Infinity });
+    for (const chunk of chunks) codexCursor.feed(chunk);
+    const [record] = codexCursor.finish();
+    assert.equal(codexCursor.sessionId, 'codex-late');
+    assert.equal(codexCursor.cwd, '/proj/codex');
+    assert.equal(record.id, 'codex_session:codex-late:1');
+    assert.equal(codexCursor.finish()[0].id, record.id, 'repeated finish keeps the id stable');
+  }
+  const placeholder = createJsonlCursor('', 'codex', '', { limit: Infinity });
+  placeholder.feed(codexUsage);
+  assert.equal(placeholder.finish()[0].id, 'codex_session:session:1', 'a missing session_meta keeps the placeholder');
+
   const home = await mkdtemp(path.join(tmpdir(), 'tps-claude-channel-'));
   t.after(() => rm(home, { recursive: true, force: true }));
   const now = Date.now();

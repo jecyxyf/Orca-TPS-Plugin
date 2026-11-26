@@ -923,7 +923,9 @@ test('scans real Copilot, WorkBuddy and Hermes fixtures and ignores a broken log
   assert.equal(rows.find(([provider]) => provider === 'workbuddy')[1], project);
 });
 
-test('the manager process starts with prompt garbage collection limits', async () => {
+test('the manager process starts with a small young generation but no hard old-generation cap', async () => {
   const source = await readFile(new URL('../src/orca_connection.mjs', import.meta.url), 'utf8');
-  assert.match(source, /spawn\(process\.execPath, \['--max-semi-space-size=4', '--max-old-space-size=384', entry, '--serve'\]/);
+  assert.match(source, /spawn\(process\.execPath, \['--max-semi-space-size=4', entry, '--serve'\]/);
+  // A capped old space kills the manager with an OOM mid-scan instead of letting large scans finish.
+  assert.doesNotMatch(source, /--max-old-space-size/);
 });

@@ -259,9 +259,10 @@ async function connectManager(root, entry) {
   try { return await dial(root); } catch (error) {
     if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
   }
-  // A small young generation and a capped old generation make V8 collect scan garbage promptly;
-  // the manager keeps only a few MB of live data, so this mainly trims idle memory.
-  const child = spawn(process.execPath, ['--max-semi-space-size=4', '--max-old-space-size=384', entry, '--serve'], {
+  // A small young generation makes V8 collect scan garbage promptly, which trims idle memory.
+  // The old generation is left uncapped: a cap is a hard limit that kills the manager with an OOM mid-scan
+  // instead of letting it finish, and scans legitimately spike above a few hundred MB on large logs.
+  const child = spawn(process.execPath, ['--max-semi-space-size=4', entry, '--serve'], {
     detached: true, windowsHide: true, stdio: 'ignore',
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ORCA_TPS_TOKENS_ROOT: root }
   });

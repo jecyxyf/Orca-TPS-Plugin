@@ -2532,8 +2532,11 @@ function codexTokenSignature(info) {
   return JSON.stringify([pick(total), pick(last)]);
 }
 
-/** Incremental Codex parser: feed row batches in order, then finish. Same results as one call with all rows. */
+/** Incremental Codex parser: feed row batches in order, then finish. Same results as one call with all rows.
+ *  `sessionId` may be a getter: the cursor can learn the id from a session_meta row that arrives after this parser is built. */
 export function createCodexParser(sessionId, { truncated = false, limit = 100 } = {}) {
+  const sessionIdOf = typeof sessionId === 'function' ? sessionId : () => sessionId;
+  const idPrefix = current => `codex_session:${current || 'session'}:`;
   let results = [];
   const lastSignatureBySource = new Map();
   let previousTokenSignature = null;
@@ -2684,7 +2687,7 @@ export function createCodexParser(sessionId, { truncated = false, limit = 100 } 
         const clampedWrite = Math.min(u.cacheWriteInput, u.input - clampedRead);
         if (pending.timestampMs !== null) {
           results.push(buildRecord({
-            id: `codex_session:${sessionId || 'session'}:usage:${pending.key}`,
+            id: `${idPrefix(sessionIdOf())}usage:${pending.key}`,
             completedAt: pending.timestampMs,
             dataSource: 'codex_session',
             inputTokens: u.input,
@@ -2748,7 +2751,7 @@ export function createCodexParser(sessionId, { truncated = false, limit = 100 } 
     if (completedAt === null) continue;
     eventIndex += 1;
     results.push(buildRecord({
-      id: `codex_session:${sessionId || 'session'}:${eventIndex}`,
+      id: `${idPrefix(sessionIdOf())}${eventIndex}`,
       completedAt,
       dataSource: 'codex_session',
       inputTokens: delta.input,
@@ -2763,7 +2766,19 @@ export function createCodexParser(sessionId, { truncated = false, limit = 100 } 
   }
   if (results.length > limit * 2) results = recentRecords(results, limit);
   };
-  return { feed, finish: () => recentRecords(results, limit) };
+  return {
+    feed,
+    finish() {
+      // IDs are minted per batch, so a session_meta row that arrived later applies to every record minted without it.
+      const current = sessionIdOf();
+      if (current) {
+        for (const record of results) {
+          if (record?.id.startsWith(idPrefix(null))) record.id = idPrefix(current) + record.id.slice(idPrefix(null).length);
+        }
+      }
+      return recentRecords(results, limit);
+    }
+  };
 }
 
 export function createClaudeParser({ isSubagent = false, limit = 100 } = {}) {
@@ -3244,8 +3259,9 @@ function updateJsonlMetadata(metadata, rows, provider, options = {}) {
       metadata.sessionId ??= shortText(row.id);
       metadata.cwd ??= shortText(row.cwd);
     } else if (provider === 'claude') {
-      metadata.sessionId ??= shortText(row.sessionId);
-      metadata.cwd ??= shortText(row.cwd);
+      // Claude stamps both fields on most rows; only parse the ones still missing.
+      if (!metadata.sessionId) metadata.sessionId = shortText(row.sessionId);
+      if (!metadata.cwd) metadata.cwd = shortText(row.cwd);
     }
     if (metadata.sessionId && metadata.cwd) break;
   }
@@ -3263,7 +3279,7 @@ export function createJsonlCursor(text, provider, headerText = '', options = {})
   updateJsonlMetadata(metadata, headerText ? jsonlRows(headerText) : rows, provider, options);
   if (headerText && (!metadata.sessionId || !metadata.cwd)) updateJsonlMetadata(metadata, rows, provider, options);
   const parsers = {
-    codex: () => createCodexParser(metadata.sessionId, options),
+    codex: () => createCodexParser(() => metadata.sessionId, options),
     claude: () => createClaudeParser(options),
     pi: () => createPiParser(options),
     antigravity: () => createAntigravityParser(options)

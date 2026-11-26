@@ -2130,7 +2130,7 @@
       badge.append(svg);
       return badge;
     }
-    function updateList(container, items, previous, keyOf, create, inserted) {
+    function updateList(container, items, previous, keyOf, create, inserted, removed) {
       const next = new Map();
       let position = container.firstChild;
       const counts = new Map();
@@ -2151,6 +2151,7 @@
       while (position) {
         const unused = position;
         position = position.nextSibling;
+        removed?.(unused);
         unused.remove();
       }
       return next;
@@ -2563,6 +2564,8 @@
       const usageModeButtons = usageGroup.querySelectorAll('[data-usage-mode]');
       const modelSortButtons = usageGroup.querySelectorAll('[data-model-sort]');
       const SHARE_COLORS = ['#38bdf8', '#a855f7', '#4ade80', '#fbbf24', '#fb7185', '#2dd4bf', '#818cf8', '#f97316'];
+      // Used for rows past the first palette; chosen to stay readable on both the light and dark bar backgrounds.
+      const SHARE_COLORS_EXTRA = ['#0ea5e9', '#d946ef', '#84cc16', '#f59e0b', '#f43f5e', '#14b8a6', '#6366f1', '#e11d48'];
       function formatCount(value) {
         if (!numeric(value)) return '—';
         return value >= 1e4 ? locale.number(value, { notation: 'compact', maximumFractionDigits: 2 }) : number(value);
@@ -2612,8 +2615,13 @@
           return colors;
         }
         const segments = [];
+        // The first rows keep the hand-picked brand palette; rows past it cycle through a second set of
+        // mid-tone colors that stay readable on both the light and dark bar backgrounds.
+        const shareColor = index => index < SHARE_COLORS.length
+          ? SHARE_COLORS[index]
+          : SHARE_COLORS_EXTRA[(index - SHARE_COLORS.length) % SHARE_COLORS_EXTRA.length];
         for (const [index, row] of positive.entries()) {
-          const color = SHARE_COLORS[index % SHARE_COLORS.length];
+          const color = shareColor(index);
           colors.set(`${row.provider}\u0000${row.model}`, color);
           const seg = document.createElement('span');
           seg.className = 'stacked-seg';
@@ -3520,6 +3528,15 @@
         if (chartAnimFrame !== undefined || !chartMotionAllowed() || rankDays <= 1 || !visibleCharts.size) return;
         if (typeof requestAnimationFrame === 'function') chartAnimFrame = requestAnimationFrame(stepChartAnimation);
       }
+      // IntersectionObserver keeps observed nodes alive, so a row dropped from the list must be released here.
+      function releaseRowObservers(row) {
+        if (!row) return;
+        for (const stage of row.querySelectorAll('.hb-stage')) heartbeatObserver?.unobserve(stage);
+        for (const chart of row.querySelectorAll('.ladder-chart')) {
+          chartObserver?.unobserve(chart);
+          visibleCharts.delete(chart);
+        }
+      }
 
       function recentHeartbeatBpm(points, now) {
         if (!Array.isArray(points) || !points.length) return 0;
@@ -4026,10 +4043,12 @@
           } else item.append(usageCard(row, now, Infinity, ranking.windowStart));
           item.append(time);
           return item;
-        });
+        }, undefined, releaseRowObservers);
         if (todayBoard) {
-          for (const [key, node] of rankingNodes) {
-            const matched = rows.find(row => keyOf(row) === key);
+          // rankingNodes is filled in row order, so position i pairs with rows[i]; no need to re-key every row.
+          let index = 0;
+          for (const node of rankingNodes.values()) {
+            const matched = rows[index++];
             const bpmNum = matched ? node.querySelector('.hb-bpm-num') : null;
             if (bpmNum && bpmNum.textContent !== String(matched._hb.bpm)) {
               bpmNum.textContent = String(matched._hb.bpm);
