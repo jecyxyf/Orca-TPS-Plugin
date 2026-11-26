@@ -162,6 +162,25 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.doesNotMatch(warTotals, /class="war-label"/);
   assert.match(html, /\.war-totals\s*\{[^}]*grid-auto-flow:\s*column/);
   assert.match(html, /\.war-value\.speed-max\s*\{\s*color:\s*var\(--speed\)/);
+  const css = cascadeTopLevelCss(html.match(/<style>([\s\S]*?)<\/style>/)[1]);
+  assert.equal(css.get('.war-value')['font-size'], '20px');
+  assert.equal(css.get('.war-value small')['font-size'], '11px');
+  assert.equal(css.get('.war-stat-icon').width, '18px');
+  assert.equal(css.get('.war-stat-icon svg').width, '17px');
+  assert.equal(css.get('.war-agent-icon').width, '22px');
+  assert.equal(css.get('.war-agent-icon svg').width, '20px');
+  assert.equal(css.get('.war-model')['font-size'], '15px');
+  assert.equal(css.get('.war-amount')['font-size'], '15px');
+  assert.equal(css.get('.rank-tps')['font-size'], '15px');
+  assert.equal(css.get('.rank-tps small')['font-size'], '11px');
+  assert.equal(css.get('.rank-index')['font-size'], '13px');
+  assert.equal(css.get('.war-meta')['font-size'], '12px');
+  assert.equal(css.get('.war-meta-item svg').width, '13px');
+  assert.equal(css.get('.war-period-tabs .war-tab')['font-size'], '13px');
+  assert.equal(css.get('.usage-mode-tabs .war-tab').width, '32px');
+  assert.equal(css.get('.usage-mode-tabs svg').width, '16px');
+  assert.match(html, /@media \(max-width: 339px\)[\s\S]*?\.war-period-tabs \.war-tab \{ padding: 5px 3px; font-size: 12px; \}/);
+  assert.match(html, /@media \(max-width: 339px\)[\s\S]*?\.war-value \{ font-size: 17px; \}/);
   assert.doesNotMatch(html, /speed-note|model-speed-description|model-speed-insufficient-samples|model-list-truncated|class="war-agent"/);
   assert.match(html, /#war-rows \.war-meta\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*5\.2em 6\.2em 6\.2em minmax\(0, 1fr\)/);
   assert.match(html, /function harnessBadge\(provider/);
@@ -174,6 +193,16 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
     .map(match => match.slice(1)), expectedModes);
   assert.match(html, /usageMode = 'calendar'/);
   assert.match(html, /rankingMode = 'calendar'/);
+  assert.doesNotMatch(html, /RelativeTimeFormat/);
+  assert.match(html, /usageRange === 'year' \? \(windows\?\.past365 \?\? windows\?\.year\) : windows\?\.\[usageRange\]/);
+  const formatPeriodSrc = /function formatUsagePeriod\([\s\S]*?\n    \}/.exec(html)?.[0];
+  assert.ok(formatPeriodSrc);
+  const formatFor = lang => new Function('locale', 'document', `${formatPeriodSrc}\nreturn formatUsagePeriod;`)(
+    { number: (value, options) => new Intl.NumberFormat(lang, options).format(value) },
+    { documentElement: { lang } }
+  );
+  assert.equal(formatFor('zh-CN')(365, false), '365天');
+  assert.equal(formatFor('en')(365, false), '365 days');
   assert.doesNotMatch(html, /war-mode-help|war-mode-hint|usage-update-(?:help|hint)/);
 });
 
