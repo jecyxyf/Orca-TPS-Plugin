@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 // Menu order follows each flag country's nominal GDP (IMF WEO, October 2026).
 const flags = {
   en: 'us', 'zh-CN': 'cn', de: 'de', ja: 'jp', hi: 'in', fr: 'fr',
-  ru: 'ru', it: 'it', 'pt-BR': 'br', es: 'es', id: 'id', ar: 'sa', bn: 'bd', ur: 'pk', 'pt-PT': 'pt'
+  ru: 'ru', it: 'it', 'pt-BR': 'br', es: 'es', ko: 'kr', id: 'id', 'zh-TW': 'tw', ar: 'sa', bn: 'bd', ur: 'pk', 'pt-PT': 'pt'
 };
 const defaultCode = 'en';
 const preferencesKey = 'panel-language';

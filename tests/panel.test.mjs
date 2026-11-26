@@ -254,6 +254,9 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
     { documentElement: { lang } }
   );
   assert.equal(formatFor('zh-CN')(365, false), '365天');
+  assert.equal(formatFor('zh-TW')(365, false), '365天');
+  assert.equal(formatFor('zh-TW')(1, true), '24時');
+  assert.equal(formatFor('ko')(365, false), '365일');
   assert.equal(formatFor('en')(365, false), '365 days');
   assert.doesNotMatch(html, /war-mode-help|war-mode-hint|usage-update-(?:help|hint)/);
 });

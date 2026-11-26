@@ -431,7 +431,7 @@
     .ladder-ranking-scroll { flex: 1; min-block-size: 0; }
     .war-tabs.ladder-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 8px; }
     .ladder-tabs .war-tab { min-width: 0; padding: 6px 4px; font-size: 13px; overflow-wrap: anywhere; }
-    html:lang(zh-CN) .ladder-tabs { grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); }
+    html:is(:lang(zh-CN), :lang(zh-TW)) .ladder-tabs { grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); }
     .ladder-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
     .ladder-control { min-height: 28px; padding: 4px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; }
     .ladder-secondary { color: var(--muted); background: var(--tag-bg); }
@@ -453,7 +453,7 @@
       align-items: center; column-gap: var(--ladder-toolbar-gap);
       font-variant-numeric: tabular-nums;
     }
-    html:lang(zh-CN) .ladder-toolbar { --ladder-toolbar-title-width: 4em; }
+    html:is(:lang(zh-CN), :lang(zh-TW)) .ladder-toolbar { --ladder-toolbar-title-width: 4em; }
     .ladder-upload-toolbar { margin-top: 8px; }
     .ladder-rank-toolbar {
       grid-template-areas: "title toggle action last";
@@ -2087,8 +2087,12 @@
     const t = locale.t;
     function formatUsagePeriod(days, hourly) {
       const value = hourly ? days * 24 : days;
-      if (hourly && document.documentElement.lang === 'zh-CN') {
-        return `${locale.number(value, { useGrouping: false })}时`;
+      const lang = document.documentElement.lang;
+      if (hourly && (lang === 'zh-CN' || lang === 'zh-TW')) {
+        return `${locale.number(value, { useGrouping: false })}${lang === 'zh-TW' ? '時' : '时'}`;
+      }
+      if (!hourly && lang === 'zh-TW') {
+        return `${locale.number(value, { useGrouping: false })}天`;
       }
       return locale.number(value, { style: 'unit', unit: hourly ? 'hour' : 'day', unitDisplay: 'short', useGrouping: false });
     }

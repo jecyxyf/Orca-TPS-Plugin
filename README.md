@@ -11,7 +11,7 @@
 
 TPS Plugin shows AI request token usage and generation speed in the Orca sidebar. Inspect the current session, review your usage over time, or join the leaderboard with a GitHub account.
 
-The plugin supports local and remote workspaces, offers 15 interface languages, and remembers your selection.
+The plugin supports local and remote workspaces, offers 17 interface languages, and remembers your selection.
 
 ## 2. Interface overview
 

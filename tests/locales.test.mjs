@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createLocalePreferences } from '../src/locales.mjs';
 
-const codes = ['en', 'zh-CN', 'de', 'ja', 'hi', 'fr', 'ru', 'it', 'pt-BR', 'es', 'id', 'ar', 'bn', 'ur', 'pt-PT'];
+const codes = ['en', 'zh-CN', 'de', 'ja', 'hi', 'fr', 'ru', 'it', 'pt-BR', 'es', 'ko', 'id', 'zh-TW', 'ar', 'bn', 'ur', 'pt-PT'];
 const storage = () => {
   const data = new Map();
   return {
