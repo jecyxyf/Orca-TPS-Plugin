@@ -758,6 +758,58 @@
       width: 38px; height: 38px; color: var(--icon-color, var(--ink));
     }
     .model-icon svg { width: 36px; height: 36px; display: block; }
+    .record-card:not(.is-entering) .model-icon.is-acting-hop {
+      transform-origin: center bottom;
+      animation: harness-idle-hop .95s ease-out 1;
+    }
+    .record-card:not(.is-entering) .model-icon.is-acting-wiggle {
+      transform-origin: center bottom;
+      animation: harness-idle-wiggle .9s ease-in-out 1;
+    }
+    .record-card:not(.is-entering) .model-icon.is-acting-peek {
+      transform-origin: center bottom;
+      animation: harness-idle-peek 1.05s ease-in-out 1;
+    }
+    .record-card:not(.is-entering) .model-icon.is-acting-spin {
+      transform-origin: center center;
+      animation: harness-idle-spin .85s cubic-bezier(.22, 1, .36, 1) 1;
+    }
+    .record-card:not(.is-entering) .model-icon.is-acting-jiggle {
+      transform-origin: center bottom;
+      animation: harness-idle-jiggle .8s ease-out 1;
+    }
+    @keyframes harness-idle-hop {
+      0%, 100% { transform: translateY(0) scale(1, 1); }
+      14% { transform: translateY(2px) scale(1.14, .86); }
+      38% { transform: translateY(-8px) scale(.94, 1.1) rotate(-6deg); }
+      58% { transform: translateY(1px) scale(1.09, .91); }
+      78% { transform: translateY(-4px) scale(.97, 1.05) rotate(5deg); }
+    }
+    @keyframes harness-idle-wiggle {
+      0%, 100% { transform: rotate(0deg); }
+      18% { transform: rotate(-13deg) scale(1.06); }
+      38% { transform: rotate(12deg) scale(1.06); }
+      58% { transform: rotate(-9deg); }
+      78% { transform: rotate(6deg); }
+    }
+    @keyframes harness-idle-peek {
+      0%, 100% { transform: translateX(0) rotate(0deg); }
+      22%, 34% { transform: translateX(-4px) rotate(-10deg) scale(1.04); }
+      62%, 74% { transform: translateX(4px) rotate(10deg) scale(1.04); }
+    }
+    @keyframes harness-idle-spin {
+      0% { transform: scale(1) rotate(0deg); }
+      16% { transform: scale(1.12, .88) rotate(-10deg); }
+      72% { transform: scale(1.08) rotate(368deg); }
+      100% { transform: scale(1) rotate(360deg); }
+    }
+    @keyframes harness-idle-jiggle {
+      0%, 100% { transform: scale(1, 1); }
+      20% { transform: scale(1.18, .82); }
+      42% { transform: scale(.86, 1.16); }
+      64% { transform: scale(1.1, .9); }
+      82% { transform: scale(.95, 1.06); }
+    }
     .model { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--purple); font-size: 15px; line-height: 1.45; font-weight: 700; }
     .badge {
       display: inline-grid; place-items: center; flex-shrink: 0;
@@ -1105,7 +1157,8 @@
       .heat-cell::after, .war-delta, .war-row-flash, .war-row-flash::before { animation: none !important; opacity: 0; }
       .war-value.is-counting, .war-amount.is-counting, .war-meta-tokens.is-counting,
       .war-meta-item.is-counting > span:not(.war-delta),
-      .war-row.is-jackpot .war-agent-icon, .record-card.is-entering .model-icon { animation: none !important; }
+      .war-row.is-jackpot .war-agent-icon, .record-card.is-entering .model-icon,
+      .record-card .model-icon[class*="is-acting-"] { animation: none !important; }
     }
   </style>
 </head>
@@ -1711,6 +1764,23 @@
               <span class="settings-color-value" id="settings-star-speed-value">1.0×</span>
             </div>
           </div>
+          <div class="settings-bg-card" id="settings-harness-motion">
+            <div class="settings-bg-row">
+              <p class="settings-bg-title" data-i18n="settings-harness-motion"></p>
+              <button class="settings-bg-btn" id="settings-harness-reset" data-testid="settings-harness-reset" type="button"
+                      data-i18n-title="settings-harness-reset" data-i18n-aria-label="settings-harness-reset" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+              </button>
+            </div>
+            <div class="settings-star-grid">
+              <label class="settings-color-label" for="settings-harness-interval" data-i18n="settings-harness-interval"></label>
+              <input class="settings-card-range" id="settings-harness-interval" data-testid="settings-harness-interval" type="range" min="0" max="10" step="1" value="5">
+              <span class="settings-color-value" id="settings-harness-interval-value">5s</span>
+            </div>
+          </div>
         </section>
       </div>
     </div>
@@ -2044,6 +2114,7 @@
           byId(view.getAttribute('aria-controls')).hidden = !selected;
         }
         if (byId('usage').hidden) stopUsageAnimations(true);
+        if (ui['current-data'].hidden) clearHarnessIdle();
         byId(tab.getAttribute('aria-controls')).dispatchEvent(new Event('tps-view-opened'));
       }
       for (const [index, tab] of views.entries()) {
@@ -2896,7 +2967,86 @@
         playStarMapIntro();
         if (!usageSummary) void loadUsage();
       });
-      ui['current-data'].addEventListener('tps-view-opened', render);
+      const HARNESS_IDLE_ACTIONS = ['is-acting-hop', 'is-acting-wiggle', 'is-acting-peek', 'is-acting-spin', 'is-acting-jiggle'];
+      let harnessIdleTimer, lastIdleCard, lastIdleAction = '';
+      function harnessIdleIntervalSec() {
+        const value = Number(document.documentElement.dataset.harnessInterval ?? 5);
+        return Number.isFinite(value) ? Math.min(10, Math.max(0, Math.round(value))) : 5;
+      }
+      function currentHarnessIdleAllowed() {
+        return !disposed && !ui['current-data'].hidden && harnessIdleIntervalSec() > 0 &&
+          !document.documentElement.classList.contains('is-motion-paused') &&
+          !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      }
+      function clearHarnessIdle() {
+        clearTimeout(harnessIdleTimer);
+        harnessIdleTimer = undefined;
+        for (const icon of ui.records.querySelectorAll('.model-icon')) {
+          icon.classList.remove(...HARNESS_IDLE_ACTIONS);
+        }
+      }
+      function scheduleHarnessIdle(initial = false) {
+        clearTimeout(harnessIdleTimer);
+        harnessIdleTimer = undefined;
+        const maxSec = harnessIdleIntervalSec();
+        if (!currentHarnessIdleAllowed()) return;
+        const maxMs = maxSec * 1000;
+        const minMs = Math.min(500, Math.round(maxMs * 0.35));
+        const delay = initial
+          ? Math.min(maxMs, 500 + Math.random() * Math.max(200, Math.min(1500, maxMs - 500)))
+          : minMs + Math.random() * Math.max(0, maxMs - minMs);
+        harnessIdleTimer = setTimeout(triggerHarnessIdleAction, Math.round(delay));
+        harnessIdleTimer.unref?.();
+      }
+      function triggerHarnessIdleAction() {
+        harnessIdleTimer = undefined;
+        if (!currentHarnessIdleAllowed()) return;
+        const scrollRect = ui['current-scroll']?.getBoundingClientRect?.();
+        const cards = [...ui.records.children].filter(card => {
+          if (card.classList.contains('is-entering')) return false;
+          const icon = card.querySelector('.model-icon');
+          if (!icon || HARNESS_IDLE_ACTIONS.some(cls => icon.classList.contains(cls))) return false;
+          if (!scrollRect || !scrollRect.height) return true;
+          const rect = card.getBoundingClientRect();
+          return rect.bottom > scrollRect.top + 8 && rect.top < scrollRect.bottom - 8;
+        });
+        const pool = cards.length > 1 ? cards.filter(card => card !== lastIdleCard) : cards;
+        if (pool.length) {
+          const card = pool[Math.floor(Math.random() * pool.length)];
+          const icon = card.querySelector('.model-icon');
+          const actions = HARNESS_IDLE_ACTIONS.length > 1
+            ? HARNESS_IDLE_ACTIONS.filter(name => name !== lastIdleAction)
+            : HARNESS_IDLE_ACTIONS;
+          const action = actions[Math.floor(Math.random() * actions.length)];
+          lastIdleCard = card;
+          lastIdleAction = action;
+          void icon.offsetWidth;
+          icon.classList.add(action);
+          let cleared = false;
+          const finish = () => {
+            if (cleared) return;
+            cleared = true;
+            clearTimeout(clearTimer);
+            icon.classList.remove(action);
+          };
+          const clearTimer = setTimeout(finish, 1300);
+          clearTimer.unref?.();
+          icon.addEventListener('animationend', finish, { once: true });
+        }
+        scheduleHarnessIdle(false);
+      }
+      document.addEventListener('tps-motion-changed', () => {
+        if (!currentHarnessIdleAllowed()) clearHarnessIdle();
+        else if (harnessIdleTimer === undefined && ui.records.children.length > 0) scheduleHarnessIdle(true);
+      }, { signal: lifetime.signal });
+      document.addEventListener('tps-harness-interval-changed', () => {
+        if (!currentHarnessIdleAllowed()) clearHarnessIdle();
+        else if (ui.records.children.length > 0) scheduleHarnessIdle(true);
+      }, { signal: lifetime.signal });
+      ui['current-data'].addEventListener('tps-view-opened', () => {
+        render();
+        if (ui.records.children.length > 0) scheduleHarnessIdle(true);
+      });
       function render() {
         if (disposed || ui['current-data'].hidden) return;
         const records = (current?.records ?? []).filter(record => record && typeof record === 'object')
@@ -2985,6 +3135,11 @@
           ui['current-scroll'].scrollTop = 0;
           window.scrollTo(0, 0);
         }
+        if (records.length > 0) {
+          if (harnessIdleTimer === undefined) scheduleHarnessIdle(true);
+        } else {
+          clearHarnessIdle();
+        }
       }
       function scheduleCurrent() {
         if (disposed || ui['current-data'].hidden || currentFrame !== undefined) return;
@@ -3035,6 +3190,7 @@
         if (disposed) return;
         disposed = true;
         stopUsageAnimations(false);
+        clearHarnessIdle();
         usageViewSnapshots.clear();
         warResizeObserver?.disconnect();
         lifetime.abort();
@@ -4526,6 +4682,27 @@
       starSpeedInput.addEventListener('change', () => applyStarTwinkle({ ratio: starRatio, speed: starSpeedInput.value }, true));
       starReset.addEventListener('click', () => applyStarTwinkle({ ratio: 100, speed: 1 }, true));
 
+      const HARNESS_INTERVAL_KEY = 'tps:panel-harness-interval';
+      const harnessIntervalInput = byId('settings-harness-interval');
+      const harnessIntervalValue = byId('settings-harness-interval-value');
+      const harnessReset = byId('settings-harness-reset');
+      let harnessInterval = 5;
+
+      function applyHarnessInterval(value, persist = false) {
+        harnessInterval = clampInt(value, 0, 10, 5);
+        document.documentElement.dataset.harnessInterval = String(harnessInterval);
+        harnessIntervalInput.value = String(harnessInterval);
+        harnessIntervalValue.textContent = `${harnessInterval}s`;
+        harnessReset.disabled = harnessInterval === 5;
+        if (persist) writeStore(HARNESS_INTERVAL_KEY, harnessInterval === 5 ? null : String(harnessInterval));
+        document.dispatchEvent(new Event('tps-harness-interval-changed'));
+      }
+
+      applyHarnessInterval(readStore(HARNESS_INTERVAL_KEY) ?? 5, false);
+      harnessIntervalInput.addEventListener('input', () => applyHarnessInterval(harnessIntervalInput.value, false));
+      harnessIntervalInput.addEventListener('change', () => applyHarnessInterval(harnessIntervalInput.value, true));
+      harnessReset.addEventListener('click', () => applyHarnessInterval(5, true));
+
       function setOpen(open, restoreFocus = false) {
         dialog.hidden = !open;
         toggle.setAttribute('aria-expanded', String(open));
@@ -4786,7 +4963,10 @@
 
       let panelInView = true;
       function updateMotionPause() {
-        document.documentElement.classList.toggle('is-motion-paused', document.hidden || !panelInView);
+        const paused = document.hidden || !panelInView;
+        if (document.documentElement.classList.contains('is-motion-paused') === paused) return;
+        document.documentElement.classList.toggle('is-motion-paused', paused);
+        document.dispatchEvent(new Event('tps-motion-changed'));
       }
       document.addEventListener('visibilitychange', updateMotionPause, { signal: lifetime.signal });
       const motionObserver = typeof IntersectionObserver === 'function'

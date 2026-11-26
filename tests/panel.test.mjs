@@ -233,7 +233,7 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   }
   assert.equal(css.get('.heat-cell.is-still').animation, 'none');
   assert.match(html, /html\.is-motion-paused \*[\s\S]*?animation-play-state: paused !important;/);
-  assert.match(html, /classList\.toggle\('is-motion-paused', document\.hidden \|\| !panelInView\)/);
+  assert.match(html, /const paused = document\.hidden \|\| !panelInView;[\s\S]*?classList\.toggle\('is-motion-paused', paused\);[\s\S]*?dispatchEvent\(new Event\('tps-motion-changed'\)\)/);
   assert.match(html, /new IntersectionObserver\(/);
   assert.match(css.get('.heat-cell:hover::after').animation, /star-ripple/);
   assert.match(html, /class="ladder-controls-head"/);
@@ -895,6 +895,15 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(html, /starReset\.addEventListener\('click', \(\) => applyStarTwinkle\(\{ ratio: 100, speed: 1 \}, true\)\)/);
   assert.match(html, /function applyStarRatio\(\)[\s\S]*?\.filter\(\(\{ cell \}\) => \/\\blv\[2-4\]\\b\/\.test\(cell\.className\)\)[\s\S]*?const twinkling = Math\.round\(lit\.length \* ratio \/ 100\);[\s\S]*?cell\.classList\.toggle\('is-still', index >= twinkling\)/);
   assert.match(html, /addEventListener\('tps-star-twinkle-changed', applyStarRatio/);
+  assert.match(dialog, /id="settings-star-twinkle"[\s\S]*?id="settings-harness-motion"[\s\S]*?data-i18n="settings-harness-motion"[\s\S]*?id="settings-harness-reset"[^>]*disabled[\s\S]*?id="settings-harness-interval"[^>]*type="range" min="0" max="10" step="1" value="5"[\s\S]*?id="settings-harness-interval-value">5s</);
+  assert.match(html, /const HARNESS_INTERVAL_KEY = 'tps:panel-harness-interval';/);
+  assert.match(html, /function applyHarnessInterval\(value, persist = false\)[\s\S]*?dataset\.harnessInterval = String\(harnessInterval\)[\s\S]*?dispatchEvent\(new Event\('tps-harness-interval-changed'\)\)/);
+  assert.match(html, /harnessReset\.addEventListener\('click', \(\) => applyHarnessInterval\(5, true\)\)/);
+  assert.match(html, /const HARNESS_IDLE_ACTIONS = \['is-acting-hop', 'is-acting-wiggle', 'is-acting-peek', 'is-acting-spin', 'is-acting-jiggle'\];/);
+  for (const name of ['hop', 'wiggle', 'peek', 'spin', 'jiggle']) {
+    assert.match(html, new RegExp(`@keyframes harness-idle-${name}\\b`));
+  }
+  assert.match(html, /function triggerHarnessIdleAction\(\)[\s\S]*?clearHarnessIdle\(\)/);
   assert.doesNotMatch(dialog, /id="language-picker"|settings-timezone|settings-bg-zoom|settings-bg-preview/);
 
   const editor = /<div[^>]*id="bg-editor"[^>]*role="dialog"[\s\S]*?(?=\n\s*<template id="ladder-avatar-fallback">)/.exec(html)?.[0] ?? '';
