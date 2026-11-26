@@ -9,7 +9,7 @@
 
 ## 1. Project description
 
-TPS Plugin shows AI request token usage and generation speed in the Orca sidebar. Inspect the current session, review your usage over time, or join the leaderboard with a GitHub account.
+TPS Plugin shows AI request token usage and generation speed in the Orca sidebar. Inspect the current session, track personal usage with interactive charts and a 365-day star map, customize the panel theme, or join the live leaderboard with a GitHub account.
 
 The plugin supports local and remote workspaces, offers 17 interface languages, and remembers your selection.
 
@@ -17,43 +17,82 @@ The plugin supports local and remote workspaces, offers 17 interface languages, 
 
 Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**, **Personal Stats**, and **Leaderboard**.
 
-<p align="center">
-  <img src="./assets/readme/en/overview.jpg" width="640" alt="TPS Plugin overview with all three tabs in English">
-</p>
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="./assets/readme/en/current-data.gif" width="100%" alt="Current Data animated preview showing new card stardust burst and real-time metrics"><br>
+      <sub><b>Current Data</b></sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="./assets/readme/en/personal-stats.gif" width="100%" alt="Personal Stats animated preview showing count-up totals, delta highlights, and twinkling star map"><br>
+      <sub><b>Personal Stats</b></sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="./assets/readme/en/leaderboard.gif" width="100%" alt="Leaderboard animated preview showing royal tier ECG heartbeats, 7-day curves, and 30-day equalizer"><br>
+      <sub><b>Leaderboard</b></sub>
+    </td>
+  </tr>
+</table>
 
-*The screenshots use sample data.*
+*The previews use sample data.*
 
 ## 3. Features
 
 ### 3.1 Current Data
 
-- Follow the active Orca channel and view up to 100 recent requests.
+- Follow the active Orca channel and view up to 100 recent requests with Harness icons, proxy/subagent badges, and live update timestamps.
 - See the model, output in Tokens, generation speed in tokens per second, request duration, time to first token (TTFT) when available, and cache hit rate.
-- Check the latest speed and cache hit rate in the Orca status bar. Estimated speeds are marked with ≈.
+- New incoming requests trigger an aurora border sweep and rainbow stardust burst, while visible Harness icons perform periodic idle animations.
+- Check the latest speed and cache hit rate in the Orca status bar (estimated speeds are marked with `≈`), and open or star the GitHub repository right from the header.
 
 <p align="center">
-  <img src="./assets/readme/en/current-data.jpg" width="267" alt="English Current Data tab showing request cards for Codex, Claude, Hermes, OpenCode, and Pi">
+  <img src="./assets/readme/en/current-data.jpg" width="270" alt="English Current Data tab showing request cards for Codex, Claude, Hermes, OpenCode, and Pi">
 </p>
 
 ### 3.2 Personal Stats
 
-- Review usage and requests for today, the last 7 or 30 days, this calendar year, or the past 365 days. Today's summary also shows the highest generation speed for a single request.
-- Break down usage by tool and model, and compare average model generation speeds. Usage is shown in millions of tokens (M) and includes new input, output, cache reads, and cache writes.
-- Personal Stats combines local and SSH usage without signing in. The heatmap covers the past 365 days. Set the statistics time zone in the TPS Plugin settings in Orca.
+- Switch between **By Day** and **By Hour** modes with the top icon capsule, and review usage across **1 day**, **7 days**, **30 days**, and **365 days**.
+- View total usage (including cache reads and writes), request count, and today’s max single-request speed; incoming usage animates with count-up numbers, row flashes, and `+Δ` badges.
+- Inspect **Model data** with a segmented share bar at the top and toggle between sorting by **Usage** or **Speed**, showing each model’s Harness icon, tokens, request count, and average speed.
+- Explore the 365-day **Activity star map** with a drop-in entrance animation and twinkling stars. Combines local and SSH usage automatically without signing in.
 
 <p align="center">
-  <img src="./assets/readme/en/personal-stats.jpg" width="250" alt="English Personal Stats tab showing totals, model usage, average speed, and a usage heatmap">
+  <img src="./assets/readme/en/personal-stats.jpg" width="270" alt="English Personal Stats tab showing totals, model share bar, average speed, and activity star map">
 </p>
 
 ### 3.3 Leaderboard
 
-- View token usage rankings and trends by day or hour.
-- Compare each account’s best average generation speed and see the model and Harness used for that result.
-- Turn on Rankings to get automatic updates. Sign in with GitHub to participate. Usage from multiple devices is combined under the same account.
+- View your signed-in account, sync status, and **1 day / 7 days / 30 days** rankings in one summary card with 7 royal tier badges (Challenger, Grandmaster, Master, Diamond, Emerald, Platinum, Gold).
+- **1 day** calculates live activity BPM from uploads in the last 5 minutes, pairing animated royal characters (rocket, sports car, sprinting, panting, flatline) with tier-colored live ECG heartbeat waves.
+- **7 days** draws tier-colored glowing curves with a light sweep and pulsing tip; **30 days** displays a tier-colored animated dot-matrix equalizer.
+- **Speed** compares each account’s best average generation speed, marks the top three with `S` tier badges, and shows the model, Harness icon, and token count.
 
 <p align="center">
-  <img src="./assets/readme/en/leaderboard.jpg" width="266" alt="English leaderboard with a 30-day usage curve and the Speed tab">
+  <img src="./assets/readme/en/leaderboard.jpg" width="270" alt="English Leaderboard tab showing royal tier badges, character poses, and live ECG heartbeat waves">
 </p>
+
+### 3.4 Theme Customization
+
+Click the palette button in the top-right header to open the live **Theme** panel without dimming the background:
+
+- **Background image**: Upload SVG, JPG, PNG, WebP, or GIF images (up to 2 MB) and adjust them in a full-panel editor (drag to pan, scroll or click to zoom, and reset position).
+- **Font & icon colors**: Customize unselected text, selected accent, and icon colors independently, with one-click reset.
+- **Card style**: Pick a custom card color and adjust opacity from `0%` to `100%` to achieve a frosted-glass backdrop over custom backgrounds.
+- **Star map twinkle**: Fine-tune the percentage of twinkling stars (`0%`–`100%`) and twinkle speed (`0×`–`2.0×`).
+- **Icon motion**: Adjust the random trigger interval (`0s`–`10s`) for Harness icon animations on the Current Data tab.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="./assets/readme/en/theme-settings.jpg" width="270" alt="English Theme settings dialog showing background image, font color, icon color, card style, star map twinkle, and icon motion controls"><br>
+      <sub><b>Theme settings panel</b></sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="./assets/readme/en/theme-preview.jpg" width="270" alt="English Current Data panel styled with a custom aurora background image, translucent frosted cards, and custom accent colors"><br>
+      <sub><b>Custom background &amp; translucent cards</b></sub>
+    </td>
+  </tr>
+</table>
 
 ## 4. Supported Harnesses
 
@@ -77,7 +116,7 @@ Open **TPS Plugin** in Orca’s right sidebar to switch between **Current Data**
 > [!IMPORTANT]
 > **Upgrading from 1.6.4**
 >
-> Version 1.6.5 substantially changes the plugin structure and moves the leaderboard to a new server. Uninstall the old TPS Plugin in Orca, then install **1.6.6**.
+> Version 1.6.5+ substantially changes the plugin structure and moves the leaderboard to a new server. Uninstall the old TPS Plugin in Orca, then install **1.6.7**.
 
 - **Requirements.** Use Orca 1.4.251 or later on Windows or Linux. For SSH workspace usage, the remote host needs Node.js 22.13 or later with SQLite support.
 - **Install from the plugin directory.** In Orca, open **Settings → Plugins**, search for **TPS** by **jecyxyf**, then install it and review the permissions. [View the plugin listing](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)
@@ -90,6 +129,6 @@ If a device submits to the leaderboard and shuts down before syncing, Personal S
 
 ## 8. Next version
 
-Overhaul the plugin’s visual design and layout to make it feel more modern and fun.
+Continue expanding supported AI Harnesses, refining animation smoothness and memory efficiency, and improving cross-device sync reliability.
 
 [MIT License](./LICENSE) · [Third-party notices](./THIRD_PARTY_NOTICES.md)
