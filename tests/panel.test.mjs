@@ -951,7 +951,7 @@ test('top-right header places language picker beside settings gear and modal off
   assert.match(dialog, /id="settings-star-ratio-value">100%</);
   assert.match(dialog, /id="settings-star-speed-value">1\.0×</);
   assert.match(html, /const STAR_RATIO_KEY = 'tps:panel-star-ratio';\s*const STAR_SPEED_KEY = 'tps:panel-star-speed';/);
-  assert.match(html, /function applyStarTwinkle\(\{ ratio, speed \}, persist = false\)[\s\S]*?Math\.max\(0, rawSpeed\)[\s\S]*?root\.dataset\.starRatio = String\(starSpeed === 0 \? 0 : starRatio\)[\s\S]*?setProperty\('--star-speed'[\s\S]*?dispatchEvent\(new Event\('tps-star-twinkle-changed'\)\)/);
+  assert.match(html, /function applyStarTwinkle\(\{ ratio, speed \}, persist = false\)[\s\S]*?Math\.max\(0, rawSpeed\)[\s\S]*?documentElement\.dataset\.starRatio = String\(starSpeed === 0 \? 0 : starRatio\)[\s\S]*?setProperty\('--star-speed'[\s\S]*?dispatchEvent\(new Event\('tps-star-twinkle-changed'\)\)/);
   assert.match(html, /starReset\.addEventListener\('click', \(\) => applyStarTwinkle\(\{ ratio: 100, speed: 1 \}, true\)\)/);
   assert.match(html, /function applyStarRatio\(\)[\s\S]*?\.filter\(\(\{ cell \}\) => \/\\blv\[2-4\]\\b\/\.test\(cell\.className\)\)[\s\S]*?const twinkling = Math\.round\(lit\.length \* ratio \/ 100\);[\s\S]*?cell\.classList\.toggle\('is-still', index >= twinkling\)/);
   assert.match(html, /addEventListener\('tps-star-twinkle-changed', applyStarRatio/);
@@ -994,9 +994,10 @@ test('top-right header places language picker beside settings gear and modal off
   assert.equal(css.get('.settings-close').color, 'var(--icon-color, var(--muted))');
   assert.equal(css.get('.settings-bg-btn').background, 'transparent');
   assert.equal(css.get('.settings-bg-btn').color, 'var(--icon-color, var(--muted))');
-  assert.match(html, /root\.setProperty\('--ink', value\)[\s\S]*?root\.setProperty\('--purple', value\)[\s\S]*?root\.setProperty\('--muted',[\s\S]*?root\.setProperty\('--tab-unselected', value\)/);
-  assert.match(html, /root\.setProperty\('--blue', value\)[\s\S]*?root\.setProperty\('--tab-selected', value\)/);
-  assert.match(html, /setProperty\('--icon-color', value\)/);
+  assert.match(html, /vars: value => \(\{ '--ink': value, '--purple': value, '--muted': `color-mix\(in srgb, \$\{value\} 82%, transparent\)`, '--tab-unselected': value \}\)/);
+  assert.match(html, /vars: value => \(\{ '--blue': value, '--tab-selected': value \}\)/);
+  assert.match(html, /vars: value => \(\{ '--icon-color': value \}\)/);
+  assert.match(html, /if \(valid\) root\.setProperty\(name, color\);\s*else root\.removeProperty\(name\);/);
   assert.equal(css.get('#current-scroll')['scrollbar-gutter'], 'stable');
   assert.equal(css.get('#current-scroll')['padding-inline-end'], '6px');
   assert.equal(css.get('.records')['justify-items'], 'center');

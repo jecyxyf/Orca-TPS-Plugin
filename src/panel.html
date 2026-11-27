@@ -3865,18 +3865,9 @@
   </script>
   <script>
     (() => {
-      const byId = id => document.getElementById(id);
-      const lifetime = new AbortController();
-      const BG_IMAGE_KEY = 'tps:panel-bg-image';
-      const BG_TRANSFORM_KEY = 'tps:panel-bg-transform';
-      const BG_ORIG_DB = 'orca-tps-bg';
-      const BG_ORIG_STORE = 'images';
-      const BG_ORIG_KEY = 'panel-bg-original';
-      const COLOR_UNSELECTED_KEY = 'tps:panel-color-unselected';
-      const COLOR_SELECTED_KEY = 'tps:panel-color-selected';
-      const COLOR_ICON_KEY = 'tps:panel-color-icon';
-      const CARD_COLOR_KEY = 'tps:panel-card-color';
-      const CARD_OPACITY_KEY = 'tps:panel-card-opacity';
+      const lifetime = new AbortController(), listen = { signal: lifetime.signal };
+      const BG_IMAGE_KEY = 'tps:panel-bg-image', BG_TRANSFORM_KEY = 'tps:panel-bg-transform';
+      const BG_ORIG_DB = 'orca-tps-bg', BG_ORIG_STORE = 'images', BG_ORIG_KEY = 'panel-bg-original';
       const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
       const DEFAULT_BG_TRANSFORM = { scale: 100, x: 0, y: 0, baked: false };
       const MAX_BG_BYTES = 2 * 1024 * 1024;
@@ -3888,81 +3879,26 @@
       const ALLOWED_MIMES = new Set(Object.values(MIME_BY_EXT));
       const RASTER_CROP_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
       const DATA_IMAGE_RE = /^data:image\/(?:svg\+xml|jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/;
-      const panelMain = byId('panel');
-      const toggle = byId('settings-toggle');
-      const dialog = byId('settings-dialog');
-      const closeButton = byId('settings-close');
-      const bgLayer = byId('panel-bg-layer');
-      const bgImg = byId('panel-bg-img');
-      const bgInput = byId('settings-bg-input');
-      const bgUpload = byId('settings-bg-upload');
-      const bgEdit = byId('settings-bg-edit');
-      const bgReset = byId('settings-bg-reset');
-      const bgError = byId('settings-bg-error');
-      const bgEditor = byId('bg-editor');
-      const bgEditorBar = byId('bg-editor-bar');
-      const bgEditorZoomOut = byId('bg-editor-zoom-out');
-      const bgEditorZoomValue = byId('bg-editor-zoom-value');
-      const bgEditorZoomIn = byId('bg-editor-zoom-in');
-      const bgEditorResetPos = byId('bg-editor-reset-pos');
-      const bgEditorCancel = byId('bg-editor-cancel');
-      const bgEditorSave = byId('bg-editor-save');
-      const fontColorReset = byId('settings-color-reset');
+      const [panelMain, toggle, dialog, closeButton, bgLayer, bgImg, bgInput, bgUpload, bgEdit, bgReset, bgError] =
+        ['panel', 'settings-toggle', 'settings-dialog', 'settings-close', 'panel-bg-layer', 'panel-bg-img', 'settings-bg-input',
+          'settings-bg-upload', 'settings-bg-edit', 'settings-bg-reset', 'settings-bg-error'].map(byId);
+      const [bgEditor, bgEditorBar, bgEditorZoomOut, bgEditorZoomValue, bgEditorZoomIn, bgEditorResetPos, bgEditorCancel, bgEditorSave] =
+        ['', '-bar', '-zoom-out', '-zoom-value', '-zoom-in', '-reset-pos', '-cancel', '-save'].map(suffix => byId('bg-editor' + suffix));
+      const dark = () => document.documentElement.classList.contains('dark');
+      const root = document.documentElement.style;
+      // Each color setting maps its value onto the CSS variables it owns.
       const colorInputs = [
-        {
-          key: COLOR_UNSELECTED_KEY,
-          group: 'font',
-          apply: value => {
-            const root = document.documentElement.style;
-            root.setProperty('--ink', value);
-            root.setProperty('--purple', value);
-            root.setProperty('--muted', `color-mix(in srgb, ${value} 82%, transparent)`);
-            root.setProperty('--tab-unselected', value);
-          },
-          clear: () => {
-            const root = document.documentElement.style;
-            root.removeProperty('--ink');
-            root.removeProperty('--purple');
-            root.removeProperty('--muted');
-            root.removeProperty('--tab-unselected');
-          },
-          input: byId('settings-color-unselected'),
-          fallback: () => document.documentElement.classList.contains('dark') ? '#b4b4be' : '#6d6d75'
-        },
-        {
-          key: COLOR_SELECTED_KEY,
-          group: 'font',
-          apply: value => {
-            const root = document.documentElement.style;
-            root.setProperty('--blue', value);
-            root.setProperty('--tab-selected', value);
-          },
-          clear: () => {
-            const root = document.documentElement.style;
-            root.removeProperty('--blue');
-            root.removeProperty('--tab-selected');
-          },
-          input: byId('settings-color-selected'),
-          fallback: () => document.documentElement.classList.contains('dark') ? '#64b0ff' : '#0066e6'
-        },
-        {
-          key: COLOR_ICON_KEY,
-          apply: value => document.documentElement.style.setProperty('--icon-color', value),
-          clear: () => document.documentElement.style.removeProperty('--icon-color'),
-          input: byId('settings-color-icon'), reset: byId('settings-color-icon-reset'),
-          fallback: () => document.documentElement.classList.contains('dark') ? '#b4b4be' : '#6d6d75'
-        }
+        { key: 'tps:panel-color-unselected', group: 'font', input: byId('settings-color-unselected'),
+          vars: value => ({ '--ink': value, '--purple': value, '--muted': `color-mix(in srgb, ${value} 82%, transparent)`, '--tab-unselected': value }),
+          fallback: () => dark() ? '#b4b4be' : '#6d6d75' },
+        { key: 'tps:panel-color-selected', group: 'font', input: byId('settings-color-selected'),
+          vars: value => ({ '--blue': value, '--tab-selected': value }), fallback: () => dark() ? '#64b0ff' : '#0066e6' },
+        { key: 'tps:panel-color-icon', input: byId('settings-color-icon'), reset: byId('settings-color-icon-reset'),
+          vars: value => ({ '--icon-color': value }), fallback: () => dark() ? '#b4b4be' : '#6d6d75' }
       ];
-      let hasBgImage = false;
-      let croppedBgUrl = '';
-      let originalBgFallback = null;
-      let activeImgSize = { w: 0, h: 0 };
-      let bgTransform = { ...DEFAULT_BG_TRANSFORM };
-      let beforeEdit = null;
-      let editorBusy = false;
-      let editingOriginal = false;
-      let editingSourceUrl = '';
-      let dragState = null;
+      let hasBgImage = false, croppedBgUrl = '', originalBgFallback = null, activeImgSize = { w: 0, h: 0 };
+      let bgTransform = { ...DEFAULT_BG_TRANSFORM }, beforeEdit = null, editorBusy = false;
+      let editingOriginal = false, editingSourceUrl = '', dragState = null;
 
       function readStore(key) {
         try { return localStorage.getItem(key); } catch { return null; }
@@ -3976,21 +3912,30 @@
           return false;
         }
       }
+      // Fires inputs live and persists on change.
+      function onEdit(input, update) {
+        input.addEventListener('input', () => update(false));
+        input.addEventListener('change', () => update(true));
+      }
 
-      function openBgDb() {
+      // The uncropped original stays in IndexedDB so a later edit can re-crop it; it is read only when editing.
+      function withBgStore(mode, run) {
         if (typeof indexedDB === 'undefined') return Promise.resolve(null);
         return new Promise(resolve => {
           try {
-            const req = indexedDB.open(BG_ORIG_DB, 1);
-            req.onupgradeneeded = () => {
-              const db = req.result;
-              if (!db.objectStoreNames.contains(BG_ORIG_STORE)) {
-                db.createObjectStore(BG_ORIG_STORE);
-              }
+            const open = indexedDB.open(BG_ORIG_DB, 1);
+            open.onupgradeneeded = () => {
+              if (!open.result.objectStoreNames.contains(BG_ORIG_STORE)) open.result.createObjectStore(BG_ORIG_STORE);
             };
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => resolve(null);
-            req.onblocked = () => resolve(null);
+            open.onerror = open.onblocked = () => resolve(null);
+            open.onsuccess = () => {
+              const db = open.result;
+              const done = value => {
+                try { db.close(); } catch {}
+                resolve(value);
+              };
+              try { run(db.transaction(BG_ORIG_STORE, mode), done); } catch { done(null); }
+            };
           } catch {
             resolve(null);
           }
@@ -3998,133 +3943,69 @@
       }
 
       async function readOriginalBg() {
-        const db = await openBgDb();
-        if (!db) return originalBgFallback;
-        return new Promise(resolve => {
-          try {
-            const tx = db.transaction(BG_ORIG_STORE, 'readonly');
-            const req = tx.objectStore(BG_ORIG_STORE).get(BG_ORIG_KEY);
-            req.onsuccess = () => {
-              const val = typeof req.result === 'string' && DATA_IMAGE_RE.test(req.result) ? req.result : null;
-              db.close();
-              resolve(val ?? originalBgFallback);
-            };
-            req.onerror = () => {
-              db.close();
-              resolve(originalBgFallback);
-            };
-          } catch {
-            try { db.close(); } catch {}
-            resolve(originalBgFallback);
-          }
+        const value = await withBgStore('readonly', (tx, done) => {
+          const req = tx.objectStore(BG_ORIG_STORE).get(BG_ORIG_KEY);
+          req.onsuccess = () => done(typeof req.result === 'string' && DATA_IMAGE_RE.test(req.result) ? req.result : null);
+          req.onerror = () => done(null);
         });
+        return value ?? originalBgFallback;
       }
 
       async function writeOriginalBg(dataUrl) {
         const value = typeof dataUrl === 'string' && DATA_IMAGE_RE.test(dataUrl) ? dataUrl : null;
         originalBgFallback = null;
-        const db = await openBgDb();
-        if (!db) {
-          originalBgFallback = value;
-          return false;
-        }
-        return new Promise(resolve => {
-          const fail = () => {
-            originalBgFallback = value;
-            try { db.close(); } catch {}
-            resolve(false);
-          };
-          try {
-            const tx = db.transaction(BG_ORIG_STORE, 'readwrite');
-            const store = tx.objectStore(BG_ORIG_STORE);
-            if (value) store.put(value, BG_ORIG_KEY);
-            else store.delete(BG_ORIG_KEY);
-            tx.oncomplete = () => { db.close(); resolve(true); };
-            tx.onerror = fail;
-            tx.onabort = fail;
-          } catch {
-            fail();
-          }
+        const saved = await withBgStore('readwrite', (tx, done) => {
+          if (value) tx.objectStore(BG_ORIG_STORE).put(value, BG_ORIG_KEY);
+          else tx.objectStore(BG_ORIG_STORE).delete(BG_ORIG_KEY);
+          tx.oncomplete = () => done(true);
+          tx.onerror = tx.onabort = () => done(false);
         });
+        if (!saved) originalBgFallback = value;
+        return Boolean(saved);
       }
 
       const clampInt = (value, min, max, fallback) => {
         const num = Number(value);
         return Number.isFinite(num) ? Math.min(max, Math.max(min, Math.round(num))) : fallback;
       };
-
-      function bgViewportSize() {
-        const w = bgLayer.clientWidth || document.documentElement.clientWidth || window.innerWidth || 1;
-        const h = bgLayer.clientHeight || document.documentElement.clientHeight || window.innerHeight || 1;
-        return { w, h };
-      }
-
-      function clearBgImgInlineLayout() {
-        bgImg.style.left = '';
-        bgImg.style.top = '';
-        bgImg.style.width = '';
-        bgImg.style.height = '';
-        bgImg.style.objectFit = '';
-      }
+      const finite = value => typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
       function computeBgLayout(transform, imgW, imgH) {
-        const { w: W, h: H } = bgViewportSize();
+        const W = bgLayer.clientWidth || document.documentElement.clientWidth || window.innerWidth || 1;
+        const H = bgLayer.clientHeight || document.documentElement.clientHeight || window.innerHeight || 1;
         const hasDims = imgW > 0 && imgH > 0;
-        const natW = hasDims ? imgW : W;
-        const natH = hasDims ? imgH : H;
+        const natW = hasDims ? imgW : W, natH = hasDims ? imgH : H;
         const scale = clampInt(transform?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale);
         const coverScale = Math.max(W / natW, H / natH);
-        const dispW = natW * coverScale * (scale / 100);
-        const dispH = natH * coverScale * (scale / 100);
-        const rawX = typeof transform?.x === 'number' && Number.isFinite(transform.x) ? transform.x : 0;
-        const rawY = typeof transform?.y === 'number' && Number.isFinite(transform.y) ? transform.y : 0;
-        const boundX = Math.abs(W - dispW) / (2 * dispW) * 100;
-        const boundY = Math.abs(H - dispH) / (2 * dispH) * 100;
-        const x = hasDims ? Math.min(boundX, Math.max(-boundX, rawX)) : rawX;
-        const y = hasDims ? Math.min(boundY, Math.max(-boundY, rawY)) : rawY;
-        const left = W / 2 - dispW / 2 + (x / 100) * dispW;
-        const top = H / 2 - dispH / 2 + (y / 100) * dispH;
+        const dispW = natW * coverScale * (scale / 100), dispH = natH * coverScale * (scale / 100);
+        const bound = (value, size, display) => {
+          const limit = Math.abs(size - display) / (2 * display) * 100;
+          return hasDims ? Math.min(limit, Math.max(-limit, finite(value))) : finite(value);
+        };
+        const x = bound(transform?.x, W, dispW), y = bound(transform?.y, H, dispH);
+        const left = W / 2 - dispW / 2 + (x / 100) * dispW, top = H / 2 - dispH / 2 + (y / 100) * dispH;
         return { W, H, imgW: natW, imgH: natH, hasDims, scale, x, y, dispW, dispH, left, top };
       }
 
-      function loadTransform() {
-        try {
-          const parsed = JSON.parse(readStore(BG_TRANSFORM_KEY) || 'null');
-          return {
-            scale: clampInt(parsed?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale),
-            x: typeof parsed?.x === 'number' && Number.isFinite(parsed.x) ? parsed.x : 0,
-            y: typeof parsed?.y === 'number' && Number.isFinite(parsed.y) ? parsed.y : 0,
-            baked: parsed?.baked === true
-          };
-        } catch {
-          return { ...DEFAULT_BG_TRANSFORM };
-        }
+      const cleanTransform = (value, baked) => ({
+        scale: clampInt(value?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale), x: finite(value?.x), y: finite(value?.y), baked
+      });
+
+      function placeBgImage(layout) {
+        const box = layout ? { left: `${layout.left}px`, top: `${layout.top}px`, width: `${layout.dispW}px`, height: `${layout.dispH}px`, objectFit: 'fill' }
+          : { left: '', top: '', width: '', height: '', objectFit: '' };
+        Object.assign(bgImg.style, box);
       }
 
       function applyBackgroundTransform(next, persist = false) {
         const baked = next?.baked === true;
         if (baked && bgEditor.hidden) {
-          bgTransform = {
-            scale: clampInt(next?.scale, 50, 300, DEFAULT_BG_TRANSFORM.scale),
-            x: typeof next?.x === 'number' && Number.isFinite(next.x) ? next.x : 0,
-            y: typeof next?.y === 'number' && Number.isFinite(next.y) ? next.y : 0,
-            baked: true
-          };
-          clearBgImgInlineLayout();
+          bgTransform = cleanTransform(next, true);
+          placeBgImage(null);
         } else {
-          const imgW = activeImgSize.w || bgImg.naturalWidth || 0;
-          const imgH = activeImgSize.h || bgImg.naturalHeight || 0;
-          const layout = computeBgLayout(next, imgW, imgH);
+          const layout = computeBgLayout(next, activeImgSize.w || bgImg.naturalWidth || 0, activeImgSize.h || bgImg.naturalHeight || 0);
           bgTransform = { scale: layout.scale, x: layout.x, y: layout.y, baked };
-          if (layout.hasDims) {
-            bgImg.style.left = `${layout.left}px`;
-            bgImg.style.top = `${layout.top}px`;
-            bgImg.style.width = `${layout.dispW}px`;
-            bgImg.style.height = `${layout.dispH}px`;
-            bgImg.style.objectFit = 'fill';
-          } else {
-            clearBgImgInlineLayout();
-          }
+          placeBgImage(layout.hasDims ? layout : null);
         }
         bgEditorZoomValue.textContent = `${bgTransform.scale}%`;
         bgEditorZoomOut.disabled = bgTransform.scale <= 50;
@@ -4143,22 +4024,15 @@
         const valid = typeof dataUrl === 'string' && DATA_IMAGE_RE.test(dataUrl);
         hasBgImage = valid;
         croppedBgUrl = valid ? dataUrl : '';
-        bgLayer.hidden = !valid;
-        if (valid) {
-          if (bgImg.getAttribute('src') !== dataUrl) {
-            activeImgSize = { w: 0, h: 0 };
-            bgImg.src = dataUrl;
-          } else {
-            activeImgSize = { w: bgImg.naturalWidth || 0, h: bgImg.naturalHeight || 0 };
-          }
-        } else {
-          activeImgSize = { w: 0, h: 0 };
+        bgLayer.hidden = bgEdit.hidden = bgReset.hidden = !valid;
+        activeImgSize = valid && bgImg.getAttribute('src') === dataUrl
+          ? { w: bgImg.naturalWidth || 0, h: bgImg.naturalHeight || 0 } : { w: 0, h: 0 };
+        if (!valid) {
           bgImg.removeAttribute('src');
-          clearBgImgInlineLayout();
+          return placeBgImage(null);
         }
-        bgEdit.hidden = !valid;
-        bgReset.hidden = !valid;
-        if (valid) applyBackgroundTransform(bgTransform, false);
+        if (bgImg.getAttribute('src') !== dataUrl) bgImg.src = dataUrl;
+        applyBackgroundTransform(bgTransform, false);
       }
 
       function resolveImageMime(file) {
@@ -4166,20 +4040,6 @@
         if (ALLOWED_MIMES.has(rawType)) return rawType;
         const ext = typeof file?.name === 'string' ? file.name.split('.').pop()?.toLowerCase() : '';
         return ext && Object.hasOwn(MIME_BY_EXT, ext) ? MIME_BY_EXT[ext] : null;
-      }
-
-      function extractDataUrlMime(dataUrl) {
-        const match = typeof dataUrl === 'string' ? /^data:(image\/[a-z0-9+.-]+);base64,/i.exec(dataUrl) : null;
-        return match ? match[1].toLowerCase() : '';
-      }
-
-      function readAsDataUrl(blob) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-          reader.onerror = () => reject(new Error('read_failed'));
-          reader.readAsDataURL(blob);
-        });
       }
 
       function loadImageElement(dataUrl) {
@@ -4195,164 +4055,110 @@
         const img = await loadImageElement(sourceUrl);
         if (!img || !img.naturalWidth || !img.naturalHeight) return null;
         const layout = computeBgLayout(transform, img.naturalWidth, img.naturalHeight);
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const maxDim = 1600;
-        const outScale = Math.min(dpr, maxDim / Math.max(layout.W, layout.H, 1));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(layout.W * outScale));
-        canvas.height = Math.max(1, Math.round(layout.H * outScale));
+        const outScale = Math.min(Math.min(window.devicePixelRatio || 1, 2), 1600 / Math.max(layout.W, layout.H, 1));
+        const canvas = el('canvas', { width: Math.max(1, Math.round(layout.W * outScale)), height: Math.max(1, Math.round(layout.H * outScale)) });
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(
-          img,
-          layout.left * outScale,
-          layout.top * outScale,
-          layout.dispW * outScale,
-          layout.dispH * outScale
-        );
+        ctx.drawImage(img, layout.left * outScale, layout.top * outScale, layout.dispW * outScale, layout.dispH * outScale);
         const hasMargins = layout.left > 0.5 || layout.top > 0.5 ||
-          layout.left + layout.dispW < layout.W - 0.5 ||
-          layout.top + layout.dispH < layout.H - 0.5;
-        const candidates = [];
-        if (!hasMargins && sourceMime === 'image/jpeg') {
-          candidates.push(['image/jpeg', 0.92], ['image/jpeg', 0.82], ['image/jpeg', 0.72]);
-        } else if (sourceMime === 'image/webp') {
-          candidates.push(['image/webp', 0.92], ['image/webp', 0.82], ['image/webp', 0.72]);
-        } else if (sourceMime === 'image/png') {
-          candidates.push(['image/png', undefined], ['image/webp', 0.92], ['image/webp', 0.82]);
-          if (!hasMargins) candidates.push(['image/jpeg', 0.85]);
-        } else {
-          candidates.push(['image/webp', 0.92], ['image/png', undefined]);
-          if (!hasMargins) candidates.push(['image/jpeg', 0.85]);
-        }
+          layout.left + layout.dispW < layout.W - 0.5 || layout.top + layout.dispH < layout.H - 0.5;
+        const candidates = !hasMargins && sourceMime === 'image/jpeg' ? [['image/jpeg', 0.92], ['image/jpeg', 0.82], ['image/jpeg', 0.72]]
+          : sourceMime === 'image/webp' ? [['image/webp', 0.92], ['image/webp', 0.82], ['image/webp', 0.72]]
+          : sourceMime === 'image/png' ? [['image/png', undefined], ['image/webp', 0.92], ['image/webp', 0.82]]
+          : [['image/webp', 0.92], ['image/png', undefined]];
+        if (!hasMargins && sourceMime !== 'image/jpeg' && sourceMime !== 'image/webp') candidates.push(['image/jpeg', 0.85]);
         let oversizedUrl = null;
         for (const [mime, quality] of candidates) {
           try {
             const url = quality === undefined ? canvas.toDataURL(mime) : canvas.toDataURL(mime, quality);
             if (!DATA_IMAGE_RE.test(url)) continue;
-            if (url.length <= MAX_STORED_BG_CHARS) {
-              if (writeStore(BG_IMAGE_KEY, url)) return url;
-            } else if (!oversizedUrl) {
-              oversizedUrl = url;
-            }
+            if (url.length > MAX_STORED_BG_CHARS) oversizedUrl ??= url;
+            else if (writeStore(BG_IMAGE_KEY, url)) return url;
           } catch {}
         }
-        if (oversizedUrl && writeStore(BG_IMAGE_KEY, oversizedUrl)) return oversizedUrl;
-        return null;
+        return oversizedUrl && writeStore(BG_IMAGE_KEY, oversizedUrl) ? oversizedUrl : null;
       }
 
-      bgTransform = loadTransform();
+      try {
+        const saved = JSON.parse(readStore(BG_TRANSFORM_KEY) || 'null');
+        bgTransform = cleanTransform(saved, saved?.baked === true);
+      } catch {}
       applyBackgroundImage(readStore(BG_IMAGE_KEY));
 
-      function updateFontReset() {
-        fontColorReset.disabled = !colorInputs.some(entry => entry.group === 'font' && entry.custom);
-      }
-
+      const fontColorReset = byId('settings-color-reset');
       function applyTextColor(entry, value, persist = false) {
         const valid = typeof value === 'string' && HEX_COLOR_RE.test(value);
         entry.custom = valid;
-        if (valid) entry.apply(value);
-        else entry.clear();
+        for (const [name, color] of Object.entries(entry.vars(value))) {
+          if (valid) root.setProperty(name, color);
+          else root.removeProperty(name);
+        }
         entry.input.value = valid ? value.toLowerCase() : entry.fallback();
         if (entry.reset) entry.reset.hidden = !valid;
         if (persist) writeStore(entry.key, valid ? value.toLowerCase() : null);
-        updateFontReset();
+        fontColorReset.disabled = !colorInputs.some(item => item.group === 'font' && item.custom);
       }
-
       for (const entry of colorInputs) {
         applyTextColor(entry, readStore(entry.key), false);
-        entry.input.addEventListener('input', () => applyTextColor(entry, entry.input.value, false));
-        entry.input.addEventListener('change', () => applyTextColor(entry, entry.input.value, true));
+        onEdit(entry.input, persist => applyTextColor(entry, entry.input.value, persist));
         entry.reset?.addEventListener('click', () => applyTextColor(entry, null, true));
       }
       fontColorReset.addEventListener('click', () => {
-        for (const entry of colorInputs) {
-          if (entry.group === 'font') applyTextColor(entry, null, true);
-        }
+        for (const entry of colorInputs) if (entry.group === 'font') applyTextColor(entry, null, true);
       });
 
       const themeObserver = new MutationObserver(() => {
-        for (const entry of colorInputs) {
-          if (!entry.custom) entry.input.value = entry.fallback();
-        }
+        for (const entry of colorInputs) if (!entry.custom) entry.input.value = entry.fallback();
         if (!cardCustomColor) cardColorInput.value = cardColorFallback();
       });
       themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
-      const cardColorInput = byId('settings-card-color');
-      const cardOpacityInput = byId('settings-card-opacity');
-      const cardOpacityValue = byId('settings-card-opacity-value');
-      const cardReset = byId('settings-card-reset');
-      const cardColorFallback = () => document.documentElement.classList.contains('dark') ? '#262628' : '#ffffff';
-      let cardCustomColor = false;
-      let cardOpacity = 100;
+      const CARD_COLOR_KEY = 'tps:panel-card-color', CARD_OPACITY_KEY = 'tps:panel-card-opacity';
+      const [cardColorInput, cardOpacityInput, cardOpacityValue, cardReset] =
+        ['color', 'opacity', 'opacity-value', 'reset'].map(name => byId('settings-card-' + name));
+      const cardColorFallback = () => dark() ? '#262628' : '#ffffff';
+      let cardCustomColor = false, cardOpacity = 100;
 
       function applyCardStyle({ color, opacity }, persist = false) {
-        const root = document.documentElement.style;
         const validColor = typeof color === 'string' && HEX_COLOR_RE.test(color);
         cardCustomColor = validColor;
         if (validColor) root.setProperty('--record-card-bg', color.toLowerCase());
         else root.removeProperty('--record-card-bg');
         cardColorInput.value = validColor ? color.toLowerCase() : cardColorFallback();
-
         cardOpacity = clampInt(opacity, 0, 100, 100);
-        if (cardOpacity < 100) {
-          root.setProperty('--record-card-opacity', `${cardOpacity}%`);
-          root.setProperty('--record-card-blur', 'blur(8px)');
-        } else {
-          root.removeProperty('--record-card-opacity');
-          root.removeProperty('--record-card-blur');
+        for (const [name, value] of [['--record-card-opacity', `${cardOpacity}%`], ['--record-card-blur', 'blur(8px)']]) {
+          if (cardOpacity < 100) root.setProperty(name, value);
+          else root.removeProperty(name);
         }
         cardOpacityInput.value = String(cardOpacity);
         cardOpacityValue.textContent = `${cardOpacity}%`;
         cardReset.disabled = !cardCustomColor && cardOpacity === 100;
-
         if (persist) {
           writeStore(CARD_COLOR_KEY, validColor ? color.toLowerCase() : null);
           writeStore(CARD_OPACITY_KEY, cardOpacity < 100 ? String(cardOpacity) : null);
         }
       }
-
-      applyCardStyle({
-        color: readStore(CARD_COLOR_KEY),
-        opacity: readStore(CARD_OPACITY_KEY) ?? 100
-      }, false);
-
-      cardColorInput.addEventListener('input', () => applyCardStyle({
-        color: cardColorInput.value, opacity: cardOpacity
-      }, false));
-      cardColorInput.addEventListener('change', () => applyCardStyle({
-        color: cardColorInput.value, opacity: cardOpacity
-      }, true));
-      cardOpacityInput.addEventListener('input', () => applyCardStyle({
-        color: cardCustomColor ? cardColorInput.value : null, opacity: cardOpacityInput.value
-      }, false));
-      cardOpacityInput.addEventListener('change', () => applyCardStyle({
-        color: cardCustomColor ? cardColorInput.value : null, opacity: cardOpacityInput.value
-      }, true));
+      applyCardStyle({ color: readStore(CARD_COLOR_KEY), opacity: readStore(CARD_OPACITY_KEY) ?? 100 }, false);
+      onEdit(cardColorInput, persist => applyCardStyle({ color: cardColorInput.value, opacity: cardOpacity }, persist));
+      onEdit(cardOpacityInput, persist => applyCardStyle({ color: cardCustomColor ? cardColorInput.value : null, opacity: cardOpacityInput.value }, persist));
       cardReset.addEventListener('click', () => applyCardStyle({ color: null, opacity: 100 }, true));
 
       const STAR_RATIO_KEY = 'tps:panel-star-ratio';
       const STAR_SPEED_KEY = 'tps:panel-star-speed';
-      const starRatioInput = byId('settings-star-ratio');
-      const starRatioValue = byId('settings-star-ratio-value');
-      const starSpeedInput = byId('settings-star-speed');
-      const starSpeedValue = byId('settings-star-speed-value');
-      const starReset = byId('settings-star-reset');
-      let starRatio = 100;
-      let starSpeed = 1;
+      const [starRatioInput, starRatioValue, starSpeedInput, starSpeedValue, starReset] =
+        ['ratio', 'ratio-value', 'speed', 'speed-value', 'reset'].map(name => byId('settings-star-' + name));
+      let starRatio = 100, starSpeed = 1;
 
       function applyStarTwinkle({ ratio, speed }, persist = false) {
         starRatio = Math.round(clampInt(ratio, 0, 100, 100) / 10) * 10;
         const rawSpeed = Number(speed);
         starSpeed = Number.isFinite(rawSpeed) ? Math.round(Math.min(2, Math.max(0, rawSpeed)) * 10) / 10 : 1;
-        const root = document.documentElement;
         // Speed 0 turns twinkling off, so every star stays still.
-        root.dataset.starRatio = String(starSpeed === 0 ? 0 : starRatio);
-        if (starSpeed === 1 || starSpeed === 0) root.style.removeProperty('--star-speed');
-        else root.style.setProperty('--star-speed', String(starSpeed));
+        document.documentElement.dataset.starRatio = String(starSpeed === 0 ? 0 : starRatio);
+        if (starSpeed === 1 || starSpeed === 0) root.removeProperty('--star-speed');
+        else root.setProperty('--star-speed', String(starSpeed));
         starRatioInput.value = String(starRatio);
         starRatioValue.textContent = `${starRatio}%`;
         starSpeedInput.value = String(starSpeed);
@@ -4364,21 +4170,14 @@
         }
         document.dispatchEvent(new Event('tps-star-twinkle-changed'));
       }
-
-      applyStarTwinkle({
-        ratio: readStore(STAR_RATIO_KEY) ?? 100,
-        speed: readStore(STAR_SPEED_KEY) ?? 1
-      }, false);
-      starRatioInput.addEventListener('input', () => applyStarTwinkle({ ratio: starRatioInput.value, speed: starSpeed }, false));
-      starRatioInput.addEventListener('change', () => applyStarTwinkle({ ratio: starRatioInput.value, speed: starSpeed }, true));
-      starSpeedInput.addEventListener('input', () => applyStarTwinkle({ ratio: starRatio, speed: starSpeedInput.value }, false));
-      starSpeedInput.addEventListener('change', () => applyStarTwinkle({ ratio: starRatio, speed: starSpeedInput.value }, true));
+      applyStarTwinkle({ ratio: readStore(STAR_RATIO_KEY) ?? 100, speed: readStore(STAR_SPEED_KEY) ?? 1 }, false);
+      onEdit(starRatioInput, persist => applyStarTwinkle({ ratio: starRatioInput.value, speed: starSpeed }, persist));
+      onEdit(starSpeedInput, persist => applyStarTwinkle({ ratio: starRatio, speed: starSpeedInput.value }, persist));
       starReset.addEventListener('click', () => applyStarTwinkle({ ratio: 100, speed: 1 }, true));
 
       const HARNESS_INTERVAL_KEY = 'tps:panel-harness-interval';
-      const harnessIntervalInput = byId('settings-harness-interval');
-      const harnessIntervalValue = byId('settings-harness-interval-value');
-      const harnessReset = byId('settings-harness-reset');
+      const [harnessIntervalInput, harnessIntervalValue, harnessReset] =
+        ['interval', 'interval-value', 'reset'].map(name => byId('settings-harness-' + name));
       let harnessInterval = 5;
 
       function applyHarnessInterval(value, persist = false) {
@@ -4390,10 +4189,8 @@
         if (persist) writeStore(HARNESS_INTERVAL_KEY, harnessInterval === 5 ? null : String(harnessInterval));
         document.dispatchEvent(new Event('tps-harness-interval-changed'));
       }
-
       applyHarnessInterval(readStore(HARNESS_INTERVAL_KEY) ?? 5, false);
-      harnessIntervalInput.addEventListener('input', () => applyHarnessInterval(harnessIntervalInput.value, false));
-      harnessIntervalInput.addEventListener('change', () => applyHarnessInterval(harnessIntervalInput.value, true));
+      onEdit(harnessIntervalInput, persist => applyHarnessInterval(harnessIntervalInput.value, persist));
       harnessReset.addEventListener('click', () => applyHarnessInterval(5, true));
 
       function setOpen(open, restoreFocus = false) {
@@ -4402,9 +4199,7 @@
         if (open) {
           showBgError('');
           closeButton.focus();
-        } else if (restoreFocus) {
-          toggle.focus();
-        }
+        } else if (restoreFocus) toggle.focus();
       }
 
       async function openEditor() {
@@ -4420,26 +4215,32 @@
           const sourceUrl = useOriginal ? origUrl : croppedBgUrl;
           const loaded = await loadImageElement(sourceUrl);
           if (lifetime.signal.aborted || !loaded) return;
-
           beforeEdit = { ...bgTransform };
           editingOriginal = useOriginal;
           editingSourceUrl = sourceUrl;
           activeImgSize = { w: loaded.naturalWidth || 0, h: loaded.naturalHeight || 0 };
-
-          const startTransform = !useOriginal && bgTransform.baked
-            ? { scale: 100, x: 0, y: 0, baked: false }
-            : { ...bgTransform, baked: false };
-
           if (bgImg.getAttribute('src') !== sourceUrl) bgImg.src = sourceUrl;
           setOpen(false, false);
           panelMain.hidden = true;
           document.body.classList.add('is-bg-editing');
           bgEditor.hidden = false;
-          applyBackgroundTransform(startTransform, false);
+          applyBackgroundTransform(!useOriginal && bgTransform.baked ? { ...DEFAULT_BG_TRANSFORM } : { ...bgTransform, baked: false }, false);
           bgEditorSave.focus();
         } finally {
           editorBusy = false;
         }
+      }
+
+      function leaveEditor(nextTransform, nextUrl) {
+        bgTransform = nextTransform ?? (beforeEdit ? { ...beforeEdit } : { ...DEFAULT_BG_TRANSFORM });
+        beforeEdit = null;
+        editingOriginal = false;
+        editingSourceUrl = '';
+        bgEditor.hidden = true;
+        document.body.classList.remove('is-bg-editing');
+        panelMain.hidden = false;
+        if (nextTransform) writeStore(BG_TRANSFORM_KEY, JSON.stringify(bgTransform));
+        applyBackgroundImage(nextUrl ?? croppedBgUrl);
       }
 
       async function closeEditor(save) {
@@ -4447,74 +4248,26 @@
         dragState = null;
         bgEditor.classList.remove('is-dragging');
         if (!save) {
-          bgTransform = beforeEdit ? { ...beforeEdit } : { ...DEFAULT_BG_TRANSFORM };
-          beforeEdit = null;
-          editingOriginal = false;
-          editingSourceUrl = '';
-          bgEditor.hidden = true;
-          document.body.classList.remove('is-bg-editing');
-          panelMain.hidden = false;
-          applyBackgroundImage(croppedBgUrl);
-          toggle.focus();
-          return;
+          leaveEditor();
+          return toggle.focus();
         }
-
-        editorBusy = true;
-        bgEditorSave.disabled = true;
+        editorBusy = bgEditorSave.disabled = true;
         try {
           const sourceUrl = editingSourceUrl || croppedBgUrl;
-          const sourceMime = extractDataUrlMime(sourceUrl);
-          let nextUrl = sourceUrl;
-          let nextTransform;
-          if (RASTER_CROP_MIMES.has(sourceMime)) {
-            const savedCropped = await saveCroppedBgToStore(sourceUrl, bgTransform, sourceMime);
-            if (!savedCropped) {
-              bgTransform = beforeEdit ? { ...beforeEdit } : { ...DEFAULT_BG_TRANSFORM };
-              beforeEdit = null;
-              editingOriginal = false;
-              editingSourceUrl = '';
-              bgEditor.hidden = true;
-              document.body.classList.remove('is-bg-editing');
-              panelMain.hidden = false;
-              applyBackgroundImage(croppedBgUrl);
-              setOpen(true, false);
-              showBgError('settings-bg-error-save');
-              return;
-            }
-            nextUrl = savedCropped;
-            nextTransform = editingOriginal
-              ? { scale: bgTransform.scale, x: bgTransform.x, y: bgTransform.y, baked: true }
-              : { scale: 100, x: 0, y: 0, baked: true };
-          } else {
-            if (!writeStore(BG_IMAGE_KEY, sourceUrl)) {
-              bgTransform = beforeEdit ? { ...beforeEdit } : { ...DEFAULT_BG_TRANSFORM };
-              beforeEdit = null;
-              editingOriginal = false;
-              editingSourceUrl = '';
-              bgEditor.hidden = true;
-              document.body.classList.remove('is-bg-editing');
-              panelMain.hidden = false;
-              applyBackgroundImage(croppedBgUrl);
-              setOpen(true, false);
-              showBgError('settings-bg-error-save');
-              return;
-            }
-            nextTransform = { scale: bgTransform.scale, x: bgTransform.x, y: bgTransform.y, baked: false };
+          const sourceMime = /^data:(image\/[a-z0-9+.-]+);base64,/i.exec(sourceUrl)?.[1].toLowerCase() ?? '';
+          const raster = RASTER_CROP_MIMES.has(sourceMime);
+          const nextUrl = raster ? await saveCroppedBgToStore(sourceUrl, bgTransform, sourceMime)
+            : writeStore(BG_IMAGE_KEY, sourceUrl) ? sourceUrl : null;
+          if (!nextUrl) {
+            leaveEditor();
+            setOpen(true, false);
+            return showBgError('settings-bg-error-save');
           }
-
-          beforeEdit = null;
-          editingOriginal = false;
-          editingSourceUrl = '';
-          bgEditor.hidden = true;
-          document.body.classList.remove('is-bg-editing');
-          panelMain.hidden = false;
-          bgTransform = nextTransform;
-          writeStore(BG_TRANSFORM_KEY, JSON.stringify(bgTransform));
-          applyBackgroundImage(nextUrl);
+          const kept = { scale: bgTransform.scale, x: bgTransform.x, y: bgTransform.y };
+          leaveEditor(raster ? { ...(editingOriginal ? kept : { scale: 100, x: 0, y: 0 }), baked: true } : { ...kept, baked: false }, nextUrl);
           toggle.focus();
         } finally {
-          editorBusy = false;
-          bgEditorSave.disabled = false;
+          editorBusy = bgEditorSave.disabled = false;
         }
       }
 
@@ -4524,15 +4277,11 @@
         if (event.target === dialog) setOpen(false, true);
       });
       document.addEventListener('keydown', event => {
-        if (event.key !== 'Escape') return;
-        if (!bgEditor.hidden) {
-          event.preventDefault();
-          void closeEditor(false);
-        } else if (!dialog.hidden) {
-          event.preventDefault();
-          setOpen(false, true);
-        }
-      }, { signal: lifetime.signal });
+        if (event.key !== 'Escape' || (bgEditor.hidden && dialog.hidden)) return;
+        event.preventDefault();
+        if (!bgEditor.hidden) void closeEditor(false);
+        else setOpen(false, true);
+      }, listen);
 
       bgUpload.addEventListener('click', () => bgInput.click());
       bgEdit.addEventListener('click', () => void openEditor());
@@ -4546,27 +4295,20 @@
         applyBackgroundImage('');
       });
 
+      const transformBy = change => applyBackgroundTransform({ ...bgTransform, ...change(bgTransform) }, false);
       bgEditorBar.addEventListener('pointerdown', event => event.stopPropagation());
-      bgEditorZoomOut.addEventListener('click', () => applyBackgroundTransform({ ...bgTransform, scale: bgTransform.scale - 10 }, false));
-      bgEditorZoomIn.addEventListener('click', () => applyBackgroundTransform({ ...bgTransform, scale: bgTransform.scale + 10 }, false));
-      bgEditorResetPos.addEventListener('click', () => applyBackgroundTransform({ ...bgTransform, scale: DEFAULT_BG_TRANSFORM.scale, x: 0, y: 0 }, false));
+      bgEditorZoomOut.addEventListener('click', () => transformBy(({ scale }) => ({ scale: scale - 10 })));
+      bgEditorZoomIn.addEventListener('click', () => transformBy(({ scale }) => ({ scale: scale + 10 })));
+      bgEditorResetPos.addEventListener('click', () => transformBy(() => ({ scale: DEFAULT_BG_TRANSFORM.scale, x: 0, y: 0 })));
       bgEditorCancel.addEventListener('click', () => void closeEditor(false));
       bgEditorSave.addEventListener('click', () => void closeEditor(true));
 
       bgEditor.addEventListener('pointerdown', event => {
         if (!hasBgImage || bgEditor.hidden || editorBusy || (event.pointerType === 'mouse' && event.button !== 0)) return;
         if (bgEditorBar.contains(event.target)) return;
-        const imgW = activeImgSize.w || bgImg.naturalWidth || 0;
-        const imgH = activeImgSize.h || bgImg.naturalHeight || 0;
-        const layout = computeBgLayout(bgTransform, imgW, imgH);
+        const layout = computeBgLayout(bgTransform, activeImgSize.w || bgImg.naturalWidth || 0, activeImgSize.h || bgImg.naturalHeight || 0);
         if (!layout.dispW || !layout.dispH) return;
-        dragState = {
-          pointerId: event.pointerId,
-          lastClientX: event.clientX,
-          lastClientY: event.clientY,
-          dispW: layout.dispW,
-          dispH: layout.dispH
-        };
+        dragState = { pointerId: event.pointerId, lastClientX: event.clientX, lastClientY: event.clientY, dispW: layout.dispW, dispH: layout.dispH };
         bgEditor.classList.add('is-dragging');
         bgEditor.setPointerCapture?.(event.pointerId);
       });
@@ -4576,17 +4318,11 @@
         const dy = ((event.clientY - dragState.lastClientY) / dragState.dispH) * 100;
         dragState.lastClientX = event.clientX;
         dragState.lastClientY = event.clientY;
-        applyBackgroundTransform({
-          ...bgTransform,
-          x: bgTransform.x + dx,
-          y: bgTransform.y + dy
-        }, false);
+        transformBy(({ x, y }) => ({ x: x + dx, y: y + dy }));
       });
       function stopDrag(event) {
         if (!dragState || event.pointerId !== dragState.pointerId) return;
-        if (bgEditor.hasPointerCapture?.(event.pointerId)) {
-          bgEditor.releasePointerCapture(event.pointerId);
-        }
+        if (bgEditor.hasPointerCapture?.(event.pointerId)) bgEditor.releasePointerCapture(event.pointerId);
         dragState = null;
         bgEditor.classList.remove('is-dragging');
       }
@@ -4595,23 +4331,19 @@
       bgEditor.addEventListener('wheel', event => {
         if (!hasBgImage || bgEditor.hidden || editorBusy) return;
         event.preventDefault();
-        const step = event.deltaY < 0 ? 5 : -5;
-        applyBackgroundTransform({ ...bgTransform, scale: bgTransform.scale + step }, false);
+        transformBy(({ scale }) => ({ scale: scale + (event.deltaY < 0 ? 5 : -5) }));
       }, { passive: false });
 
-      const bgResizeObserver = typeof ResizeObserver === 'function'
-        ? new ResizeObserver(() => {
-            if (hasBgImage && (!bgEditor.hidden || !bgTransform.baked)) {
-              applyBackgroundTransform(bgTransform, false);
-            }
-          })
-        : null;
+      const refitBackground = () => {
+        if (hasBgImage && (!bgEditor.hidden || !bgTransform.baked)) applyBackgroundTransform(bgTransform, false);
+      };
+      const bgResizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(refitBackground) : null;
       bgResizeObserver?.observe(bgLayer);
       bgImg.addEventListener('load', () => {
         if (!hasBgImage) return;
         activeImgSize = { w: bgImg.naturalWidth || 0, h: bgImg.naturalHeight || 0 };
-        if (!bgEditor.hidden || !bgTransform.baked) applyBackgroundTransform(bgTransform, false);
-      }, { signal: lifetime.signal });
+        refitBackground();
+      }, listen);
 
       bgInput.addEventListener('change', async () => {
         const file = bgInput.files?.[0];
@@ -4622,21 +4354,19 @@
         if (!mime) return showBgError('settings-bg-error-type');
         if (file.size > MAX_BG_BYTES) return showBgError('settings-bg-error-size');
         try {
-          const originalDataUrl = await readAsDataUrl(new Blob([await file.arrayBuffer()], { type: mime }));
+          const originalDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+            reader.onerror = () => reject(new Error('read_failed'));
+            reader.readAsDataURL(new Blob([file], { type: mime }));
+          });
           const loaded = DATA_IMAGE_RE.test(originalDataUrl) ? await loadImageElement(originalDataUrl) : null;
           if (!loaded) return showBgError('settings-bg-error-type');
-
           const isRaster = RASTER_CROP_MIMES.has(mime);
           const nextTransform = { scale: 100, x: 0, y: 0, baked: isRaster };
-          let nextCroppedUrl = originalDataUrl;
-          if (isRaster) {
-            const savedCropped = await saveCroppedBgToStore(originalDataUrl, nextTransform, mime);
-            if (!savedCropped) return showBgError('settings-bg-error-save');
-            nextCroppedUrl = savedCropped;
-          } else if (!writeStore(BG_IMAGE_KEY, originalDataUrl)) {
-            return showBgError('settings-bg-error-save');
-          }
-
+          const nextCroppedUrl = isRaster ? await saveCroppedBgToStore(originalDataUrl, nextTransform, mime)
+            : writeStore(BG_IMAGE_KEY, originalDataUrl) ? originalDataUrl : null;
+          if (!nextCroppedUrl) return showBgError('settings-bg-error-save');
           await writeOriginalBg(originalDataUrl);
           bgTransform = nextTransform;
           writeStore(BG_TRANSFORM_KEY, JSON.stringify(bgTransform));
@@ -4651,7 +4381,7 @@
           if (typeof window.orca?.shell?.openExternal !== 'function') return;
           event.preventDefault();
           void window.orca.shell.openExternal(link.href).catch(() => {});
-        }, { signal: lifetime.signal });
+        }, listen);
       }
 
       let panelInView = true;
@@ -4661,13 +4391,11 @@
         document.documentElement.classList.toggle('is-motion-paused', paused);
         document.dispatchEvent(new Event('tps-motion-changed'));
       }
-      document.addEventListener('visibilitychange', updateMotionPause, { signal: lifetime.signal });
-      const motionObserver = typeof IntersectionObserver === 'function'
-        ? new IntersectionObserver(entries => {
-            panelInView = entries.some(entry => entry.isIntersecting);
-            updateMotionPause();
-          })
-        : null;
+      document.addEventListener('visibilitychange', updateMotionPause, listen);
+      const motionObserver = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+        panelInView = entries.some(entry => entry.isIntersecting);
+        updateMotionPause();
+      }) : null;
       motionObserver?.observe(document.documentElement);
       updateMotionPause();
 
