@@ -3,7 +3,7 @@
   "manifestVersion": 2,
   "id": "tps-plugin",
   "name": "TPS Plugin",
-  "version": "1.6.7",
+  "version": "1.6.8",
   "description": "Track request speed in Orca, combine personal token usage from local and SSH workspaces, and join a live cross-device leaderboard with GitHub.",
   "author": {
     "name": "jecyxyf",
@@ -15,7 +15,7 @@
   "icon": "assets/1.6.3/icon.png",
   "cover": {
     "path": "assets/1.6.7/cover.jpg",
-    "alt": "TPS Plugin 1.6.7 overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar"
+    "alt": "TPS Plugin 1.6.8 overview with Current Data, Personal Stats, and Leaderboard in the Orca sidebar"
   },
   "screenshots": [
     {

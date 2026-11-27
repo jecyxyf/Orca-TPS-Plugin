@@ -128,7 +128,7 @@ Click the palette button in the top-right header to open the live **Theme** pane
 > [!IMPORTANT]
 > **Upgrading from 1.6.4**
 >
-> Version 1.6.5+ substantially changes the plugin structure and moves the leaderboard to a new server. Uninstall the old TPS Plugin in Orca, then install **1.6.7**.
+> Version 1.6.5+ substantially changes the plugin structure and moves the leaderboard to a new server. Uninstall the old TPS Plugin in Orca, then install **1.6.8**.
 
 - **Requirements.** Use Orca 1.4.251 or later on Windows or Linux. For SSH workspace usage, the remote host needs Node.js 22.15 or later with SQLite support.
 - **Install from the plugin directory.** In Orca, open **Settings → Plugins**, search for **TPS** by **jecyxyf**, then install it and review the permissions. [View the plugin listing](https://api.onorca.dev/plugins/jecyxyf/orca-tps-plugin)

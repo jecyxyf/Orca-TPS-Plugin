@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.8] - 2026-11-28
+
+### Changed
+
+- Reduced background Tokens Manager and plugin worker memory usage by streaming session logs through a shared byte-level reader, enabling `--optimize-for-size`, and removing the redundant parser module and worker thread from the plugin process.
+- Served **Current Data** directly from the Tokens Manager database instead of re-reading raw session logs on each refresh.
+- Removed unused local usage copies, discarded scan summaries, and legacy custom-root controller options; existing installations automatically clean up the obsolete local usage copy on upgrade.
+- Simplified panel scripts and CSS rules and moved Harness icons into a standalone `src/harness-icons.svg` asset.
+- Dropped the bundled zstd fallback in favor of Node.js built-in zstd decompression; remote SSH hosts now require Node.js 22.15 or later with SQLite support.
+
 ## [1.6.7] - 2026-11-27
 
 ### Added
