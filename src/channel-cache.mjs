@@ -30,7 +30,6 @@ function panelRecord(record) {
   return result;
 }
 
-const PREFIX = 'tps:channel:v1:';
 const MEMORY_LIMIT = 64;
 const cleanRecords = records => recentRecords(records.map(panelRecord), 100);
 
@@ -41,9 +40,12 @@ function sameRecords(before, after) {
   });
 }
 
-// Persist only numeric/label data used by the panel, keyed by its opaque project ID.
-export function createChannelCache(storage, { now = Date.now, panels } = {}) {
-  const entries = new Map(), reads = new Map(), writes = new Map();
+/**
+ * Keeps only numeric and label data the panel uses, keyed by the opaque project ID. The panel database holds the
+ * displayed channels; channels collected in the background stay in memory.
+ */
+export function createChannelCache(panels, { now = Date.now } = {}) {
+  const entries = new Map();
 
   function remember(key, value) {
     entries.delete(key);
@@ -52,45 +54,32 @@ export function createChannelCache(storage, { now = Date.now, panels } = {}) {
     return value;
   }
 
-  async function get(key) {
+  function get(key) {
     if (entries.has(key)) return remember(key, entries.get(key));
-    if (reads.has(key)) return reads.get(key);
-    const pending = (async () => {
-      if (writes.has(key)) await writes.get(key);
-      let stored;
-      try { stored = panels ? panels.readPanel('current-data', key)?.value : await storage.get(PREFIX + key); }
-      catch { /* A damaged or unavailable cache can be rebuilt. */ }
-      if (entries.has(key)) return entries.get(key);
-      if (!Number.isFinite(stored?.updatedAt) || !Array.isArray(stored.records)) return remember(key, null);
-      const records = stored.records.slice(0, 100).flatMap(row => {
-        const safe = panelRecord(row);
-        return safe && /^[0-9a-f]{24}$/.test(row.id) ? [{ ...safe, id: row.id }] : [];
-      });
-      return remember(key, { updatedAt: stored.updatedAt, records });
-    })().finally(() => reads.delete(key));
-    reads.set(key, pending);
-    return pending;
+    let stored;
+    try { stored = panels.readPanel('current-data', key)?.value; }
+    catch { /* A damaged or unavailable cache can be rebuilt. */ }
+    if (!Number.isFinite(stored?.updatedAt) || !Array.isArray(stored.records)) return remember(key, null);
+    const records = stored.records.slice(0, 100).flatMap(row => {
+      const safe = panelRecord(row);
+      return safe && /^[0-9a-f]{24}$/.test(row.id) ? [{ ...safe, id: row.id }] : [];
+    });
+    return remember(key, { records, updatedAt: stored.updatedAt });
   }
 
   function set(key, records, { display = true } = {}) {
     const normalized = cleanRecords(records);
     const previous = entries.get(key);
     const unchanged = previous && sameRecords(previous.records, normalized);
-    if (unchanged && !(panels && display)) return remember(key, previous);
+    if (unchanged && !display) return remember(key, previous);
     const announcedAt = now();
     const snapshot = remember(key, unchanged ? previous : { records: normalized, updatedAt: announcedAt });
-    if (panels && display) {
+    if (display) {
       try { panels.publishPanel('current-data', key, snapshot, announcedAt); }
       catch { /* The live view still has its last successful result. */ }
     }
-    if (panels) return snapshot;
-    const write = (writes.get(key) ?? Promise.resolve())
-      .then(() => storage.set(PREFIX + key, snapshot))
-      .catch(() => {})
-      .finally(() => { if (writes.get(key) === write) writes.delete(key); });
-    writes.set(key, write);
     return snapshot;
   }
 
-  return { get, set, flush: () => Promise.allSettled(writes.values()) };
+  return { get, set };
 }

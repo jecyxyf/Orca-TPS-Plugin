@@ -16,7 +16,7 @@ import { normalizeComparePath } from '../src/harnesses.mjs';
 
 // The manager stores these records and serves each channel by folder or session.
 async function antigravityRecords(brain) {
-  const units = await discoverUsageUnits(0, { roots: { antigravity: [brain] }, includeDefaults: false, includeRecords: true,
+  const units = await discoverUsageUnits(0, { roots: { antigravity: [brain] }, includeDefaults: false,
     providers: ['antigravity'] });
   return { units, records: (await Promise.all(units.map(unit => unit.read()))).flatMap(result => result.records) };
 }

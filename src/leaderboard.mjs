@@ -59,10 +59,7 @@ export function startLeaderboard(orca, {
     const cached = account.value;
     if (token && cached?.origin === base.origin && cached.session === sessionKey(token) && validUsername(cached.username)) {
       username = cached.username;
-      if (Number.isSafeInteger(cached.accountId) && cached.accountId > 0) {
-        localDb?.saveCollection({ githubUserId: cached.accountId }, now().getTime());
-        accountId = cached.accountId;
-      }
+      if (Number.isSafeInteger(cached.accountId) && cached.accountId > 0) accountId = cached.accountId;
       onUsername(username);
       if (Number.isSafeInteger(cached.lastSyncAt) && cached.lastSyncAt >= 0 && cached.lastSyncAt <= now().getTime()) {
         lastSyncAt = cached.lastSyncAt;

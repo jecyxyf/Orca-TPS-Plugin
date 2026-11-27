@@ -6,8 +6,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setImmediate as yieldToRequests, setTimeout as delay } from 'node:timers/promises';
 import * as zlib from 'node:zlib';
-import { HISTORY_DAYS, accumulateRecords, dayKeyAgo, trimRecentRequests } from './personal_stats.mjs';
-import { RECENT_STATS_MS, leaderboardDayStart, leaderboardUsageTimesFrom } from './leaderboard_stats.mjs';
 import { defaultRoots, harnessFamily, normalizeComparePath, openCodeHarness, recentRecords, SESSION_HARNESSES } from './harnesses.mjs';
 import { openReadonlyDatabase } from './sqlite.mjs';
 
@@ -946,16 +944,15 @@ export async function hermesSources(roots, cutoffMs = 0, onUnavailable) {
   return sources;
 }
 
-export async function readHermesRecords(source, { pace, includeCwd = false } = {}) {
+async function readHermesRecords(source, pace) {
   if (source.bytes > HERMES_MAX_LOG_BYTES) throw new Error('hermes_log_too_large');
   const records = new Map();
   for (const file of source.files) {
     for (const record of await readHermesLog(file, pace)) records.set(record.id, record);
   }
-  if (!includeCwd) return [...records.values()];
   const metadata = new Map((await hermesSessionCatalogue(source.root)).map(row => [row.id, row]));
   return [...records.values()].map(record => ({ ...record, cwd: metadata.get(record.sessionId)?.cwd,
-    ...(metadata.get(record.sessionId)?.source === 'subagent' ? { isSubagent: true } : {}) }));
+    ...(metadata.get(record.sessionId)?.source === 'subagent' ? { isSubagent: true } : {}), provider: 'hermes' }));
 }
 
 async function hermesSessionCatalogue(root) {
@@ -1015,7 +1012,7 @@ export class HarnessParser {
     const ompAgent = namedProfile
       ? path.join(ompConfig, 'profiles', namedProfile, 'agent') : path.resolve(env.PI_CODING_AGENT_DIR || path.join(ompConfig, 'agent'));
     const local = discoverUsageUnits(cutoff, {
-      providers: SESSION_HARNESSES, includeRecords: true, excludeOhMyPi: true,
+      providers: SESSION_HARNESSES, excludeOhMyPi: true,
       roots: sharedSessionDir && path.isAbsolute(sharedSessionDir) ? { ...extraRoots, pi: [...(extraRoots.pi ?? []), sharedSessionDir] } : extraRoots
     });
     const files = [], databases = [];
@@ -1396,50 +1393,25 @@ async function codexHeader(file) {
   } finally { await handle.close(); }
 }
 
-function rankedUsage(window) {
-  if (!window) return undefined;
-  const result = { ...window, totals: {} };
-  if (window.includeRecent) Object.assign(result, { recent: [], recentFrom: Date.now() - RECENT_STATS_MS });
-  if (window.includeUsageTimes) Object.assign(result, { usageByTime: {}, usageTimesFrom: leaderboardUsageTimesFrom(window.from) });
-  if (window.includeRecords) Object.assign(result, { records: [], recordFrom: window.recordFrom, complete: true });
-  return result;
-}
-
-function usageResult(days, rank) {
-  if (!rank) return days;
-  const result = { days, leaderboardDays: rank.totals, leaderboardFrom: rank.from };
-  if (rank.recent) result.recent = trimRecentRequests(rank.recent);
-  if (rank.usageByTime) Object.assign(result, { leaderboardUsageByTime: rank.usageByTime, usageTimesFrom: rank.usageTimesFrom });
-  if (rank.records) Object.assign(result, { records: rank.records, complete: rank.complete });
-  return result;
-}
-
-async function addCodexStreamRecords(days, file, minDay, leaderboardDays, pace = readPacer()) {
+async function codexFileRecords(file, pace) {
   const { sessionId = null, cwd } = await codexHeader(file);
   const parser = createCodexParser(sessionId, { limit: Infinity });
   const complete = await readSessionRows(file, row => parser.feed([row]), pace);
-  if (leaderboardDays?.records && !complete) leaderboardDays.complete = false;
-  const records = parser.finish();
-  accumulateRecords(days, 'codex', leaderboardDays?.records
-    ? records.map(record => ({ ...record, sessionId, cwd })) : records, { minDay, leaderboardDays });
+  return { complete, records: parser.finish().map(record => ({ ...record, sessionId, cwd, provider: 'codex' })) };
 }
 
-async function addFileRecords(days, provider, file, minDay, isSubagent, leaderboardDays, pace, fallback = {}) {
+async function sessionFileRecords(provider, file, isSubagent, pace, fallback = {}) {
   const metadata = await stat(file);
   if (!metadata.isFile()) throw new Error('not_a_regular_file');
   if (metadata.size > USAGE_MAX_FILE_BYTES) throw Object.assign(new Error('session_file_too_large'), { code: 'too_large' });
   const cursor = createJsonlCursor('', provider, '', { isSubagent, limit: Infinity });
   const complete = await readSessionRows(file, row => cursor.add(row), pace);
-  if (leaderboardDays?.records && !complete) leaderboardDays.complete = false;
   const sessionId = cursor.sessionId ?? fallback.sessionId ?? null;
   const cwd = cursor.cwd ?? fallback.cwd ?? null;
-  const records = cursor.finish();
-  accumulateRecords(days, provider, leaderboardDays?.records
-    ? records.map(record => ({ ...record, sessionId, cwd })) : records, { minDay, leaderboardDays });
-  return { sessionId, cwd };
+  return { complete, sessionId, cwd, records: cursor.finish().map(record => ({ ...record, sessionId, cwd, provider })) };
 }
 
-async function fileUsageUnit(provider, file, rankWindow, onUnavailable, excludeOhMyPi = false) {
+async function fileUsageUnit(provider, file, onUnavailable, excludeOhMyPi = false) {
   // Claude keeps subagent calls in <session>/subagents; they belong to the parent session's unit.
   let incomplete = false;
   const subagents = provider === 'claude'
@@ -1462,40 +1434,38 @@ async function fileUsageUnit(provider, file, rankWindow, onUnavailable, excludeO
     bytes: file.size + subagents.reduce((sum, item) => sum + item.size, 0),
     mtimeMs: file.mtimeMs,
     read: async () => {
-      const minDay = dayKeyAgo(Date.now(), HISTORY_DAYS - 1), days = {}, rank = rankedUsage(rankWindow);
       if (excludeOhMyPi && provider === 'pi') {
         // Pi and Oh My Pi can share a session directory. Only Oh My Pi writes a title slot before the header.
         const handle = await open(file.path, 'r');
         let first;
         try { first = (await readAt(handle, 0, 4096)).toString('utf8').split('\n', 1)[0]; }
         finally { await handle.close(); }
-        if (json(first)?.type === 'title') return usageResult(days, rank);
+        if (json(first)?.type === 'title') return { records: [], complete: true };
       }
       const pace = readPacer();
-      if (provider === 'codex') await addCodexStreamRecords(days, file.path, minDay, rank, pace);
-      else {
-        const parent = await addFileRecords(days, provider, file.path, minDay, false, rank, pace,
+      const result = provider === 'codex' ? await codexFileRecords(file.path, pace)
+        : await sessionFileRecords(provider, file.path, false, pace,
           provider === 'claude' ? { sessionId: path.basename(file.path, '.jsonl') } : undefined);
-        for (const item of subagents) await addFileRecords(days, 'claude', item.path, minDay, true, rank, pace, parent);
+      for (const item of subagents) {
+        const child = await sessionFileRecords('claude', item.path, true, pace, result);
+        result.records = result.records.concat(child.records);
+        result.complete &&= child.complete;
       }
-      if (rank?.records) {
-        for (const item of [file, ...subagents]) {
-          const current = await stat(item.path);
-          if (current.size !== item.size || current.mtimeMs !== item.mtimeMs) rank.complete = false;
-        }
+      for (const item of [file, ...subagents]) {
+        const current = await stat(item.path);
+        if (current.size !== item.size || current.mtimeMs !== item.mtimeMs) result.complete = false;
       }
-      return usageResult(days, rank);
+      return { records: result.records, complete: result.complete };
     }
   };
 }
 
-async function readOpenCodeSession(dbPath, v2, sessionId, rankWindow, cwd) {
+async function readOpenCodeSession(dbPath, v2, sessionId, cwd) {
   const db = openReadonlyDatabase(dbPath);
   try {
     const messageTable = v2 ? 'session_message' : 'message', orderColumn = v2 ? 'seq' : 'rowid';
     const rows = db.prepare(`SELECT id,${v2 ? 'type' : 'NULL AS type'},time_created,${projectedData()}
       FROM ${messageTable} WHERE session_id=? ORDER BY ${orderColumn} ASC`).iterate(sessionId);
-    const days = {}, rank = rankedUsage(rankWindow);
     const records = new Map(), pace = readPacer();
     let batch = [];
     function collect() {
@@ -1509,15 +1479,13 @@ async function readOpenCodeSession(dbPath, v2, sessionId, rankWindow, cwd) {
       await pace(512 * 1024);
     }
     collect();
-    const entries = rank?.records ? [...records.values()].map(record => ({ ...record, sessionId, cwd })) : records.values();
-    accumulateRecords(days, openCodeHarness(v2), entries,
-      { minDay: dayKeyAgo(Date.now(), HISTORY_DAYS - 1), leaderboardDays: rank });
-    return usageResult(days, rank);
+    const provider = openCodeHarness(v2);
+    return { complete: true, records: [...records.values()].map(record => ({ ...record, sessionId, cwd, provider })) };
   } finally { db.close(); }
 }
 
 /** One unit per OpenCode session updated since cutoffMs; the unit's stamp includes its message count. */
-async function openCodeUsageUnits(dbPath, cutoffMs, rankWindow, onUnavailable) {
+async function openCodeUsageUnits(dbPath, cutoffMs, onUnavailable) {
   const database = await info(dbPath, onUnavailable);
   if (!database?.isFile()) return [];
   const units = [];
@@ -1541,7 +1509,7 @@ async function openCodeUsageUnits(dbPath, cutoffMs, rankWindow, onUnavailable) {
           stamp: `${row.time_updated}:${count}`,
           bytes: count * 1024,
           mtimeMs: Number(row.time_updated) || 0,
-          read: () => readOpenCodeSession(dbPath, v2, row.id, rankWindow, row.directory)
+          read: () => readOpenCodeSession(dbPath, v2, row.id, row.directory)
         });
         if (units.length % 64 === 0) await yieldToRequests();
       }
@@ -1551,7 +1519,7 @@ async function openCodeUsageUnits(dbPath, cutoffMs, rankWindow, onUnavailable) {
 }
 
 /** Antigravity: one unit per conversation whose transcript was written since cutoffMs; timing comes from its native store. */
-async function antigravityUsageUnits(brainRoot, cutoffMs, rankWindow, onUnavailable) {
+async function antigravityUsageUnits(brainRoot, cutoffMs, onUnavailable) {
   if (!(await info(brainRoot, onUnavailable))?.isDirectory()) return [];
   let entries;
   try { entries = await readdir(brainRoot, { withFileTypes: true }); }
@@ -1567,34 +1535,27 @@ async function antigravityUsageUnits(brainRoot, cutoffMs, rankWindow, onUnavaila
       stamp: `${metadata.size}:${metadata.mtimeMs}:${await antigravityNativeStamp(transcript)}`,
       bytes: metadata.size,
       mtimeMs: metadata.mtimeMs,
-      read: () => readAntigravityUsage(transcript, entry.name, rankWindow)
+      read: () => readAntigravityUsage(transcript, entry.name)
     });
   }
   return units;
 }
 
-async function readAntigravityUsage(transcript, conversationId, rankWindow) {
-  const days = {}, rank = rankedUsage(rankWindow);
+async function readAntigravityUsage(transcript, conversationId) {
   const native = await readAntigravityTimings(transcript);
   const cursor = createJsonlCursor('', 'antigravity', '', { sessionId: conversationId, limit: Infinity });
   // Antigravity reads its model switches from message text, so its long strings stay whole.
   const complete = await readSessionRows(transcript, row => cursor.add(row), readPacer(), false);
-  if (rank?.records && !complete) rank.complete = false;
   const records = cursor.finish(native);
-  const cwd = rank?.records ? await antigravityWorkspace(transcript, process.platform).catch(() => null) : null;
-  accumulateRecords(days, 'antigravity', rank?.records ? records.map(record => ({ ...record, sessionId: conversationId, cwd })) : records,
-    { minDay: dayKeyAgo(Date.now(), HISTORY_DAYS - 1), leaderboardDays: rank });
-  return usageResult(days, rank);
+  const cwd = await antigravityWorkspace(transcript, process.platform).catch(() => null);
+  return { complete, records: records.map(record => ({ ...record, sessionId: conversationId, cwd, provider: 'antigravity' })) };
 }
 
 /** Descriptors for the usage index: Codex, Claude and Pi session files, OpenCode sessions, and Antigravity conversations. */
 export async function discoverUsageUnits(cutoffMs, options = {}) {
-  const { rankDay, rankFrom = rankDay, includeRecent = false, includeUsageTimes = false, includeRecords = false, onUnavailable } = options;
+  const { onUnavailable } = options;
   const roots = await configuredRoots(options.roots, options.includeDefaults !== false, onUnavailable);
   const enabled = provider => !options.providers || options.providers.includes(provider);
-  const rankWindow = rankDay ? { from: rankFrom, start: leaderboardDayStart(rankFrom),
-    end: leaderboardDayStart(rankDay) + 86_400_000, includeRecent, includeUsageTimes, includeRecords, recordFrom: cutoffMs } :
-    includeRecords ? { includeRecords, recordFrom: cutoffMs } : undefined;
   // Mirrors are append-only transcripts. Keep the largest copy; use its modification time to break ties.
   // A sync can give a stale copy a newer mtime, so root order and mtime alone cannot identify the fullest log.
   const units = [];
@@ -1611,16 +1572,16 @@ export async function discoverUsageUnits(cutoffMs, options = {}) {
       }
     }
     for (const file of selected.values()) {
-      const unit = await fileUsageUnit(provider, file, rankWindow, onUnavailable, options.excludeOhMyPi);
+      const unit = await fileUsageUnit(provider, file, onUnavailable, options.excludeOhMyPi);
       if (unit) units.push(unit);
     }
   }
   for (const root of (enabled('opencode') ? roots.opencode : []).slice(0, 10)) {
-    try { units.push(...await openCodeUsageUnits(root, cutoffMs, rankWindow, onUnavailable)); }
+    try { units.push(...await openCodeUsageUnits(root, cutoffMs, onUnavailable)); }
     catch { onUnavailable?.(); }
   }
   for (const root of (enabled('antigravity') ? roots.antigravity : []).slice(0, 10)) {
-    units.push(...await antigravityUsageUnits(root, cutoffMs, rankWindow, onUnavailable));
+    units.push(...await antigravityUsageUnits(root, cutoffMs, onUnavailable));
   }
   for (const source of enabled('hermes') ? await hermesSources(roots.hermes, cutoffMs, onUnavailable) : []) {
     units.push({
@@ -1628,12 +1589,7 @@ export async function discoverUsageUnits(cutoffMs, options = {}) {
       stamp: source.stamp,
       bytes: source.bytes,
       mtimeMs: source.mtimeMs,
-      async read() {
-        const days = {}, rank = rankedUsage(rankWindow);
-        const records = await readHermesRecords(source, { pace: readPacer(), includeCwd: includeRecords });
-        accumulateRecords(days, 'hermes', records, { minDay: dayKeyAgo(Date.now(), HISTORY_DAYS - 1), leaderboardDays: rank });
-        return usageResult(days, rank);
-      }
+      read: async () => ({ complete: true, records: await readHermesRecords(source, readPacer()) })
     });
   }
   return units;

@@ -9,7 +9,6 @@ export const RECENT_STATS_MS = 5 * 60_000;
 export const HOUR_MS = 3_600_000;
 export const RANKING_HOURS = [24, 168, 720];
 export const RANKING_REFRESH_MS = 10_000;
-export const USAGE_UPLOAD_BYTES = 64 * 1024;
 export const SPEED_WINDOW_MS = 24 * HOUR_MS;
 export const SPEED_SAMPLE_WINDOW_MS = SPEED_WINDOW_MS + HOUR_MS;
 export const SPEED_MIN_DELTA = 500;
@@ -25,16 +24,6 @@ export function qualifyingSpeed({ deltaTokens, avgTps } = {}) {
 export function validStatsLabel(value) {
   return value === null || (typeof value === 'string' && value.length > 0 && value.length <= 128 &&
     !/[\u0000-\u001f\u007f]/.test(value));
-}
-
-export function validStatsPoint({ deltaTokens, avgTps } = {}) {
-  return Number.isSafeInteger(deltaTokens) && deltaTokens >= 0 &&
-    (avgTps === null || (Number.isFinite(avgTps) && avgTps >= 0));
-}
-
-export function validSubmissionStats(stats) {
-  return Boolean(stats && typeof stats === 'object' && !Array.isArray(stats) && validStatsPoint(stats) &&
-    validStatsLabel(stats.topModel) && validStatsLabel(stats.topCli));
 }
 
 export function validRecentRequest(row) {
@@ -93,15 +82,6 @@ export function requestTokens(record) {
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 export const leaderboardDay = ms => new Date(ms + BEIJING_OFFSET_MS).toISOString().slice(0, 10);
 export const leaderboardDayStart = day => Date.parse(`${day}T00:00:00+08:00`);
-export const leaderboardUsageTimesFrom = day => leaderboardDayStart(day) - 24 * HOUR_MS;
-
-export function validLeaderboardUsageTimes(usage, from, end = Infinity) {
-  return usage && typeof usage === 'object' && !Array.isArray(usage) && Object.entries(usage).every(([key, tokens]) => {
-    const at = Number(key);
-    return String(at) === key && isUsageTime(at) && at >= from && at < end && Number.isSafeInteger(tokens) && tokens >= 0;
-  });
-}
-
 const label = value => validStatsLabel(value) ? value : null;
 const add = (map, key, amount) => map.set(key, (map.get(key) ?? 0) + amount);
 

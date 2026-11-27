@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTpsController, validateRoots } from '../src/controller.mjs';
+import { createTpsController, publicChannelId, validateRoots } from '../src/controller.mjs';
 import { createChannelCache } from '../src/channel-cache.mjs';
+import { openLocalUsageDb } from '../src/local-usage-db.mjs';
 import { createLocalePreferences } from '../src/locales.mjs';
 
 function fakeHost(saved = null) {
@@ -366,9 +367,9 @@ test('a disconnected remote channel retains its records and last successful refr
 
 test('open channels are collected in the background and switching displays cached data before I/O replies', async t => {
   const host = fakeHost();
-  const storage = new Map();
-  host.orca.storage = { get: async key => storage.get(key), set: async (key, value) => storage.set(key, value) };
-  const cache = createChannelCache(host.orca.storage, { now: () => 500 });
+  const db = openLocalUsageDb(':memory:');
+  t.after(() => db.close());
+  const cache = createChannelCache(db, { now: () => 500 });
   const local = { key: 'local', worktreeId: 'local', sessions: [] };
   const remote = { key: 'remote', worktreeId: 'remote', executionHostId: 'runtime:host', sessions: [] };
   const partial = deferred(), requests = [];
@@ -391,9 +392,9 @@ test('open channels are collected in the background and switching displays cache
   t.after(() => controller.stop());
   await controller.start();
   await settle();
-  await cache.flush();
   assert.deepEqual(requests, ['local', 'remote']);
-  assert.equal(storage.size, 2);
+  assert.equal(db.readPanel('current-data', publicChannelId(local)).value.records.length, 1);
+  assert.equal(db.readPanel('current-data', publicChannelId(remote)), null);
   pause = true;
   current = remote;
   const switched = controller.checkActive();

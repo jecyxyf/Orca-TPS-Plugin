@@ -27,7 +27,7 @@ const jsonl = values => values.map(value => JSON.stringify(value)).join('\n') + 
 
 /** Records the Tokens manager stores for these roots, as one scan reads them. */
 async function usageRecords(roots, providers) {
-  const units = await discoverUsageUnits(0, { roots, includeDefaults: false, includeRecords: true, providers });
+  const units = await discoverUsageUnits(0, { roots, includeDefaults: false, providers });
   return (await Promise.all(units.map(unit => unit.read()))).flatMap(result => result.records);
 }
 

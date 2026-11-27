@@ -1,14 +1,10 @@
-import { createHash } from 'node:crypto';
-import { HOUR_MS, MAX_RECENT_REQUESTS, USAGE_COUNTER, countUsageRecord, emptyUsageCounters, leaderboardDay,
-  requestTokens, usageCount, usageCounterTokens, validStatsLabel } from './leaderboard_stats.mjs';
-import { harnessFamily } from './harnesses.mjs';
+import { HOUR_MS, USAGE_COUNTER, usageCounterTokens } from './leaderboard_stats.mjs';
 
-export const HISTORY_DAYS = 365;
-export const WINDOWS = [['today', 1], ['week', 7], ['month', 30], ['year', HISTORY_DAYS]];
-export const ROW_LIMIT = 30;
+const WINDOWS = [['today', 1], ['week', 7], ['month', 30], ['year', 365]];
+const ROW_LIMIT = 30;
 const SPEED_ROW_LIMIT = 10;
-// Units stored with an older schema keep their totals for display but are read again to fill the speed counters.
-export const SPEED_MIN_SAMPLES = 5;
+// A model needs this many timed requests in a window before it is ranked by speed.
+const SPEED_MIN_SAMPLES = 5;
 
 const dayMs = 24 * HOUR_MS;
 
@@ -105,79 +101,6 @@ export function mergePersonalPackets(packets, timeZone, now = Date.now()) {
     hourly: { cutoffAt, ready: true, historyDays: RETENTION_DAYS, windows: hourly } };
 }
 
-/** Local calendar day as YYYY-MM-DD. */
-export function localDayKey(ms) {
-  const date = new Date(ms);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-/** Local day key `daysAgo` before the day containing `nowMs`. */
-export function dayKeyAgo(nowMs, daysAgo) {
-  const date = new Date(nowMs);
-  return localDayKey(new Date(date.getFullYear(), date.getMonth(), date.getDate() - daysAgo).getTime());
-}
-
-export function localHourStart(ms) {
-  const date = new Date(ms);
-  const start = ms - date.getMinutes() * 60_000 - date.getSeconds() * 1000 - date.getMilliseconds();
-  // A half-hour clock change can put the candidate between two real local hour boundaries.
-  return start - new Date(start).getMinutes() * 60_000;
-}
-
-/** Oldest local midnight the index keeps; files last written before this cannot contribute. */
-export function usageCutoffMs(nowMs) {
-  const date = new Date(nowMs);
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - (HISTORY_DAYS - 1)).getTime();
-}
-
-/** Adds one source's records into `days[day][provider][model] = [requests, fresh, output, cacheRead, cacheWrite]`. */
-export function accumulateRecords(days, sourceProvider, records, { minDay = '', leaderboardDays } = {}) {
-  for (const record of records) {
-    if (!Number.isFinite(record?.completedAt)) continue;
-    const provider = sourceProvider ?? record.provider;
-    if (leaderboardDays?.records && record.completedAt >= leaderboardDays.recordFrom) {
-      leaderboardDays.records.push({ ...record, provider });
-    }
-    const day = localDayKey(record.completedAt);
-    if (day < minDay) continue;
-    if (leaderboardDays?.recent && record.completedAt >= leaderboardDays.recentFrom && typeof record.id === 'string') {
-      const tokens = requestTokens(record);
-      if (Number.isSafeInteger(tokens)) {
-        const id = createHash('sha256').update(record.id).digest('hex').slice(0, 24);
-        const model = typeof record.model === 'string' ? record.model.slice(0, 128) : null;
-        leaderboardDays.recent.push([id, record.completedAt, tokens, usageCount(record.tokensPerSecond) || null,
-          validStatsLabel(model) ? model : null, harnessFamily(provider)]);
-        if (leaderboardDays.recent.length >= 2 * MAX_RECENT_REQUESTS) trimRecentRequests(leaderboardDays.recent);
-      }
-    }
-    if (leaderboardDays && record.completedAt >= leaderboardDays.start && record.completedAt < leaderboardDays.end) {
-      const tokens = requestTokens(record);
-      const day = leaderboardDay(record.completedAt), { totals } = leaderboardDays;
-      totals[day] = (totals[day] ?? 0) + tokens;
-    }
-    if (leaderboardDays?.usageByTime && record.completedAt >= leaderboardDays.usageTimesFrom && record.completedAt < leaderboardDays.end) {
-      const at = Math.trunc(record.completedAt);
-      const total = (leaderboardDays.usageByTime[at] ?? 0) + requestTokens(record);
-      if (Number.isSafeInteger(total)) leaderboardDays.usageByTime[at] = total;
-    }
-    countRequest(days[day] ??= Object.create(null), provider, record);
-  }
-  return days;
-}
-
-function countRequest(byProvider, provider, record) {
-  const model = typeof record.model === 'string' && record.model ? record.model.slice(0, 128) : '';
-  const byModel = byProvider[provider] ??= Object.create(null);
-  const cell = byModel[model] ??= emptyUsageCounters();
-  countUsageRecord(cell, record);
-}
-
-export function trimRecentRequests(requests) {
-  requests.sort((a, b) => b[1] - a[1]);
-  if (requests.length > MAX_RECENT_REQUESTS) requests.length = MAX_RECENT_REQUESTS;
-  return requests;
-}
-
 /** CC Switch's "real total": new input + output + cache writes + cache reads. */
 export function realTokens(counters) {
   return counters.freshInput + counters.output + counters.cacheWrite + counters.cacheRead;
@@ -187,51 +110,6 @@ export function realTokens(counters) {
 export function cacheHitRate(counters) {
   const cacheable = counters.freshInput + counters.cacheWrite + counters.cacheRead;
   return cacheable > 0 ? counters.cacheRead / cacheable : 0;
-}
-
-/** Totals per window, using the same real-total and hit-rate definitions as CC Switch's usage summary. */
-export function summarizeUsage(dayMaps, nowMs) {
-  const today = localDayKey(nowMs);
-  const days = dayMaps.flatMap(map => Object.entries(map));
-  return Object.fromEntries(WINDOWS.map(([name, span]) => {
-    const first = dayKeyAgo(nowMs, span - 1);
-    const groups = days.filter(([day]) => day >= first && day <= today).map(([, byProvider]) => byProvider);
-    return [name, summarizeGroups(groups)];
-  }));
-}
-
-export function summarizeHourlyUsage(records, cutoffAt) {
-  const segments = WINDOWS.map(([name, span]) => ({ name, start: cutoffAt - span * 24 * HOUR_MS, group: Object.create(null) }));
-  let fastest = null;
-  for (const record of records) {
-    if (record.completedAt >= cutoffAt) continue;
-    const segment = segments.find(({ start }) => record.completedAt >= start);
-    if (!segment) continue;
-    countRequest(segment.group, record.provider, record);
-    if (segment.name === 'today') fastest = fasterRequest(fastest, record);
-  }
-  const groups = [];
-  return Object.fromEntries(segments.map(({ name, group }) => {
-    groups.push(group);
-    const summary = summarizeGroups(groups);
-    if (name === 'today') summary.maxSpeed = fastest;
-    return [name, summary];
-  }));
-}
-
-function fasterRequest(fastest, { tokensPerSecond, isEstimatedSpeed: estimated }) {
-  if (!Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0) return fastest;
-  if (!fastest || tokensPerSecond > fastest.tokensPerSecond ||
-      (tokensPerSecond === fastest.tokensPerSecond && fastest.estimated && !estimated)) {
-    return { tokensPerSecond, estimated: estimated === true };
-  }
-  return fastest;
-}
-
-export function maxRequestSpeed(records) {
-  let fastest = null;
-  for (const record of records) fastest = fasterRequest(fastest, record);
-  return fastest;
 }
 
 export function summarizeGroups(groups) {
@@ -293,24 +171,6 @@ function rankSpeeds(speeds) {
   }
   ranked.sort((a, b) => b.tokensPerSecond - a.tokensPerSecond || b.samples - a.samples || (a.model < b.model ? -1 : a.model > b.model ? 1 : 0));
   return { speeds: ranked.slice(0, SPEED_ROW_LIMIT), hidden: Math.max(0, ranked.length - SPEED_ROW_LIMIT), sparse };
-}
-
-/** One entry per local day that has usage in the last HISTORY_DAYS, oldest first; drives the heatmap. */
-export function dailySeries(dayMaps, nowMs) {
-  const first = dayKeyAgo(nowMs, HISTORY_DAYS - 1), today = localDayKey(nowMs), perDay = new Map();
-  for (const days of dayMaps) {
-    for (const [day, byProvider] of Object.entries(days)) {
-      if (day < first || day > today) continue;
-      const cell = perDay.get(day) ?? { requests: 0, freshInput: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-      for (const byModel of Object.values(byProvider)) {
-        for (const counters of Object.values(byModel)) addCounters(cell, counters);
-      }
-      perDay.set(day, cell);
-    }
-  }
-  return [...perDay.entries()]
-    .map(([day, cell]) => ({ day, tokens: realTokens(cell), requests: cell.requests }))
-    .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 }
 
 function addCounters(target, cell) {

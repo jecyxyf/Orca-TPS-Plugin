@@ -15,13 +15,13 @@ const PANEL_VIEW_KEY = 'panel-view';
 const PANEL_VIEWS = new Set(['current-data', 'usage', 'leaderboard']);
 
 const INSTALLATION_KEY = 'leaderboard:installation-id';
-let controller, cache, manager, stopLeaderboard, stopPanelView, db, locales;
+let controller, manager, stopLeaderboard, stopPanelView, db, locales;
 let registrations = [];
 
 export default async function activate(orca) {
   await deactivate();
   db = openLocalUsageDb(localUsageDatabasePath());
-  const migrationGuid = db.loadCollection(Date.now()).deviceGuid;
+  const migrationGuid = db.legacyDeviceGuid();
   const deviceGuid = validInstallationId(migrationGuid) ? migrationGuid : await orca.storage.get(INSTALLATION_KEY);
   const language = locales = await createLocalePreferences(orca.storage);
   const icons = readFile(new URL('./harness-icons.svg', import.meta.url), 'utf8')
@@ -50,9 +50,8 @@ export default async function activate(orca) {
   if (orca.settings?.onDidChange) registrations.push(orca.settings.onDidChange(({ key }) => {
     if (key === 'timeZone') void Promise.resolve(setZoneFromSettings()).then(client.setTimeZone).catch(() => {});
   }));
-  const channelCache = cache = createChannelCache(orca.storage, { panels: db });
   controller = createTpsController(orca, {
-    cache: channelCache, locales: language,
+    cache: createChannelCache(db), locales: language,
     pollMs: 250, livePollMs: 250, focusPollMs: 1000,
     backgroundPollMs: 5000, backgroundLimit: 1, watchWorkspace: true,
     readActive: () => readActiveConversation({ includeRemote: true, includeOpen: true }),
@@ -92,9 +91,8 @@ export async function deactivate() {
   registrations = [];
   controller?.stop();
   controller = undefined;
-  const closings = [locales?.flush(), stopPanelView?.(), stopLeaderboard?.(),
-    manager?.close(), cache?.flush()];
-  locales = stopPanelView = stopLeaderboard = manager = cache = undefined;
+  const closings = [locales?.flush(), stopPanelView?.(), stopLeaderboard?.(), manager?.close()];
+  locales = stopPanelView = stopLeaderboard = manager = undefined;
   const database = db;
   db = undefined;
   try { await Promise.allSettled(closings); }

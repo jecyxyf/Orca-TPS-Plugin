@@ -9,17 +9,17 @@ import { promisify } from 'node:util';
 import { discoverUsageUnits } from '../src/harness_parser.mjs';
 import { defaultRoots } from '../src/harnesses.mjs';
 import { leaderboardDay, leaderboardDayStart } from '../src/leaderboard_stats.mjs';
-import { localDayKey } from '../src/personal_stats.mjs';
 
 const options = root => ({ roots: { hermes: [root] }, includeDefaults: false });
 // The manager stores these records and serves each channel by folder or session.
 async function hermesRecords(root) {
-  const [unit] = await discoverUsageUnits(0, { ...options(root), includeRecords: true });
+  const [unit] = await discoverUsageUnits(0, options(root));
   return (await unit.read()).records;
 }
 const localTime = clock => {
   const field = value => String(value).padStart(2, '0');
-  return `${localDayKey(clock.getTime())} ${field(clock.getHours())}:${field(clock.getMinutes())}:${field(clock.getSeconds())},000`;
+  const day = `${clock.getFullYear()}-${field(clock.getMonth() + 1)}-${field(clock.getDate())}`;
+  return `${day} ${field(clock.getHours())}:${field(clock.getMinutes())}:${field(clock.getSeconds())},000`;
 };
 
 const call = (id, { clock = new Date(), session = 'local-hermes', model = 'model-a', cache = '', responseId = 'result-' + id } = {}) =>
@@ -83,14 +83,14 @@ test('Hermes usage preserves all timestamped requests and deduplicates rotations
   const rows = Array.from({ length: 130 }, (_, index) => call(index + 1, { clock: today }));
   await writeFile(file, rows.join(''));
   await writeFile(file + '.1', call(131, { clock: yesterday }) + rows.slice(0, 10).join(''));
-  const units = await discoverUsageUnits(0, { ...options(root), rankDay, rankFrom });
+  const units = await discoverUsageUnits(0, options(root));
   assert.equal(units.length, 1);
-  const result = await units[0].read();
-  const requests = Object.values(result.days).reduce((total, day) => total + day.hermes['model-a'][0], 0);
-  assert.equal(requests, 131);
-  assert.equal(result.leaderboardFrom, rankFrom);
-  assert.deepEqual(result.leaderboardDays, { [rankDay]: 130 * 556, [rankFrom]: 556 });
-  assert.equal((await hermesRecords(root)).length, 131);
+  const { records, complete } = await units[0].read();
+  assert.equal(complete, true);
+  assert.equal(records.length, 131);
+  const tokensOn = day => records.filter(record => leaderboardDay(record.completedAt) === day)
+    .reduce((sum, record) => sum + record.freshInputTokens + record.outputTokens, 0);
+  assert.deepEqual([tokensOn(rankDay), tokensOn(rankFrom)], [130 * 556, 556]);
 });
 
 test('Hermes notices equal-size replacements and reads each complete appended request once', async t => {
