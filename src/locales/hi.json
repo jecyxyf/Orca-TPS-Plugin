@@ -215,7 +215,7 @@
   "notice.remote-permission": "Orca की प्लगइन सेटिंग में कार्यक्षेत्र की अनुमति दें।",
   "notice.remote-workspace-unavailable": "दूरस्थ कार्यक्षेत्र का Orca से सिंक होने का इंतज़ार है।",
   "notice.remote-ssh-unavailable": "दूरस्थ प्रोजेक्ट में SSH कनेक्शन नहीं है। चैनल के आखिरी आँकड़े दिख रहे हैं।",
-  "notice.remote-node-unavailable": "दूरस्थ मशीन पर SQLite समर्थन वाला Node.js 22.13 या बाद का संस्करण चाहिए।",
+  "notice.remote-node-unavailable": "दूरस्थ मशीन पर SQLite समर्थन वाला Node.js 22.15 या बाद का संस्करण चाहिए।",
   "notice.remote-connection-failed": "दूरस्थ आँकड़ों से कनेक्ट नहीं हो सके। चैनल के आखिरी आँकड़े दिख रहे हैं।",
   "notice.remote-log-unavailable": "दूरस्थ सत्र लॉग नहीं पढ़ सके। चैनल के आखिरी आँकड़े दिख रहे हैं।",
   "notice.remote-logs-incomplete": "कुछ दूरस्थ सत्र लॉग अभी उपलब्ध नहीं हैं।",

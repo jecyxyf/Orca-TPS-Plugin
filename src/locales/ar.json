@@ -215,7 +215,7 @@
   "notice.remote-permission": "اسمح بقراءة مساحة العمل في إعدادات إضافة Orca.",
   "notice.remote-workspace-unavailable": "في انتظار مزامنة مساحة العمل البعيدة في Orca.",
   "notice.remote-ssh-unavailable": "لا يتوفر اتصال SSH للمشروع البعيد. تُعرض آخر إحصاءات القناة.",
-  "notice.remote-node-unavailable": "يحتاج الجهاز البعيد إلى Node.js 22.13 أو أحدث مع دعم SQLite.",
+  "notice.remote-node-unavailable": "يحتاج الجهاز البعيد إلى Node.js 22.15 أو أحدث مع دعم SQLite.",
   "notice.remote-connection-failed": "تعذّر الاتصال بخدمة الإحصاءات البعيدة. تُعرض آخر إحصاءات القناة.",
   "notice.remote-log-unavailable": "سجلات الجلسات البعيدة غير متاحة. تُعرض آخر إحصاءات القناة.",
   "notice.remote-logs-incomplete": "بعض سجلات الجلسات البعيدة غير متاحة مؤقتًا.",

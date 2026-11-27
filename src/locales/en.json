@@ -215,7 +215,7 @@
   "notice.remote-permission": "Allow workspace access in Orca's plugin settings.",
   "notice.remote-workspace-unavailable": "Waiting for Orca to sync the remote workspace.",
   "notice.remote-ssh-unavailable": "The remote project has no SSH connection. Showing the channel's last stats.",
-  "notice.remote-node-unavailable": "The remote machine needs Node.js 22.13 or later with SQLite support.",
+  "notice.remote-node-unavailable": "The remote machine needs Node.js 22.15 or later with SQLite support.",
   "notice.remote-connection-failed": "Could not connect to the remote stats service. Showing the channel's last stats.",
   "notice.remote-log-unavailable": "The remote session logs are unavailable. Showing the channel's last stats.",
   "notice.remote-logs-incomplete": "Some remote session logs are temporarily unavailable.",

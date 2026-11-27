@@ -215,7 +215,7 @@
   "notice.remote-permission": "Autorisez l’accès à l’espace de travail dans les réglages de l’extension Orca.",
   "notice.remote-workspace-unavailable": "En attente de la synchronisation de l’espace de travail distant dans Orca.",
   "notice.remote-ssh-unavailable": "Le projet distant n’a pas de connexion SSH. Les dernières statistiques du canal restent affichées.",
-  "notice.remote-node-unavailable": "La machine distante nécessite Node.js 22.13 ou ultérieur avec SQLite.",
+  "notice.remote-node-unavailable": "La machine distante nécessite Node.js 22.15 ou ultérieur avec SQLite.",
   "notice.remote-connection-failed": "Connexion au service distant impossible. Les dernières statistiques du canal restent affichées.",
   "notice.remote-log-unavailable": "Journaux de session distants indisponibles. Les dernières statistiques du canal restent affichées.",
   "notice.remote-logs-incomplete": "Certains journaux distants sont temporairement indisponibles.",

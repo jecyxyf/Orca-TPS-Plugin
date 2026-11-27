@@ -215,7 +215,7 @@
   "notice.remote-permission": "Orca のプラグイン設定でワークスペースへのアクセスを許可してください。",
   "notice.remote-workspace-unavailable": "Orca がリモートワークスペースを同期するのを待っています。",
   "notice.remote-ssh-unavailable": "リモートプロジェクトに SSH 接続がありません。チャンネルの直近の統計を表示しています。",
-  "notice.remote-node-unavailable": "リモートマシンには SQLite 対応の Node.js 22.13 以降が必要です。",
+  "notice.remote-node-unavailable": "リモートマシンには SQLite 対応の Node.js 22.15 以降が必要です。",
   "notice.remote-connection-failed": "リモート統計サービスに接続できませんでした。チャンネルの直近の統計を表示しています。",
   "notice.remote-log-unavailable": "リモートセッションのログを利用できません。チャンネルの直近の統計を表示しています。",
   "notice.remote-logs-incomplete": "一部のリモートセッションログを一時的に利用できません。",

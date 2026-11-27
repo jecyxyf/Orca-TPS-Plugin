@@ -215,7 +215,7 @@
   "notice.remote-permission": "請在 Orca 的外掛設定中授權讀取工作區。",
   "notice.remote-workspace-unavailable": "暫時無法確認遠端專案頻道，等待 Orca 工作區同步。",
   "notice.remote-ssh-unavailable": "該遠端專案沒有可用的 SSH 連線。保留該頻道上次的結果。",
-  "notice.remote-node-unavailable": "遠端主機需要可用的 Node.js 22.13 或更新版本，並支援 SQLite。",
+  "notice.remote-node-unavailable": "遠端主機需要可用的 Node.js 22.15 或更新版本，並支援 SQLite。",
   "notice.remote-connection-failed": "暫時無法連線遠端統計，保留該頻道上次的結果。",
   "notice.remote-log-unavailable": "遠端工作階段紀錄暫時無法讀取，保留該頻道上次的結果。",
   "notice.remote-logs-incomplete": "遠端專案的部分工作階段紀錄暫時無法讀取。",

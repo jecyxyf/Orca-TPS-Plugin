@@ -215,7 +215,7 @@
   "notice.remote-permission": "Permite el acceso al espacio de trabajo en los ajustes del plugin de Orca.",
   "notice.remote-workspace-unavailable": "Esperando a que Orca sincronice el espacio de trabajo remoto.",
   "notice.remote-ssh-unavailable": "El proyecto remoto no tiene conexión SSH. Se muestran los últimos datos del canal.",
-  "notice.remote-node-unavailable": "El equipo remoto necesita Node.js 22.13 o posterior con SQLite.",
+  "notice.remote-node-unavailable": "El equipo remoto necesita Node.js 22.15 o posterior con SQLite.",
   "notice.remote-connection-failed": "No se pudo conectar al servicio remoto de estadísticas. Se muestran los últimos datos del canal.",
   "notice.remote-log-unavailable": "Los registros de sesión remotos no están disponibles. Se muestran los últimos datos del canal.",
   "notice.remote-logs-incomplete": "Algunos registros remotos no están disponibles temporalmente.",

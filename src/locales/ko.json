@@ -215,7 +215,7 @@
   "notice.remote-permission": "Orca 플러그인 설정에서 워크스페이스 읽기 권한을 허용해 주세요.",
   "notice.remote-workspace-unavailable": "원격 워크스페이스 동기화를 기다리는 중입니다.",
   "notice.remote-ssh-unavailable": "이 원격 프로젝트에 사용 가능한 SSH 연결이 없어 이전 결과를 유지합니다.",
-  "notice.remote-node-unavailable": "원격 머신에 SQLite를 지원하는 Node.js 22.13 이상이 필요합니다.",
+  "notice.remote-node-unavailable": "원격 머신에 SQLite를 지원하는 Node.js 22.15 이상이 필요합니다.",
   "notice.remote-connection-failed": "원격 통계 서비스에 연결하지 못해 이전 결과를 유지합니다.",
   "notice.remote-log-unavailable": "원격 세션 로그를 읽을 수 없어 이전 결과를 유지합니다.",
   "notice.remote-logs-incomplete": "일부 원격 세션 로그를 일시적으로 읽을 수 없습니다.",

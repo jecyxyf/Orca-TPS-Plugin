@@ -215,7 +215,7 @@
   "notice.remote-permission": "请在 Orca 的插件设置中授权读取工作区。",
   "notice.remote-workspace-unavailable": "暂时无法确认远程项目频道，等待 Orca 工作区同步。",
   "notice.remote-ssh-unavailable": "该远程项目没有可用的 SSH 连接。保留该频道上次的结果。",
-  "notice.remote-node-unavailable": "远程机器需要可用的 Node.js 22.13 或更新版本，并支持 SQLite。",
+  "notice.remote-node-unavailable": "远程机器需要可用的 Node.js 22.15 或更新版本，并支持 SQLite。",
   "notice.remote-connection-failed": "暂时无法连接远程统计，保留该频道上次的结果。",
   "notice.remote-log-unavailable": "远程会话日志暂时无法读取，保留该频道上次的结果。",
   "notice.remote-logs-incomplete": "远程项目的部分会话日志暂时无法读取。",

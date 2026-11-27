@@ -215,7 +215,7 @@
   "notice.remote-permission": "Разрешите доступ к рабочим областям в настройках плагина Orca.",
   "notice.remote-workspace-unavailable": "Ожидаем синхронизации удалённой рабочей области в Orca.",
   "notice.remote-ssh-unavailable": "У удалённого проекта нет SSH-подключения. Показываем последнюю статистику канала.",
-  "notice.remote-node-unavailable": "На удалённой машине нужен Node.js 22.13 или новее с поддержкой SQLite.",
+  "notice.remote-node-unavailable": "На удалённой машине нужен Node.js 22.15 или новее с поддержкой SQLite.",
   "notice.remote-connection-failed": "Не удалось подключиться к службе удалённой статистики. Показываем последнюю статистику канала.",
   "notice.remote-log-unavailable": "Удалённые журналы сессии недоступны. Показываем последнюю статистику канала.",
   "notice.remote-logs-incomplete": "Часть удалённых журналов сессии временно недоступна.",

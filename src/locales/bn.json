@@ -215,7 +215,7 @@
   "notice.remote-permission": "Orca-এর প্লাগইন সেটিংসে ওয়ার্কস্পেস অ্যাক্সেসের অনুমতি দিন।",
   "notice.remote-workspace-unavailable": "দূরবর্তী ওয়ার্কস্পেস সিঙ্ক করতে Orca-এর অপেক্ষায়।",
   "notice.remote-ssh-unavailable": "দূরবর্তী প্রজেক্টে SSH সংযোগ নেই। চ্যানেলের শেষ পরিসংখ্যান দেখানো হচ্ছে।",
-  "notice.remote-node-unavailable": "দূরবর্তী মেশিনে SQLite সমর্থনসহ Node.js 22.13 বা নতুন সংস্করণ প্রয়োজন।",
+  "notice.remote-node-unavailable": "দূরবর্তী মেশিনে SQLite সমর্থনসহ Node.js 22.15 বা নতুন সংস্করণ প্রয়োজন।",
   "notice.remote-connection-failed": "দূরবর্তী পরিসংখ্যানে সংযোগ করা যায়নি। চ্যানেলের শেষ পরিসংখ্যান দেখানো হচ্ছে।",
   "notice.remote-log-unavailable": "দূরবর্তী সেশন লগ পাওয়া যাচ্ছে না। চ্যানেলের শেষ পরিসংখ্যান দেখানো হচ্ছে।",
   "notice.remote-logs-incomplete": "কিছু দূরবর্তী সেশন লগ সাময়িকভাবে পাওয়া যাচ্ছে না।",

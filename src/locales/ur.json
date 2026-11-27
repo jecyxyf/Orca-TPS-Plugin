@@ -215,7 +215,7 @@
   "notice.remote-permission": "Orca کی پلگ ان ترتیبات میں ورک اسپیس تک رسائی کی اجازت دیں۔",
   "notice.remote-workspace-unavailable": "دور دراز ورک اسپیس کو Orca میں ہم آہنگ کرنے کا انتظار ہے۔",
   "notice.remote-ssh-unavailable": "دور دراز پروجیکٹ کا SSH کنکشن نہیں۔ چینل کے آخری اعداد و شمار دکھائے جا رہے ہیں۔",
-  "notice.remote-node-unavailable": "دور دراز مشین پر SQLite کی معاونت کے ساتھ Node.js 22.13 یا بعد کا ورژن درکار ہے۔",
+  "notice.remote-node-unavailable": "دور دراز مشین پر SQLite کی معاونت کے ساتھ Node.js 22.15 یا بعد کا ورژن درکار ہے۔",
   "notice.remote-connection-failed": "دور دراز اعداد و شمار سے رابطہ نہیں ہو سکا۔ چینل کے آخری اعداد و شمار دکھائے جا رہے ہیں۔",
   "notice.remote-log-unavailable": "دور دراز سیشن لاگز دستیاب نہیں۔ چینل کے آخری اعداد و شمار دکھائے جا رہے ہیں۔",
   "notice.remote-logs-incomplete": "کچھ دور دراز سیشن لاگز عارضی طور پر دستیاب نہیں۔",

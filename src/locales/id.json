@@ -215,7 +215,7 @@
   "notice.remote-permission": "Izinkan akses ruang kerja di pengaturan plugin Orca.",
   "notice.remote-workspace-unavailable": "Menunggu Orca menyinkronkan ruang kerja jarak jauh.",
   "notice.remote-ssh-unavailable": "Proyek jarak jauh tidak memiliki koneksi SSH. Menampilkan statistik kanal terakhir.",
-  "notice.remote-node-unavailable": "Mesin jarak jauh memerlukan Node.js 22.13 atau lebih baru dengan SQLite.",
+  "notice.remote-node-unavailable": "Mesin jarak jauh memerlukan Node.js 22.15 atau lebih baru dengan SQLite.",
   "notice.remote-connection-failed": "Gagal terhubung ke statistik jarak jauh. Menampilkan statistik kanal terakhir.",
   "notice.remote-log-unavailable": "Log sesi jarak jauh tidak tersedia. Menampilkan statistik kanal terakhir.",
   "notice.remote-logs-incomplete": "Sebagian log sesi jarak jauh tidak tersedia untuk sementara.",

@@ -295,8 +295,7 @@ export function launchSsh(destination, token, bootstrap) {
     !Number.isInteger(port) || port < 1 || port > 65535) throw new Error('ssh');
   const configHost = typeof alias === 'string' && /^[\p{L}\p{N}_][\p{L}\p{N}_.-]*$/u.test(alias) ? alias : host;
   const prefix = '@TPS:' + token + ':';
-  const checkNode = "const [major,minor]=process.versions.node.split('.').map(Number);" +
-    "if(major<22||(major===22&&minor<13))process.exit(1);require('node:sqlite')";
+  const checkNode = "require('node:sqlite');if(!require('node:zlib').zstdDecompressSync)process.exit(1)";
   // Non-interactive SSH may skip the shell profile that normally adds Node to PATH.
   const script = [
     'cd ' + (directory ? shellQuote(directory) : '"$HOME"') + ' || { echo ' + prefix + 'workspace; exit 1; }',
