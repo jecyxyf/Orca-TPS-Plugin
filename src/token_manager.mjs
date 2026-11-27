@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { bridgeOrca, createManagerLinks, createOrcaConnection, createSnapshotSender, MANAGER_PROTOCOL_VERSION, MESSAGE,
   TOKENS_LEASE_MS, TOKENS_ROOT } from './orca_connection.mjs';
 import { channelProvider, openRemoteDeviceCache, openTokensManagerDb } from './database.mjs';
-import { enrichChannelRecords, HarnessParser, normalizeComparePath } from './harness_parser.mjs';
+import { enrichChannelRecords, HarnessParser } from './harness_parser.mjs';
+import { normalizeComparePath } from './harnesses.mjs';
 import { calendarFor, makePersonalPacket, mergePersonalPackets, RETENTION_DAYS } from './personal_stats.mjs';
 import { HOUR_MS, leaderboardPacketFromPersonal, makeLeaderboardPacket, SPEED_SAMPLE_WINDOW_MS, SPEED_WINDOW_MS, TOKENS_LEADERBOARD,
   tokensIntervals, validInstallationId } from './leaderboard_stats.mjs';

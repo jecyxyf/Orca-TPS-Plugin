@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { recentRecords } from './harness_parser.mjs';
-import { isManagerHarness } from './harnesses.mjs';
+import { isManagerHarness, recentRecords } from './harnesses.mjs';
 
 const NUMBERS = [
   'completedAt', 'createdAtSec', 'freshInputTokens', 'outputTokens', 'cacheReadTokens', 'cacheCreationTokens',

@@ -12,7 +12,7 @@ import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { calendarFor } from '../src/personal_stats.mjs';
 import { openTokensManagerDb, readRemoteDeviceCache } from '../src/database.mjs';
-import { normalizeComparePath } from '../src/harness_parser.mjs';
+import { normalizeComparePath } from '../src/harnesses.mjs';
 import { makePersonalPacket, mergePersonalPackets } from '../src/personal_stats.mjs';
 import { makeLeaderboardPacket, TOKENS_DEFAULT_INTERVALS } from '../src/leaderboard_stats.mjs';
 import { createPacketReceiver, createTokensRankings, validatePacket } from '../server/tokens-manager-rankings.mjs';

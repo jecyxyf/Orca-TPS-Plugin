@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { readOrcaProfile } from './active-conversation.mjs';
-import { normalizeComparePath } from './harness_parser.mjs';
+import { normalizeComparePath } from './harnesses.mjs';
 
 class RemoteReadError extends Error {
   constructor(reason) {

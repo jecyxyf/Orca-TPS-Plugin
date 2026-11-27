@@ -325,7 +325,8 @@ test('the manager reads all 16 harnesses and keeps native request IDs on upgrade
 });
 
 test('createJsonlCursor extracts sessionId and cwd across fed chunks and scanTokens indexes Claude and Pi for channel lookup', async t => {
-  const { createJsonlCursor, normalizeComparePath } = await import('../src/harness_parser.mjs');
+  const { createJsonlCursor } = await import('../src/harness_parser.mjs');
+  const { normalizeComparePath } = await import('../src/harnesses.mjs');
   const cursor = createJsonlCursor('', 'claude', '', { limit: Infinity });
   assert.equal(cursor.sessionId, null);
   assert.equal(cursor.cwd, null);
@@ -391,7 +392,7 @@ test('createJsonlCursor extracts sessionId and cwd across fed chunks and scanTok
   const childScript = `
     import path from 'node:path';
     import { openTokensManagerDb } from './src/database.mjs';
-    import { normalizeComparePath } from './src/harness_parser.mjs';
+    import { normalizeComparePath } from './src/harnesses.mjs';
     import { readManagerChannel, scanTokens } from './src/token_manager.mjs';
     const home = process.env.TEST_CHANNEL_HOME, now = Number(process.env.TEST_CHANNEL_NOW);
     const project = process.env.TEST_CHANNEL_PROJECT;

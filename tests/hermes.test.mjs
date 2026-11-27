@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
-import { defaultRoots, discoverUsageUnits } from '../src/harness_parser.mjs';
+import { discoverUsageUnits } from '../src/harness_parser.mjs';
+import { defaultRoots } from '../src/harnesses.mjs';
 import { leaderboardDay, leaderboardDayStart } from '../src/leaderboard_stats.mjs';
 import { localDayKey } from '../src/personal_stats.mjs';
 

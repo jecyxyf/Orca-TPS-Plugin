@@ -11,7 +11,8 @@ import {
   antigravityStepStart,
   parseJsonl
 } from '../src/harness_parser.mjs';
-import { discoverUsageUnits, normalizeComparePath } from '../src/harness_parser.mjs';
+import { discoverUsageUnits } from '../src/harness_parser.mjs';
+import { normalizeComparePath } from '../src/harnesses.mjs';
 
 // The manager stores these records and serves each channel by folder or session.
 async function antigravityRecords(brain) {

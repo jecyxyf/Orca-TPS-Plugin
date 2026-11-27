@@ -8,7 +8,7 @@ import { setImmediate as yieldToRequests, setTimeout as delay } from 'node:timer
 import * as zlib from 'node:zlib';
 import { HISTORY_DAYS, accumulateRecords, dayKeyAgo, trimRecentRequests } from './personal_stats.mjs';
 import { RECENT_STATS_MS, leaderboardDayStart, leaderboardUsageTimesFrom } from './leaderboard_stats.mjs';
-import { harnessFamily, openCodeHarness, SESSION_HARNESSES } from './harnesses.mjs';
+import { defaultRoots, harnessFamily, normalizeComparePath, openCodeHarness, recentRecords, SESSION_HARNESSES } from './harnesses.mjs';
 import { openReadonlyDatabase } from './sqlite.mjs';
 
 const BACKFILL_BYTES = 16 * 1024 * 1024;
@@ -1081,30 +1081,6 @@ export class HarnessParser {
   }
 }
 
-export function defaultRoots({ home = homedir(), env = process.env, platform = process.platform } = {}) {
-  const join = platform === 'win32' ? path.win32.join : path.posix.join;
-  const userData = env.ORCA_USER_DATA_PATH || (platform === 'win32'
-    ? join(env.APPDATA || join(home, 'AppData', 'Roaming'), 'orca')
-    : platform === 'darwin' ? join(home, 'Library', 'Application Support', 'orca')
-      : join(env.XDG_CONFIG_HOME || join(home, '.config'), 'orca'));
-  const data = env.XDG_DATA_HOME || join(home, '.local', 'share');
-  const ccSwitchDb = env.CC_SWITCH_DB_PATH || join(home, '.cc-switch', 'cc-switch.db');
-  return {
-    roots: {
-      codex: [env.CODEX_HOME || join(home, '.codex'), join(home, '.codex'),
-        join(userData, 'codex-runtime-home', 'home')].flatMap(base => [join(base, 'sessions'), join(base, 'archived_sessions')]),
-      claude: [join(env.CLAUDE_CONFIG_DIR || join(home, '.claude'), 'projects'), join(home, '.claude', 'projects')],
-      opencode: [env.OPENCODE_DB && env.OPENCODE_DB !== ':memory:' ? path.isAbsolute(env.OPENCODE_DB) ? env.OPENCODE_DB : join(data, 'opencode', env.OPENCODE_DB) : join(data, 'opencode', 'opencode.db')],
-      pi: [join(env.PI_CODING_AGENT_DIR || join(home, '.pi', 'agent'), 'sessions')],
-      antigravity: [join(home, '.gemini', 'antigravity-cli', 'brain')],
-      hermes: [env.HERMES_HOME, ...(platform === 'win32' ? [join(env.LOCALAPPDATA || join(home, 'AppData', 'Local'), 'hermes')] : []),
-        join(home, '.hermes')].filter(Boolean)
-    },
-    userData,
-    ccSwitchDb
-  };
-}
-
 export function reportDiscoveryError(error, onUnavailable) {
   if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') onUnavailable?.();
 }
@@ -1138,22 +1114,6 @@ const safeSegment = value => typeof value === 'string' && value.length > 0 && va
 
 function trimCache(cache, limit = 200) {
   while (cache.size > limit) cache.delete(cache.keys().next().value);
-}
-
-export function normalizeComparePath(rawPath, platform = process.platform) {
-  if (typeof rawPath !== 'string') return null;
-  const trimmed = rawPath.trim();
-  if (!trimmed || trimmed.length > 4096 || /[\u0000\r\n]/.test(trimmed)) return null;
-  const isWin = platform === 'win32' || /^[A-Za-z]:[\\/]/.test(trimmed);
-  if (isWin) {
-    const leadingUnc = /^[/\\]{2}/.test(trimmed) ? '\\\\' : '';
-    let body = trimmed.replace(/^[/\\]+/, '').replace(/[/\\]+/g, '\\').replace(/\\+$/, '');
-    const full = (leadingUnc + body).toLowerCase();
-    return /^[a-z]:$/.test(full) ? `${full}\\` : full;
-  }
-  let norm = trimmed.replace(/\/+/g, '/');
-  if (norm.length > 1) norm = norm.replace(/\/+$/, '');
-  return norm;
 }
 
 async function info(file, onUnavailable) {
@@ -1800,12 +1760,6 @@ export function buildHermesRecord({ cacheReported, ...request }) {
   const result = buildRecord({ ...request, dataSource: 'hermes_log', cacheInclusive: true });
   if (result && !cacheReported) delete result.cacheHitRate;
   return result;
-}
-
-/** Newest first, de-duplicated by id. Session views keep 100; usage totals pass Infinity. */
-export function recentRecords(records, limit = 100) {
-  return [...new Map(records.filter(Boolean).map(value => [value.id, value])).values()]
-    .sort((a, b) => b.completedAt - a.completedAt).slice(0, limit);
 }
 
 const maxOpt = (a, b) => a === null ? b : b === null ? a : Math.max(a, b);

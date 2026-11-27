@@ -4,9 +4,8 @@ import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/pro
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { HOUR_MS, USAGE_COUNTER, countUsageRecord, emptyUsageCounters, validInstallationId } from './leaderboard_stats.mjs';
-import { normalizeComparePath } from './harness_parser.mjs';
 import { calendarFor, RETENTION_DAYS } from './personal_stats.mjs';
-import { harnessFamily as channelProvider } from './harnesses.mjs';
+import { harnessFamily as channelProvider, normalizeComparePath } from './harnesses.mjs';
 import { openReadonlyDatabase, withTransaction } from './sqlite.mjs';
 export { channelProvider };
 

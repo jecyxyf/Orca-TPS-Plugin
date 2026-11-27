@@ -2,20 +2,20 @@ import { readFile } from 'node:fs/promises';
 import { parseEnv } from 'node:util';
 import manifest from '../orca-plugin.json' with { type: 'json' };
 import { createLocalePreferences } from './locales.mjs';
-import { createComputation } from './computation.mjs';
+import { readActiveConversation } from './active-conversation.mjs';
 import { createTpsController } from './controller.mjs';
 import { createChannelCache } from './channel-cache.mjs';
 import { openLocalUsageDb } from './local-usage-db.mjs';
-import { localUsageDatabasePath } from './data-paths.mjs';
+import { localUsageDatabasePath } from './harnesses.mjs';
 import { startLeaderboard } from './leaderboard.mjs';
-import { INSTALLATION_KEY } from './leaderboard-installation.mjs';
 import { validInstallationId } from './leaderboard_stats.mjs';
 import { createTokensManagerClient } from './tokens-manager-client.mjs';
 
 const PANEL_VIEW_KEY = 'panel-view';
 const PANEL_VIEWS = new Set(['current-data', 'usage', 'leaderboard']);
 
-let controller, computation, cache, manager, stopLeaderboard, stopPanelView, db, locales;
+const INSTALLATION_KEY = 'leaderboard:installation-id';
+let controller, cache, manager, stopLeaderboard, stopPanelView, db, locales;
 let registrations = [];
 
 export default async function activate(orca) {
@@ -50,13 +50,12 @@ export default async function activate(orca) {
   if (orca.settings?.onDidChange) registrations.push(orca.settings.onDidChange(({ key }) => {
     if (key === 'timeZone') void Promise.resolve(setZoneFromSettings()).then(client.setTimeZone).catch(() => {});
   }));
-  const compute = computation = createComputation();
   const channelCache = cache = createChannelCache(orca.storage, { panels: db });
   controller = createTpsController(orca, {
     cache: channelCache, locales: language,
     pollMs: 250, livePollMs: 250, focusPollMs: 1000,
     backgroundPollMs: 5000, backgroundLimit: 1, watchWorkspace: true,
-    readActive: () => compute.call('active', { includeRemote: true, includeOpen: true }),
+    readActive: () => readActiveConversation({ includeRemote: true, includeOpen: true }),
     readSession: client.read,
     onOpenTargets: client.setTargets
   });
@@ -94,8 +93,8 @@ export async function deactivate() {
   controller?.stop();
   controller = undefined;
   const closings = [locales?.flush(), stopPanelView?.(), stopLeaderboard?.(),
-    computation?.close(), manager?.close(), cache?.flush()];
-  locales = stopPanelView = stopLeaderboard = computation = manager = cache = undefined;
+    manager?.close(), cache?.flush()];
+  locales = stopPanelView = stopLeaderboard = manager = cache = undefined;
   const database = db;
   db = undefined;
   try { await Promise.allSettled(closings); }
