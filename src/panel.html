@@ -3020,24 +3020,14 @@
 
       function rankBadge(rank, speedBoard = false) {
         if (!Number.isFinite(rank) || rank < 1) return null;
-        const tier = royalTierOf(rank);
-        const badge = document.createElement('span');
-        badge.className = `rank-badge ${tier.cls}`;
-        badge.dataset.place = String(rank);
-        const title = t(tier.key);
-        badge.textContent = speedBoard && rank <= 3 ? `S · ${title}` : title;
-        badge.title = title;
-        badge.setAttribute('role', 'img');
-        badge.setAttribute('aria-label', title);
-        return badge;
+        const tier = royalTierOf(rank), title = t(tier.key);
+        return el(`span.rank-badge.${tier.cls}`, { 'data-place': String(rank), title, role: 'img', 'aria-label': title,
+          text: speedBoard && rank <= 3 ? `S · ${title}` : title });
       }
 
       function royalCharacterSvg(pose, rank) {
         const tier = royalTierOf(rank);
-        const svg = document.createElementNS(SVG_NS, 'svg');
-        svg.setAttribute('class', `hb-char pose-${pose.key}`);
-        svg.setAttribute('viewBox', '0 0 38 34');
-        svg.setAttribute('aria-hidden', 'true');
+        const svg = el(`svg.hb-char.pose-${pose.key}`, { viewBox: '0 0 38 34', 'aria-hidden': 'true' });
         const gear = tier.gear === 'challenger'
           ? `<path d="M12.5 10.6l-1.5-5.2 4.3 2.4 4.2-4.5 4.2 4.5 4.3-2.4-1.5 5.2z" fill="#fbbf24" stroke="#92400e" stroke-width=".7" stroke-linejoin="round"/><circle cx="19.5" cy="8.2" r="1.2" fill="${tier.gem}"/>`
           : tier.gear === 'grandmaster'
@@ -3085,11 +3075,7 @@
         const id = `ecg-${++ecgCounter}`;
         const color = royalTierOf(rank)?.line ?? pose.color;
         const w = 220, h = 28, mid = 17;
-        const svg = document.createElementNS(SVG_NS, 'svg');
-        svg.setAttribute('class', 'hb-ecg-svg');
-        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-        svg.setAttribute('preserveAspectRatio', 'none');
-        svg.setAttribute('aria-hidden', 'true');
+        const svg = el('svg.hb-ecg-svg', { viewBox: `0 0 ${w} ${h}`, preserveAspectRatio: 'none', 'aria-hidden': 'true' });
         if (bpm <= 0) {
           svg.innerHTML = `<line x1="0" y1="${mid}" x2="${w}" y2="${mid}" stroke="${color}" stroke-width="1.8" opacity=".55"/>`;
           return svg;
@@ -3109,29 +3095,11 @@
       function heartbeatStage(row, now) {
         const bpm = row._hb?.bpm ?? recentHeartbeatBpm(row.recent?.points, now);
         const pose = row._hb?.pose ?? poseFromBpm(bpm);
-        const stage = document.createElement('div');
-        stage.className = heartbeatObserver ? 'hb-stage' : 'hb-stage is-in-view';
-        const runner = document.createElement('div');
-        runner.className = 'hb-runner-box';
-        runner.append(royalCharacterSvg(pose, row.rank));
-        const ecgWrap = document.createElement('div');
-        ecgWrap.className = 'hb-ecg-wrap';
-        ecgWrap.append(ecgWaveSvg(pose, bpm, row.rank));
-        const meta = document.createElement('div');
-        meta.className = 'hb-meta-right';
-        meta.title = t(pose.i18n);
-        const bpmEl = document.createElement('span');
-        bpmEl.className = `hb-bpm ${pose.cls}`;
-        const heart = document.createElement('span');
-        heart.className = 'hb-heart';
-        heart.style.setProperty('--beat-dur', pose.beatDur);
-        heart.textContent = '♥';
-        const num = document.createElement('span');
-        num.className = 'hb-bpm-num';
-        num.textContent = String(bpm);
-        bpmEl.append(heart, ' ', num);
-        meta.append(bpmEl);
-        stage.append(runner, ecgWrap, meta);
+        const stage = el(heartbeatObserver ? 'div.hb-stage' : 'div.hb-stage.is-in-view', {},
+          el('div.hb-runner-box', {}, royalCharacterSvg(pose, row.rank)),
+          el('div.hb-ecg-wrap', {}, ecgWaveSvg(pose, bpm, row.rank)),
+          el('div.hb-meta-right', { title: t(pose.i18n) }, el(`span.hb-bpm.${pose.cls}`, {},
+            el('span.hb-heart', { style: { '--beat-dur': pose.beatDur }, text: '♥' }), ' ', el('span.hb-bpm-num', { text: String(bpm) }))));
         heartbeatObserver?.observe(stage);
         return stage;
       }
@@ -3142,7 +3110,14 @@
       const leaderboardTime = time => locale.date(time, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric',
         hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
       const toolText = (model, cli) => `${model ?? '—'} · ${Object.hasOwn(AGENT_LABELS, cli) ? AGENT_LABELS[cli] : cli ?? '—'}`;
-      const chartVerticalPadding = 4;
+      function toolLabel(model, cli) {
+        const tools = el('span.ladder-recent-tools');
+        if (!model && !cli) return tools;
+        tools.title = toolText(model, cli);
+        if (typeof document.createElementNS === 'function' && cli) tools.append(createHarnessIconBadge(cli, 16), ...(model ? [el('span', { text: model })] : []));
+        else tools.textContent = model || tools.title;
+        return tools;
+      }
 
       function dailyUsagePoints(daily, left, days) {
         if (!Array.isArray(daily)) return [];
@@ -3182,31 +3157,10 @@
         return line;
       }
 
-      function paintUsagePath(ctx, line, baseline, firstX, lastX) {
-        const colors = window.getComputedStyle(document.documentElement);
-        const low = colors.getPropertyValue('--usage-wave-low').trim();
-        const high = colors.getPropertyValue('--speed').trim();
-
-        const area = new Path2D(line);
-        area.lineTo(lastX, baseline);
-        area.lineTo(firstX, baseline);
-        area.closePath();
-
-        const gradient = ctx.createLinearGradient(0, baseline, 0, chartVerticalPadding);
-        gradient.addColorStop(0, low);
-        gradient.addColorStop(1, high);
-        ctx.strokeStyle = ctx.fillStyle = gradient;
-        ctx.save();
-        ctx.globalAlpha = 0.5;
-        ctx.fill(area);
-        ctx.restore();
-        ctx.stroke(line);
-      }
 
       function usageCard(row, now, _animateAfter, windowStart) {
         const { recent, daily } = row;
-        const container = document.createElement('div');
-        container.className = 'ladder-recent';
+        const container = el('div.ladder-recent');
         const byDay = rankDays > 1;
         const dateLabel = time => locale.date(time, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' });
         const timeOf = point => byDay ? point.at : point.submittedAt;
@@ -3222,22 +3176,10 @@
           : `${shortClock(point.submittedAt)} · ${formatMillionTokens(point.deltaTokens)} · ${speedText(point.avgTps)}`;
         const emptyTitle = byDay ? usageChartLabel() : `${usageChartLabel()}\n${formatMillionTokens(0)} · ${speedText(0)}`;
         if (byDay) {
-          const chart = document.createElement('canvas');
-          chart.className = 'ladder-chart';
-          chart.width = 320;
-          chart.height = 42;
-          chart.setAttribute('role', 'img');
-          chart.setAttribute('aria-label', usageChartLabel());
-          chart.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : emptyTitle;
-          container.append(chart);
-          const axis = document.createElement('div');
-          axis.className = 'ladder-chart-axis';
-          for (const offset of [0, Math.round((rankDays - 1) / 2), rankDays - 1]) {
-            const label = document.createElement('span');
-            label.textContent = dateLabel(left + offset * DAY_MS + (rankingMode === 'hourly' ? DAY_MS - 1 : 0));
-            axis.append(label);
-          }
-          container.append(axis);
+          const chart = el('canvas.ladder-chart', { width: 320, height: 42, role: 'img', 'aria-label': usageChartLabel(),
+            title: latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : emptyTitle });
+          container.append(chart, el('div.ladder-chart-axis', {}, ...[0, Math.round((rankDays - 1) / 2), rankDays - 1].map(offset =>
+            el('span', { text: dateLabel(left + offset * DAY_MS + (rankingMode === 'hourly' ? DAY_MS - 1 : 0)) }))));
           if (!latestPoint) return container;
           const maximum = Math.max(1, ...points.map(tokensOf));
           const tierColor = royalTierOf(row.rank)?.line ?? '#64b0ff';
@@ -3382,32 +3324,10 @@
             }
           });
         } else {
-          const meta = document.createElement('div'), tools = document.createElement('span');
-          const speed = document.createElement('strong');
-          meta.className = 'ladder-recent-meta';
-          tools.className = 'ladder-recent-tools';
-          const hasTool = Boolean(recent?.topModel || recent?.topCli);
-          if (hasTool) {
-            const label = toolText(recent?.topModel, recent?.topCli);
-            tools.title = label;
-            if (typeof document.createElementNS === 'function' && recent?.topCli) {
-              tools.append(createHarnessIconBadge(recent.topCli, 16));
-              if (recent?.topModel) {
-                const nameText = document.createElement('span');
-                nameText.textContent = recent.topModel;
-                tools.append(nameText);
-              }
-            } else {
-              tools.textContent = recent?.topModel || label;
-            }
-          }
-          speed.className = 'ladder-recent-speed';
-          speed.textContent = speedText(latestPoint?.avgTps ?? 0);
-          speed.title = t('leaderboard-average-speed');
-          meta.append(tools, speed);
+          const speed = el('strong.ladder-recent-speed', { text: speedText(latestPoint?.avgTps ?? 0), title: t('leaderboard-average-speed') });
           const stage = heartbeatStage(row, now);
           stage.title = latestPoint ? `${usageChartLabel()}\n${pointTitle(latestPoint)}` : emptyTitle;
-          container.append(meta, stage);
+          container.append(el('div.ladder-recent-meta', {}, toolLabel(recent?.topModel, recent?.topCli), speed), stage);
         }
         return container;
       }
@@ -3448,67 +3368,21 @@
           { ...row, _hb: undefined }
         ]);
         rankingNodes = updateList(element('rows'), rows, rankingNodes, keyOf, row => {
-          const item = document.createElement('li');
-          if (username && row.username === username) item.classList.add('ladder-self');
-          if (speedBoard) item.classList.add('ladder-speed-row');
-          const rank = document.createElement('span'), name = document.createElement('span'), user = document.createElement('div');
-          const total = document.createElement('strong'), time = document.createElement('time');
-          rank.className = 'ladder-rank';
-          if (row.rank >= 1 && row.rank <= 3) rank.dataset.place = String(row.rank);
-          name.className = 'ladder-name';
-          user.className = 'ladder-row-user';
-          total.className = 'ladder-total';
-          time.className = 'ladder-time';
-          rank.textContent = locale.number(row.rank);
-          name.textContent = row.username;
-          name.dir = 'auto';
-          name.title = row.username;
-          const avatar = document.createElement('span');
-          avatar.className = 'ladder-avatar';
-          avatar.setAttribute('aria-hidden', 'true');
+          const avatar = el('span.ladder-avatar', { 'aria-hidden': 'true' });
           setAvatar(avatar, row.username);
-          const badge = rankBadge(row.rank, speedBoard);
-          if (badge) user.append(badge);
-          user.append(avatar, name);
-          total.textContent = speedBoard ? speedText(row.avgTps) : formatMillionTokens(row.tokens);
-          if (speedBoard) total.title = t('leaderboard-average-speed');
           const shownAt = speedBoard ? row.submittedAt : (row.lastUploadAt ?? row.submittedAt);
           const shownTime = speedBoard ? leaderboardTime(shownAt) : clock(shownAt);
-          time.setAttribute('data-localized-text', '');
-          time.textContent = (speedBoard ? shownTime : t('last-upload-at', shownTime)) +
-            (row.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '');
-          time.dateTime = new Date(shownAt).toISOString();
-          item.append(rank, user, total);
-          if (speedBoard) {
-            const meta = document.createElement('div');
-            const tools = document.createElement('span');
-            meta.className = 'ladder-recent ladder-recent-meta';
-            tools.className = 'ladder-recent-tools';
-            if (row.topModel || row.topCli) {
-              const label = toolText(row.topModel, row.topCli);
-              tools.title = label;
-              if (typeof document.createElementNS === 'function' && row.topCli) {
-                tools.append(createHarnessIconBadge(row.topCli, 16));
-                if (row.topModel) {
-                  const nameText = document.createElement('span');
-                  nameText.textContent = row.topModel;
-                  tools.append(nameText);
-                }
-              } else {
-                tools.textContent = row.topModel || label;
-              }
-            }
-            meta.append(tools);
-            if (Number.isSafeInteger(row.deltaTokens)) {
-              const tokens = document.createElement('bdi');
-              tokens.className = 'ladder-speed-tokens';
-              tokens.textContent = `${locale.number(row.deltaTokens)} tokens`;
-              meta.append(tokens);
-            }
-            item.append(meta);
-          } else item.append(usageCard(row, now, Infinity, ranking.windowStart));
-          item.append(time);
-          return item;
+          return el(`li${username && row.username === username ? '.ladder-self' : ''}${speedBoard ? '.ladder-speed-row' : ''}`, {},
+            el('span.ladder-rank', { 'data-place': row.rank >= 1 && row.rank <= 3 && String(row.rank), text: locale.number(row.rank) }),
+            el('div.ladder-row-user', {}, rankBadge(row.rank, speedBoard), avatar,
+              el('span.ladder-name', { text: row.username, dir: 'auto', title: row.username })),
+            el('strong.ladder-total', { text: speedBoard ? speedText(row.avgTps) : formatMillionTokens(row.tokens),
+              title: speedBoard && t('leaderboard-average-speed') }),
+            speedBoard ? el('div.ladder-recent.ladder-recent-meta', {}, toolLabel(row.topModel, row.topCli),
+              Number.isSafeInteger(row.deltaTokens) && el('bdi.ladder-speed-tokens', { text: `${locale.number(row.deltaTokens)} tokens` }))
+              : usageCard(row, now, Infinity, ranking.windowStart),
+            el('time.ladder-time', { 'data-localized-text': '', datetime: new Date(shownAt).toISOString(),
+              text: (speedBoard ? shownTime : t('last-upload-at', shownTime)) + (row.complete === false ? ` · ${t('leaderboard-usage-incomplete')}` : '') }));
         }, undefined, releaseRowObservers);
         if (todayBoard) {
           // rankingNodes is filled in row order, so position i pairs with rows[i]; no need to re-key every row.

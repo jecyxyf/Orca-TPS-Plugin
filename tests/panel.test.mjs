@@ -431,7 +431,9 @@ test('today usage renders a heartbeat ECG stage with royal characters driven by 
 
   const hbBlock = /const ROYAL_TIERS = [\s\S]*?(?=\n      const usageChartLabel = )/.exec(html)?.[0];
   const usageCardSrc = /function usageCard\([\s\S]*?\n      \}/.exec(html)?.[0];
-  assert.ok(hbBlock && usageCardSrc);
+  const toolLabelSrc = /function toolLabel\([\s\S]*?\n      \}/.exec(html)?.[0];
+  const elSrc = /function el\(spec[\s\S]*?\n    \}/.exec(html)?.[0];
+  assert.ok(hbBlock && usageCardSrc && toolLabelSrc && elSrc);
 
   const observed = [];
   function createEl() {
@@ -439,7 +441,10 @@ test('today usage renders a heartbeat ECG stage with royal characters driven by 
     return {
       attributes: attrs, dataset: {}, children: [], style: { setProperty() {} },
       classList: { toggle() {}, add() {}, remove() {} },
-      setAttribute(k, v) { attrs.set(k, v); },
+      setAttribute(k, v) {
+        attrs.set(k, v);
+        if (k === 'title') this.title = v;
+      },
       getAttribute(k) { return attrs.get(k); },
       append(...items) { this.children.push(...items); },
       addEventListener() {}
@@ -450,11 +455,12 @@ test('today usage renders a heartbeat ECG stage with royal characters driven by 
   };
   const { recentHeartbeatBpm, poseFromBpm, usageCard } = new Function(
     'document', 'group', 'IntersectionObserver', 'SVG_NS', 't', 'formatMillionTokens', 'speedText', 'shortClock', 'toolText', 'createHarnessIconBadge', 'usageChartLabel', `
-      const RECENT_STATS_MS = 300000, DAY_MS = 86400000, rankDays = 1, rankingMode = 'calendar', chartVerticalPadding = 4;
+      const RECENT_STATS_MS = 300000, DAY_MS = 86400000, rankDays = 1, rankingMode = 'calendar';
       const locale = { date: () => '11/26' }, usagePainters = new WeakMap();
       function dailyUsagePoints() { return []; }
       function dailyUsagePath() { return {}; }
-      function paintUsagePath() {}
+      ${elSrc}
+      ${toolLabelSrc}
       ${hbBlock}
       ${usageCardSrc}
       return { recentHeartbeatBpm, poseFromBpm, usageCard };
@@ -532,7 +538,7 @@ test('today usage renders a heartbeat ECG stage with royal characters driven by 
 test('usage rankings omit the subtitle beneath the period selector', async () => {
   const html = await readFile(panelPath, 'utf8');
   assert.doesNotMatch(html, /ladder-recent-caption|leaderboard-cutoff/);
-  assert.match(html, /chart\.setAttribute\('aria-label', usageChartLabel\(\)\)/);
+  assert.match(html, /el\('canvas\.ladder-chart', \{[^}]*'aria-label': usageChartLabel\(\)/);
 });
 
 test('leaderboard ranks assign royal tier badges and speed tab marks top three with S', async () => {
@@ -540,16 +546,19 @@ test('leaderboard ranks assign royal tier badges and speed tab marks top three w
   const tiers = /const ROYAL_TIERS = \[[\s\S]*?\];/.exec(html)?.[0];
   const tierOf = /const royalTierOf = [^\n]+;/.exec(html)?.[0];
   const badgeFn = /function rankBadge\(rank, speedBoard = false\) \{[\s\S]*?\n      \}/.exec(html)?.[0];
-  assert.ok(tiers && tierOf && badgeFn);
+  const elFn = /function el\(spec[\s\S]*?\n    \}/.exec(html)?.[0];
+  assert.ok(tiers && tierOf && badgeFn && elFn);
 
   const document = { createElement() {
     const attrs = {};
     return {
       attributes: attrs, dataset: {},
-      setAttribute(k, v) { attrs[k] = v; }
+      setAttribute(k, v) { attrs[k] = v; },
+      append() {}
     };
   } };
   const makeBadge = new Function('document', 't', `
+    ${elFn}
     ${tiers}
     ${tierOf}
     ${badgeFn}
