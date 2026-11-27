@@ -1,60 +1,39 @@
 import { threadId } from 'node:worker_threads';
 
-const LOCK = 0;
-const ACTIVE = 1;
-const FIRST_USED = 2;
-const HEADER_BYTES = 4 * Int32Array.BYTES_PER_ELEMENT;
-const SIZE_BYTES = Uint32Array.BYTES_PER_ELEMENT;
-const ROUND_BYTES = 64 * 1024 * 1024;
+const LOCK = 0, ACTIVE = 1, FIRST_USED = 2;
+const HEADER_BYTES = 16, SIZE_BYTES = 4, ROUND_BYTES = 32 * 1024 * 1024;
 
-export function createPacketBuffer(capacity = ROUND_BYTES) {
-  return new SharedArrayBuffer(HEADER_BYTES + 2 * capacity);
-}
+export const createPacketBuffer = (capacity = ROUND_BYTES) => new SharedArrayBuffer(HEADER_BYTES + 2 * capacity);
 
 export function openPacketBuffer(buffer) {
-  const header = new Int32Array(buffer, 0, 4);
-  const data = new Uint8Array(buffer, HEADER_BYTES);
-  const lengths = new DataView(buffer, HEADER_BYTES);
-  const capacity = data.length / 2;
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
+  const header = new Int32Array(buffer, 0, 4), data = new Uint8Array(buffer, HEADER_BYTES);
+  const lengths = new DataView(buffer, HEADER_BYTES), capacity = data.length / 2;
+  const encoder = new TextEncoder(), decoder = new TextDecoder();
 
-  function acquire() {
-    let holder;
-    while ((holder = Atomics.compareExchange(header, LOCK, 0, threadId + 1)) !== 0) {
-      Atomics.wait(header, LOCK, holder);
-    }
-  }
-
-  function release(owner = threadId) {
-    if (Atomics.compareExchange(header, LOCK, owner + 1, 0) === owner + 1) {
-      Atomics.notify(header, LOCK, 1);
-    }
-  }
+  const acquire = () => {
+    for (let holder; (holder = Atomics.compareExchange(header, LOCK, 0, threadId + 1)) !== 0;) Atomics.wait(header, LOCK, holder);
+  };
+  const release = (owner = threadId) => {
+    if (Atomics.compareExchange(header, LOCK, owner + 1, 0) === owner + 1) Atomics.notify(header, LOCK, 1);
+  };
 
   function appendBatch(entries) {
-    const encoded = entries.map(entry => encoder.encode(JSON.stringify(entry)));
-    const accepted = new Array(encoded.length).fill(false);
+    const encoded = entries.map(entry => encoder.encode(JSON.stringify(entry))), accepted = new Array(encoded.length).fill(false);
     acquire();
     try {
-      const active = Atomics.load(header, ACTIVE);
-      const start = active * capacity;
+      const active = Atomics.load(header, ACTIVE), start = active * capacity;
       let used = Atomics.load(header, FIRST_USED + active);
-      for (let index = 0; index < encoded.length; index++) {
-        const bytes = encoded[index];
-        const end = used + SIZE_BYTES + bytes.length;
+      for (let i = 0; i < encoded.length; i++) {
+        const bytes = encoded[i], end = used + SIZE_BYTES + bytes.length;
         if (end > capacity) continue;
-        const offset = start + used;
-        lengths.setUint32(offset, bytes.length, true);
-        data.set(bytes, offset + SIZE_BYTES);
+        lengths.setUint32(start + used, bytes.length, true);
+        data.set(bytes, start + used + SIZE_BYTES);
         used = end;
-        accepted[index] = true;
+        accepted[i] = true;
       }
       Atomics.store(header, FIRST_USED + active, used);
       return accepted;
-    } finally {
-      release();
-    }
+    } finally { release(); }
   }
 
   function* read(start, end) {
@@ -69,17 +48,11 @@ export function openPacketBuffer(buffer) {
   function take() {
     acquire();
     try {
-      const active = Atomics.load(header, ACTIVE);
-      const next = 1 - active;
-      const used = Atomics.load(header, FIRST_USED + active);
+      const active = Atomics.load(header, ACTIVE), next = 1 - active, used = Atomics.load(header, FIRST_USED + active);
       Atomics.store(header, FIRST_USED + next, 0);
       Atomics.store(header, ACTIVE, next);
-      const start = active * capacity;
-      // The ranking worker consumes this view before switching buffers again.
-      return read(start, start + used);
-    } finally {
-      release();
-    }
+      return read(active * capacity, active * capacity + used);
+    } finally { release(); }
   }
 
   return { appendBatch, take, release };

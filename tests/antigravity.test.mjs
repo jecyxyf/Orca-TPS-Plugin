@@ -11,7 +11,7 @@ import {
   antigravityStepStart,
   parseJsonl
 } from '../src/harness_parser.mjs';
-import { scanSessions, readTargetSession } from '../src/harness_parser.mjs';
+import { discoverUsageUnits, readTargetSession } from '../src/harness_parser.mjs';
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import('node:sqlite')); }
@@ -183,9 +183,10 @@ test('discovery and targeted reads join the transcript with the native conversat
   db.close();
 
   const options = { roots: { antigravity: [path.join(root, 'brain')] }, includeDefaults: false };
-  const scan = await scanSessions(options);
-  assert.deepEqual(scan.sessions.map(session => session.id), [`antigravity:${conversation}`]);
-  const scanned = scan.sessions[0].records.find(record => record.rawId === '7');
+  const units = await discoverUsageUnits(0, { ...options, providers: ['antigravity'] });
+  assert.equal(units.length, 1);
+  const scan = await units[0].read();
+  const scanned = scan.records.find(record => record.rawId === '7');
   assert.equal(scanned.model, 'gemini-3.8-flash-high');
   assert.equal(scanned.durationMs, 2808);
   assert.ok(!JSON.stringify(scan).includes('PRIVATE-PAYLOAD'), 'step payloads must never be read');
@@ -205,10 +206,9 @@ test('a conversation without a readable native store keeps tokens and warns inst
   await writeFile(path.join(root, 'conversations', `${conversation}.db`), 'not a sqlite database');
 
   const options = { roots: { antigravity: [path.join(root, 'brain')] }, includeDefaults: false };
-  const scan = await scanSessions(options);
-  assert.equal(scan.sessions.length, 1);
-  assert.equal(scan.sessions[0].records.find(record => record.rawId === '7').durationMs, null);
-  assert.equal(scan.sessions[0].records.find(record => record.rawId === '7').outputTokens, 280);
+  const scan = await readTargetSession({ provider: 'antigravity', sessionId: conversation }, options);
+  assert.equal(scan.session.records.find(record => record.rawId === '7').durationMs, null);
+  assert.equal(scan.session.records.find(record => record.rawId === '7').outputTokens, 280);
   assert.ok(scan.warnings.some(([code]) => code === 'notice.antigravity-database-unavailable'));
 });
 

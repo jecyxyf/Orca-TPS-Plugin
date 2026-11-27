@@ -3,10 +3,8 @@ const AVATAR_ORIGIN = 'https://avatars.githubusercontent.com';
 const PROFILE_ORIGIN = 'https://github.com';
 const REDIRECT_CODES = new Set([301, 302, 303, 307, 308]);
 const MAX_IMAGE_BYTES = 32 * 1024;
-const CACHE_ENTRIES = 160;
-const MAX_PENDING = 24, MAX_DOWNLOADS = 3;
-const DOWNLOAD_TIMEOUT = 10_000;
-// A failed avatar may be tried again after one leaderboard sync interval.
+const CACHE_ENTRIES = 80;
+const MAX_PENDING = 24, MAX_DOWNLOADS = 3, DOWNLOAD_TIMEOUT = 10_000;
 const IMAGE_TTL = 24 * 60 * 60_000, RETRY_TTL = 10_000;
 
 export const githubLoginKey = name => typeof name === 'string' &&
@@ -16,25 +14,22 @@ export function createAvatarCache({ fetcher = fetch, now = Date.now, signal }) {
   const cached = new Map(), pending = new Map(), queue = [];
   let downloading = 0;
 
-  async function lookupId(login, signal) {
-    const profile = await fetcher(new URL(`/${login}.png?size=64`, PROFILE_ORIGIN), {
-      credentials: 'omit', redirect: 'manual', signal
-    });
-    try {
-      const location = profile.headers.get('location');
-      if (!REDIRECT_CODES.has(profile.status) || !location) return null;
-      const target = new URL(location);
-      if (target.origin !== AVATAR_ORIGIN) return null;
-      const id = Number(/^\/u\/([1-9]\d*)$/.exec(target.pathname)?.[1]);
-      return Number.isSafeInteger(id) && id > 0 ? id : null;
-    } finally { await profile.body?.cancel(); }
-  }
-
   async function download(login) {
     try {
       const deadline = AbortSignal.timeout(DOWNLOAD_TIMEOUT);
       const downloadSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
-      const id = await lookupId(login, downloadSignal);
+      const profile = await fetcher(new URL(`/${login}.png?size=64`, PROFILE_ORIGIN), {
+        credentials: 'omit', redirect: 'manual', signal: downloadSignal
+      });
+      let id = null;
+      try {
+        const loc = profile.headers.get('location');
+        if (REDIRECT_CODES.has(profile.status) && loc) {
+          const target = new URL(loc);
+          const parsed = target.origin === AVATAR_ORIGIN ? Number(/^\/u\/([1-9]\d*)$/.exec(target.pathname)?.[1]) : 0;
+          if (Number.isSafeInteger(parsed) && parsed > 0) id = parsed;
+        }
+      } finally { await profile.body?.cancel(); }
       if (!id) return null;
       const response = await fetcher(new URL(`/u/${id}?s=64`, AVATAR_ORIGIN), {
         credentials: 'omit', redirect: 'error', signal: downloadSignal
@@ -64,19 +59,15 @@ export function createAvatarCache({ fetcher = fetch, now = Date.now, signal }) {
   function pump() {
     while (downloading < MAX_DOWNLOADS && queue.length) {
       const { login, resolve } = queue.shift();
-      if (signal?.aborted) {
-        pending.delete(login);
-        resolve(null);
-        continue;
-      }
-      downloading += 1;
+      if (signal?.aborted) { pending.delete(login); resolve(null); continue; }
+      downloading++;
       void download(login).then(image => {
         if (!signal?.aborted) {
           cached.set(login, { image, until: now() + (image ? IMAGE_TTL : RETRY_TTL) });
           if (cached.size > CACHE_ENTRIES) cached.delete(cached.keys().next().value);
         }
         pending.delete(login);
-        downloading -= 1;
+        downloading--;
         resolve(image);
         pump();
       });
@@ -89,10 +80,7 @@ export function createAvatarCache({ fetcher = fetch, now = Date.now, signal }) {
     const entry = cached.get(key);
     if (entry) {
       cached.delete(key);
-      if (entry.until > now()) {
-        cached.set(key, entry);
-        return entry.image;
-      }
+      if (entry.until > now()) { cached.set(key, entry); return entry.image; }
     }
     if (pending.has(key)) return pending.get(key);
     if (pending.size >= MAX_PENDING) return null;
@@ -102,6 +90,5 @@ export function createAvatarCache({ fetcher = fetch, now = Date.now, signal }) {
     pump();
     return promise;
   }
-
   return { get };
 }

@@ -37,8 +37,8 @@ test('the manager installation keeps only the required modules and preserves dat
   const bin = path.join(root, 'bin');
   await mkdir(path.join(bin, 'locales'), { recursive: true });
   const bundle = await readTokensManagerBundle();
-  const expected = ['database.mjs', 'harness_parser.mjs', 'harnesses.mjs', 'leaderboard_stats.mjs',
-    'orca_connection.mjs', 'personal_stats.mjs', 'sqlite.mjs', 'token_manager.mjs'];
+  const expected = ['database.mjs', 'harness_collectors.mjs', 'harness_formats.mjs', 'harness_parser.mjs',
+    'harnesses.mjs', 'leaderboard_stats.mjs', 'orca_connection.mjs', 'personal_stats.mjs', 'sqlite.mjs', 'token_manager.mjs'];
   assert.deepEqual(Object.keys(bundle.files).sort(), expected);
   for (const name of ['data.mjs', 'remote-collector.mjs', 'locales/zh-CN.xml', 'version', 'local-addon.mjs']) {
     await writeFile(path.join(bin, name), 'old copy');

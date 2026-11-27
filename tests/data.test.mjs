@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, rm, readFile, appendFile, utimes } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
-import { scanSessions, readTargetSession } from '../src/harness_parser.mjs';
-import { defaultRoots } from '../src/harness_parser.mjs';
+import { defaultRoots, readTargetSession } from '../src/harness_parser.mjs';
 import { createTpsController } from '../src/controller.mjs';
 import { readManagerChannel } from '../src/token_manager.mjs';
 
@@ -30,7 +29,6 @@ test('targeted JSONL lookup finds a conversation older than the latest 100 files
   await utimes(file, 1, 1);
   for (let i = 0; i < 101; i++) await writeFile(path.join(root, `recent-${i}.jsonl`), jsonl(codexRows(`recent-${i}`)));
   const options = { roots: { codex: [root] }, includeDefaults: false };
-  assert.ok(!(await scanSessions(options)).sessions.some(session => session.id === 'codex:old-session'));
   const target = { key: 'pane-old', provider: 'codex', sessionId: 'old-session' };
   const found = await readTargetSession(target, options);
   assert.equal(found.session.id, 'codex:old-session');
@@ -39,15 +37,14 @@ test('targeted JSONL lookup finds a conversation older than the latest 100 files
   assert.equal((await readTargetSession({ ...target, transcriptPath: file }, options)).session.id, 'codex:old-session');
 });
 
-test('targeted JSONL reads verify metadata even after scan cache hits and filename matches', async t => {
+test('targeted JSONL reads verify metadata even after cache hits and filename matches', async t => {
   const root = await fixture(t), file = path.join(root, 'wanted.jsonl');
   const options = { roots: { codex: [root] }, includeDefaults: false };
   await writeFile(file, jsonl(codexRows('different')));
-  await scanSessions(options);
   const target = { provider: 'codex', sessionId: 'wanted', transcriptPath: file };
+  assert.equal((await readTargetSession({ ...target, sessionId: 'different' }, options)).session.id, 'codex:different');
   assert.equal((await readTargetSession(target, options)).session, null);
   assert.equal((await readTargetSession({ ...target, transcriptPath: undefined }, options)).session, null);
-  assert.equal((await readTargetSession({ ...target, sessionId: 'different' }, options)).session.id, 'codex:different');
   // A replacement file must invalidate both the session records and its cached identity.
   await writeFile(file, jsonl(codexRows('wanted', 'replacement-turn')));
   assert.equal((await readTargetSession(target, options)).session.id, 'codex:wanted');
@@ -199,8 +196,6 @@ test('targeted SQLite lookup reads old IDs, separates v1/v2 and never falls back
     insert2.run('idle', 'old', 'idle', 3, '{}', 9000);
   } finally { db.close(); }
   const options = { roots: { opencode: [file] }, includeDefaults: false };
-  // Populate the broad-scan cache before exact lookup; the old v1 session is absent.
-  assert.ok(!(await scanSessions(options)).sessions.some(session => session.id === 'opencode:old'));
   const target = { provider: 'opencode', sessionId: 'old', dbPath: file };
   const v1 = await readTargetSession(target, options);
   assert.equal(v1.session.id, 'opencode:old');
@@ -286,15 +281,16 @@ test('portable defaults respect Windows roaming, Linux XDG homes and CC Switch d
   assert.equal(win.ccSwitchDb, 'C:\\Users\\person\\.cc-switch\\cc-switch.db');
 });
 
-test('scan deduplicates mirrored sessions, reads no credentials and does not expose prompts', async t => {
+test('channel reads deduplicate mirrored sessions, read no credentials and do not expose prompts', async t => {
   const root = await fixture(t), mirror = path.join(root, 'mirror');
   await mkdir(mirror);
   await writeFile(path.join(root, 'rollout.jsonl'), jsonl(codexRows()));
   await writeFile(path.join(mirror, 'copy.jsonl'), jsonl(codexRows()));
   await writeFile(path.join(root, 'auth.json'), '{"secret":"DO_NOT_READ_ME"}');
-  const result = await scanSessions({ roots: { codex: [root] }, includeDefaults: false });
-  assert.equal(result.sessions.length, 1);
-  assert.equal(result.sessions[0].records[0].tokensPerSecond, 100);
+  const result = await readTargetSession({ worktreeId: 'w', worktreePath: '/test', sessions: [] },
+    { roots: { codex: [root] }, includeDefaults: false, ccSwitchDb: null });
+  assert.equal(result.session.records.length, 1);
+  assert.equal(result.session.records[0].tokensPerSecond, 100);
   assert.ok(!JSON.stringify(result).includes('DO_NOT_READ_ME'));
 });
 
@@ -302,12 +298,13 @@ test('changed file invalidates the parse cache while partial final JSON stays un
   const root = await fixture(t), file = path.join(root, 'rollout.jsonl');
   const rows = codexRows();
   await writeFile(file, jsonl(rows.slice(0, 2)));
-  const options = { roots: { codex: [root] }, includeDefaults: false };
-  assert.deepEqual((await scanSessions(options)).sessions[0].records, []);
+  const target = { provider: 'codex', sessionId: 'same-session', transcriptPath: file };
+  const options = { roots: { codex: [root] }, includeDefaults: false, ccSwitchDb: null };
+  assert.deepEqual((await readTargetSession(target, options)).session.records, []);
   await appendFile(file, JSON.stringify(rows[2]));
-  assert.deepEqual((await scanSessions(options)).sessions[0].records, []);
+  assert.deepEqual((await readTargetSession(target, options)).session.records, []);
   await appendFile(file, '\n');
-  assert.equal((await scanSessions(options)).sessions[0].records.length, 1);
+  assert.equal((await readTargetSession(target, options)).session.records.length, 1);
 });
 
 test('JSONL cache preserves truncation warnings without retaining another source warning', async t => {
@@ -318,15 +315,18 @@ test('JSONL cache preserves truncation warnings without retaining another source
     Buffer.from('\n' + jsonl(largeRows.slice(1)))
   ]));
   await writeFile(small, jsonl(codexRows('small-session')));
-  const first = await scanSessions({ roots: { codex: [homedir(), large, small] }, includeDefaults: false });
+  const first = await readTargetSession({ worktreeId: 'w', worktreePath: '/test', sessions: [] },
+    { roots: { codex: [homedir(), large, small] }, includeDefaults: false, ccSwitchDb: null });
   assert.deepEqual(first.warnings, [['notice.invalid-session-folder', 'codex'], ['notice.large-session', 'codex']]);
-  const cachedLarge = await scanSessions({ roots: { codex: [large] }, includeDefaults: false });
+  const cachedLarge = await readTargetSession({ provider: 'codex', sessionId: 'large-session', transcriptPath: large },
+    { includeDefaults: false, ccSwitchDb: null });
   assert.deepEqual(cachedLarge.warnings, [['notice.large-session', 'codex']]);
-  const cachedSmall = await scanSessions({ roots: { codex: [small] }, includeDefaults: false });
+  const cachedSmall = await readTargetSession({ provider: 'codex', sessionId: 'small-session', transcriptPath: small },
+    { includeDefaults: false, ccSwitchDb: null });
   assert.deepEqual(cachedSmall.warnings, []);
 });
 
-test('SQLite scans v2 and v1 separately, stays read-only and reads live WAL', sqliteTestOptions, async t => {
+test('SQLite reads v2 and v1 separately, stays read-only and reads live WAL', sqliteTestOptions, async t => {
   const root = await fixture(t), file = path.join(root, 'opencode.db');
   const db = new DatabaseSync(file);
   try {
@@ -345,11 +345,12 @@ test('SQLite scans v2 and v1 separately, stays read-only and reads live WAL', sq
     insert1.run('u1', 'v1', '{"role":"user"}', 1000);
     insert1.run('a1', 'v1', JSON.stringify({ role: 'assistant', finish: 'stop', tokens: { output: 200, input: 10, cache: { read: 0, write: 0 } }, time: { created: 1000, streamed: 5000, completed: 8000 } }), 1000);
     const before = db.prepare('SELECT count(*) AS n FROM session_message').get().n;
-    const result = await scanSessions({ roots: { opencode: [file] }, includeDefaults: false });
-    assert.deepEqual(result.warnings, []);
-    assert.equal(result.sessions.length, 2);
-    assert.equal(result.sessions.find(value => value.provider === 'opencode2').records[0].tokensPerSecond, 100);
-    assert.equal(result.sessions.find(value => value.provider === 'opencode').records[0].tokensPerSecond, 50);
+    const v2 = await readTargetSession({ provider: 'opencode2', sessionId: 'v2', dbPath: file }, { includeDefaults: false, ccSwitchDb: null });
+    const v1 = await readTargetSession({ provider: 'opencode', sessionId: 'v1', dbPath: file }, { includeDefaults: false, ccSwitchDb: null });
+    assert.deepEqual(v2.warnings, []);
+    assert.deepEqual(v1.warnings, []);
+    assert.equal(v2.session.records[0].tokensPerSecond, 100);
+    assert.equal(v1.session.records[0].tokensPerSecond, 50);
     assert.equal(db.prepare('SELECT count(*) AS n FROM session_message').get().n, before);
   } finally { db.close(); }
 });
@@ -358,10 +359,10 @@ test('unsupported database and missing roots return warnings or empty data, neve
   const root = await fixture(t), file = path.join(root, 'other.db');
   const db = new DatabaseSync(file); db.exec('CREATE TABLE unrelated (id TEXT)'); db.close();
   const bytes = await readFile(file);
-  const result = await scanSessions({ roots: { opencode: [file], pi: [path.join(root, 'missing')] }, includeDefaults: false });
-  assert.deepEqual(result.sessions, []);
+  const result = await readTargetSession({ provider: 'opencode', sessionId: 'any', dbPath: file }, { includeDefaults: false, ccSwitchDb: null });
+  assert.equal(result.session, null);
   assert.ok(result.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
-  const cached = await scanSessions({ roots: { opencode: [file] }, includeDefaults: false });
+  const cached = await readTargetSession({ provider: 'opencode', sessionId: 'any', dbPath: file }, { includeDefaults: false, ccSwitchDb: null });
   assert.deepEqual(cached.warnings, result.warnings);
   assert.deepEqual(await readFile(file), bytes);
 });
@@ -378,13 +379,14 @@ test('SQLite cache retains row truncation without copying warnings from another 
   } finally { db.close(); }
   const other = new DatabaseSync(unsupported);
   try { other.exec('CREATE TABLE unrelated (id TEXT)'); } finally { other.close(); }
-  const first = await scanSessions({ roots: { opencode: [unsupported, large] }, includeDefaults: false });
-  assert.ok(first.warnings.some(([code]) => code === 'notice.opencode-message-limit'));
-  assert.ok(first.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
-  const cachedLarge = await scanSessions({ roots: { opencode: [large] }, includeDefaults: false });
+  const firstLarge = await readTargetSession({ provider: 'opencode', sessionId: 'large', dbPath: large }, { includeDefaults: false, ccSwitchDb: null });
+  const firstOther = await readTargetSession({ provider: 'opencode', sessionId: 'x', dbPath: unsupported }, { includeDefaults: false, ccSwitchDb: null });
+  assert.ok(firstLarge.warnings.some(([code]) => code === 'notice.opencode-message-limit'));
+  assert.ok(firstOther.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
+  const cachedLarge = await readTargetSession({ provider: 'opencode', sessionId: 'large', dbPath: large }, { includeDefaults: false, ccSwitchDb: null });
   assert.deepEqual(cachedLarge.warnings, [['notice.opencode-message-limit']]);
-  const cachedOther = await scanSessions({ roots: { opencode: [unsupported] }, includeDefaults: false });
-  assert.deepEqual(cachedOther.warnings, [['notice.opencode-schema-unavailable']]);
+  const cachedOther = await readTargetSession({ provider: 'opencode', sessionId: 'x', dbPath: unsupported }, { includeDefaults: false, ccSwitchDb: null });
+  assert.ok(cachedOther.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
 });
 
 test('channel target merges registered panes and unregistered CWD sessions across providers while isolating parent worktree', sqliteTestOptions, async t => {

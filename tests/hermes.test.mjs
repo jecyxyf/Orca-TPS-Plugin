@@ -8,13 +8,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
 import { defaultRoots } from '../src/harness_parser.mjs';
 import { discoverUsageUnits, readTargetSession } from '../src/harness_parser.mjs';
-import { leaderboardDay, leaderboardDayStart } from '../src/leaderboard_stats.mjs';
-import { localDayKey } from '../src/personal_stats.mjs';
+import { leaderboardDay, leaderboardDayStart, requestTokens } from '../src/leaderboard_stats.mjs';
 
 const options = root => ({ roots: { hermes: [root] }, includeDefaults: false, ccSwitchDb: null });
 const localTime = clock => {
-  const field = value => String(value).padStart(2, '0');
-  return `${localDayKey(clock.getTime())} ${field(clock.getHours())}:${field(clock.getMinutes())}:${field(clock.getSeconds())},000`;
+  const f = v => String(v).padStart(2, '0');
+  return `${clock.getFullYear()}-${f(clock.getMonth() + 1)}-${f(clock.getDate())} ${f(clock.getHours())}:${f(clock.getMinutes())}:${f(clock.getSeconds())},000`;
 };
 
 const call = (id, { clock = new Date(), session = 'local-hermes', model = 'model-a', cache = '', responseId = 'result-' + id } = {}) =>
@@ -80,13 +79,13 @@ test('Hermes usage preserves all timestamped requests and deduplicates rotations
   const rows = Array.from({ length: 130 }, (_, index) => call(index + 1, { clock: today }));
   await writeFile(file, rows.join(''));
   await writeFile(file + '.1', call(131, { clock: yesterday }) + rows.slice(0, 10).join(''));
-  const units = await discoverUsageUnits(0, { ...options(root), rankDay, rankFrom });
+  const units = await discoverUsageUnits(0, { ...options(root), providers: ['hermes'] });
   assert.equal(units.length, 1);
   const result = await units[0].read();
-  const requests = Object.values(result.days).reduce((total, day) => total + day.hermes['model-a'][0], 0);
-  assert.equal(requests, 131);
-  assert.equal(result.leaderboardFrom, rankFrom);
-  assert.deepEqual(result.leaderboardDays, { [rankDay]: 130 * 556, [rankFrom]: 556 });
+  assert.equal(result.records.length, 131);
+  const byDay = {};
+  for (const r of result.records) { const d = leaderboardDay(r.completedAt); byDay[d] = (byDay[d] ?? 0) + requestTokens(r); }
+  assert.deepEqual(byDay, { [rankDay]: 130 * 556, [rankFrom]: 556 });
   const live = await readTargetSession({ provider: 'hermes', sessionId: 'local-hermes' }, options(root));
   assert.equal(live.session.records.length, 100);
 });

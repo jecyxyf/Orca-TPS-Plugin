@@ -43,13 +43,14 @@
 | `GET /api/tokens-manager/snapshot` | 公开读取近 24、168、720 个完整小时的用量榜和近 24 个完整小时的速度榜 |
 | `GET /api/tokens-manager/snapshot?mode=calendar` | 公开读取北京时间今日、近 7 天、近 30 天用量榜和当日速度榜 |
 
-默认 8 个接收线程并行校验上报。每个线程等到 100 毫秒或攒到 32 个包就批量写入共享内存，写入后回执。一个算榜线程每 3 秒切换缓冲区，只更新收到有效上报的账号。上一轮还在算时，最多保留一个待算任务。
+默认按 CPU 核数自适应 1–4 个接收线程并行校验上报（可通过 `LEADERBOARD_TOKENS_RECEIVERS` 指定）。每个线程等到 100 毫秒或攒到 32 个包就批量写入共享内存，写入后回执。一个算榜线程每 3 秒切换缓冲区，只更新收到有效上报的账号。上一轮还在算时，最多保留一个待算任务。
 
 六张用量榜各留前 1 万名，两张速度榜各留前 100 名。速度成绩超出所在榜单的时间范围后让出名次。每轮裁榜后，掉出全部榜单的账号会从内存移除。漏报沿用最近一次用量成绩，曲线按实际日期和时间展示，缺失点补零。每账号最多合计最近成功上报的 4 台设备，同一设备的代报只算一次。算榜后只保留所需的用量汇总、显示字段和上榜速度记录。插件接口每榜返回前 100 名，按小时和按天的响应各生成一次，供该轮所有读取请求复用。管家启动后每分钟检查一次配置。服务重启后由管家重新上报。
 
 | 环境变量 | 默认值 | 用途 |
 | --- | ---: | --- |
-| `LEADERBOARD_TOKENS_RECEIVERS` | 8 | 并行接收线程数 |
+| `LEADERBOARD_TOKENS_RECEIVERS` | 1–4 | 并行接收线程数（默认 `min(4, max(1, CPU 核数))`） |
+| `LEADERBOARD_TOKENS_BUFFER_MB` | 32 | 每块共享内存缓冲区大小（双缓冲总计 2 倍），单位为 MB |
 | `LEADERBOARD_TOKENS_FLUSH_MS` | 100 | 单个线程的批次最长等待，单位为毫秒 |
 | `LEADERBOARD_TOKENS_PUBLISH_MS` | 3000 | 榜单发布间隔，单位为毫秒 |
 | `LEADERBOARD_TOKENS_SCAN_MS` | 2000 | 管家扫描和互传间隔，单位为毫秒 |
@@ -131,7 +132,6 @@ WantedBy=multi-user.target
 LEADERBOARD_BASE_URL=https://test.itps8.com
 LEADERBOARD_PORT=8788
 LEADERBOARD_STATE_FILE=/var/lib/orca-tps-test/leaderboard.bin
-LEADERBOARD_TOKENS_RECEIVERS=8
 LEADERBOARD_TOKENS_FLUSH_MS=100
 LEADERBOARD_TOKENS_PUBLISH_MS=3000
 LEADERBOARD_TOKENS_SCAN_MS=2000

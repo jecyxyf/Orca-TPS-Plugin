@@ -6,6 +6,8 @@ const NUMBERS = [
   'completedAt', 'createdAtSec', 'freshInputTokens', 'outputTokens', 'cacheReadTokens', 'cacheCreationTokens',
   'durationMs', 'firstTokenMs', 'generationMs', 'tokensPerSecond', 'cacheHitRate'
 ];
+const PREFIX = 'tps:channel:v1:';
+const MEMORY_LIMIT = 16;
 const clean = value => typeof value === 'string' && value.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value);
 const hermesModelId = /^[a-z\d][a-z\d._-]*\/[a-z\d][a-z\d._:-]*$/i;
 
@@ -18,9 +20,7 @@ function panelRecord(record) {
     dataSource: record.dataSource === 'proxy' || (record.provider === 'hermes' && record.dataSource === 'hermes_log')
       ? record.dataSource : 'session_log'
   };
-  for (const field of NUMBERS) {
-    if (Number.isFinite(record[field]) && record[field] >= 0) result[field] = record[field];
-  }
+  for (const field of NUMBERS) if (Number.isFinite(record[field]) && record[field] >= 0) result[field] = record[field];
   if (result.cacheHitRate > 1) delete result.cacheHitRate;
   if (clean(record.model) && record.model.length <= 128 &&
       (!/[/\\]/.test(record.model) || (record.provider === 'hermes' && hermesModelId.test(record.model)))) {
@@ -31,16 +31,11 @@ function panelRecord(record) {
   return result;
 }
 
-const PREFIX = 'tps:channel:v1:';
-const MEMORY_LIMIT = 64;
 const cleanRecords = records => recentRecords(records.map(panelRecord), 100);
-
-function sameRecords(before, after) {
-  return before.length === after.length && after.every((row, index) => {
-    const previous = before[index], keys = Object.keys(row);
-    return keys.length === Object.keys(previous).length && keys.every(key => row[key] === previous[key]);
-  });
-}
+const sameRecords = (before, after) => before.length === after.length && after.every((row, index) => {
+  const prev = before[index], keys = Object.keys(row);
+  return keys.length === Object.keys(prev).length && keys.every(key => row[key] === prev[key]);
+});
 
 // Persist only numeric/label data used by the panel, keyed by its opaque project ID.
 export function createChannelCache(storage, { now = Date.now, panels } = {}) {
@@ -59,8 +54,7 @@ export function createChannelCache(storage, { now = Date.now, panels } = {}) {
     const pending = (async () => {
       if (writes.has(key)) await writes.get(key);
       let stored;
-      try { stored = panels ? panels.readPanel('current-data', key)?.value : await storage.get(PREFIX + key); }
-      catch { /* A damaged or unavailable cache can be rebuilt. */ }
+      try { stored = panels ? panels.readPanel('current-data', key)?.value : await storage.get(PREFIX + key); } catch {}
       if (entries.has(key)) return entries.get(key);
       if (!Number.isFinite(stored?.updatedAt) || !Array.isArray(stored.records)) return remember(key, null);
       const records = stored.records.slice(0, 100).flatMap(row => {
@@ -74,21 +68,17 @@ export function createChannelCache(storage, { now = Date.now, panels } = {}) {
   }
 
   function set(key, records, { display = true } = {}) {
-    const normalized = cleanRecords(records);
-    const previous = entries.get(key);
+    const normalized = cleanRecords(records), previous = entries.get(key);
     const unchanged = previous && sameRecords(previous.records, normalized);
     if (unchanged && !(panels && display)) return remember(key, previous);
     const announcedAt = now();
     const snapshot = remember(key, unchanged ? previous : { records: normalized, updatedAt: announcedAt });
-    if (panels && display) {
-      try { panels.publishPanel('current-data', key, snapshot, announcedAt); }
-      catch { /* The live view still has its last successful result. */ }
+    if (panels) {
+      if (display) try { panels.publishPanel('current-data', key, snapshot, announcedAt); } catch {}
+      return snapshot;
     }
-    if (panels) return snapshot;
-    const write = (writes.get(key) ?? Promise.resolve())
-      .then(() => storage.set(PREFIX + key, snapshot))
-      .catch(() => {})
-      .finally(() => { if (writes.get(key) === write) writes.delete(key); });
+    const write = (writes.get(key) ?? Promise.resolve()).then(() => storage.set(PREFIX + key, snapshot))
+      .catch(() => {}).finally(() => { if (writes.get(key) === write) writes.delete(key); });
     writes.set(key, write);
     return snapshot;
   }

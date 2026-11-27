@@ -14,7 +14,8 @@ import { openLeaderboardStore } from '../server/store.mjs';
 import { openLocalUsageDb } from '../src/local-usage-db.mjs';
 import { startLeaderboard } from '../src/leaderboard.mjs';
 import { createWindowViews } from '../src/leaderboard-windows.mjs';
-import { HOUR_MS, TOKENS_DEFAULT_INTERVALS, hourStart, leaderboardDay, leaderboardDayStart } from '../src/leaderboard_stats.mjs';
+import { openTokensManagerDb } from '../src/database.mjs';
+import { HOUR_MS, TOKENS_DEFAULT_INTERVALS, hourStart, leaderboardDay, leaderboardDayStart, makeLeaderboardPacket } from '../src/leaderboard_stats.mjs';
 import { createAvatarCache } from '../src/leaderboard-avatars.mjs';
 import { discoverUsageUnits } from '../src/harness_parser.mjs';
 
@@ -733,20 +734,22 @@ test('an offline logout survives a restart and revokes only the old session', { 
   assert.ok(!secrets.get(SESSION_SECRET).includes(oldToken));
 });
 
-test('usage discovery passes only completed recent requests from the same local and remote parser path', async t => {
+test('usage discovery passes completed recent requests into the leaderboard packet', async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'tps-recent-usage-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const now = Date.now(), day = leaderboardDay(now);
+  const now = Date.now();
   const row = (id, at, output) => ({ id, type: 'message', timestamp: new Date(at).toISOString(),
     message: { role: 'assistant', model: 'sample', timestamp: at - 2000, usage: { input: 50, output, cacheRead: 10, cacheWrite: 5 } } });
   await writeFile(path.join(dir, 'sample.jsonl'), [
-    { type: 'session', id: 'sample', cwd: dir }, row('old', now - 310_000, 500), row('new', now - 1000, 400)
+    { type: 'session', id: 'sample', cwd: dir }, row('old', now - 26 * HOUR_MS, 500), row('new', now - 1000, 400)
   ].map(message => JSON.stringify(message)).join('\n') + '\n');
-  const [unit] = await discoverUsageUnits(now - 600_000, {
-    roots: { pi: [dir] }, includeDefaults: false, rankDay: day, includeRecent: true
-  });
-  const { recent } = await unit.read();
-  assert.equal(recent.length, 1);
-  assert.match(recent[0][0], /^[a-f0-9]{24}$/);
-  assert.deepEqual(recent[0].slice(1), [now - 1000, 465, 200, 'sample', 'pi']);
+  const [unit] = await discoverUsageUnits(now - 30 * HOUR_MS, { roots: { pi: [dir] }, includeDefaults: false, providers: ['pi'] });
+  const { records } = await unit.read();
+  const db = openTokensManagerDb(path.join(dir, 'mgr'), { timeZone: 'UTC', now: () => now });
+  t.after(() => db.close());
+  db.commitSource(unit.key, unit.stamp, records, now);
+  const packet = makeLeaderboardPacket(db, 1, now);
+  assert.equal(packet.samples.length, 1);
+  assert.match(packet.samples[0][0], /^[a-f0-9]{24}$/);
+  assert.deepEqual(packet.samples[0].slice(1), [now - 1000, 465, 200, 'sample', 'pi']);
 });
