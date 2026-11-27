@@ -3,7 +3,6 @@ import { createReadStream } from 'node:fs';
 import { open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 import { setImmediate as yieldToRequests, setTimeout as delay } from 'node:timers/promises';
 import * as zlib from 'node:zlib';
@@ -145,36 +144,81 @@ async function fileUnit(provider, file, cutoff, read, { companions = [], databas
   };
 }
 
-async function readJsonLines(file, bytes, consume, signal) {
-  if (!bytes) return true;
-  return readJsonChunks(createReadStream(file, { end: bytes - 1, signal }), consume);
+/** Reads the first `size` bytes through one reused buffer, so a long scan does not leave a trail of chunk buffers. */
+async function* fileChunks(file, size, signal) {
+  const handle = await open(file, 'r');
+  try {
+    const buffer = Buffer.allocUnsafe(Math.min(size, 256 * 1024));
+    for (let position = 0; position < size;) {
+      signal?.throwIfAborted();
+      const { bytesRead } = await handle.read(buffer, 0, Math.min(buffer.length, size - position), position);
+      if (!bytesRead) return;
+      position += bytesRead;
+      yield buffer.subarray(0, bytesRead);
+    }
+  } finally { await handle.close(); }
 }
 
-async function readJsonChunks(chunks, consume) {
-  let carry = Buffer.alloc(0), skipping = false, byteOffset = 0, lineStart = 0;
+async function readJsonLines(file, bytes, consume, signal) {
+  return !bytes || readJsonChunks(fileChunks(file, bytes, signal), consume);
+}
+
+const COMPACT_STRING_BYTES = 4096;
+
+/**
+ * Rewrites a JSON line in place with every string longer than `limit` bytes replaced by "~". Tool output and
+ * pasted files can make one line megabytes long; the session parsers only read short fields.
+ */
+function compactJson(bytes, limit) {
+  let write = 0, read = 0;
+  while (read < bytes.length) {
+    const quote = bytes.indexOf(34, read), stop = quote < 0 ? bytes.length : quote + 1;
+    write += bytes.copy(bytes, write, read, stop);
+    if (quote < 0) break;
+    let end = stop;
+    for (;; end++) {
+      end = bytes.indexOf(34, end);
+      if (end < 0) end = bytes.length;
+      let slashes = 0;
+      while (bytes[end - 1 - slashes] === 92) slashes++;
+      if (end === bytes.length || slashes % 2 === 0) break;
+    }
+    if (end - stop > limit) bytes[write++] = 126;
+    else write += bytes.copy(bytes, write, stop, end);
+    if (end < bytes.length) bytes[write++] = 34;
+    read = end + 1;
+  }
+  return bytes.subarray(0, write);
+}
+
+/** Calls consume(row, lineOffset) for every JSON object line and reports whether the data ended on a whole row. */
+async function readJsonChunks(chunks, consume, { compactAt = 0, maxLine = MAX_LINE, pace } = {}) {
+  let carry = [], carried = 0, skipping = false, offset = 0, lineStart = 0;
+  const parse = bytes => json((compactAt && bytes.length > compactAt ? compactJson(bytes, compactAt) : bytes).toString('utf8'));
   for await (const chunk of chunks) {
     let start = 0;
     for (let end = chunk.indexOf(10); end >= 0; end = chunk.indexOf(10, start)) {
-      if (!skipping && carry.length + end - start <= MAX_LINE) {
-        const line = chunk.subarray(start, end);
-        const row = json((carry.length ? Buffer.concat([carry, line]) : line).toString('utf8'));
-        if (row) consume(row, lineStart);
-      }
-      carry = Buffer.alloc(0);
+      const row = skipping || carried + end - start > maxLine ? null
+        : parse(carried ? Buffer.concat([...carry, chunk.subarray(start, end)]) : chunk.subarray(start, end));
+      if (row) consume(row, lineStart);
+      carry = [];
+      carried = 0;
       skipping = false;
       start = end + 1;
-      lineStart = byteOffset + start;
+      lineStart = offset + start;
     }
-    if (!skipping) {
-      const tail = chunk.subarray(start);
-      if (carry.length + tail.length > MAX_LINE) { carry = Buffer.alloc(0); skipping = true; }
-      else if (tail.length) carry = carry.length ? Buffer.concat([carry, tail]) : tail;
+    const tail = chunk.subarray(start);
+    if (carried + tail.length > maxLine) [carry, carried, skipping] = [[], 0, true];
+    else if (!skipping && tail.length) {
+      carry.push(Buffer.from(tail));
+      carried += tail.length;
     }
-    byteOffset += chunk.length;
+    offset += chunk.length;
+    await pace?.(chunk.length);
   }
-  const text = carry.toString('utf8');
-  if (!text.trim()) return !skipping;
-  const last = json(text);
+  const text = Buffer.concat(carry);
+  if (!text.toString('utf8').trim()) return !skipping;
+  const last = parse(text);
   if (last) consume(last, lineStart);
   return Boolean(last);
 }
@@ -1356,8 +1400,6 @@ async function walkRecentJsonl(root, cutoffMs, onUnavailable) {
   return found;
 }
 
-const USAGE_STREAM_BATCH_ROWS = 2_000;
-const USAGE_CHUNK_BYTES = 1024 * 1024;
 
 function readPacer() {
   let spent = 0;
@@ -1368,45 +1410,16 @@ function readPacer() {
   };
 }
 
-/** Only complete lines contribute. Keep in-progress parser state across paced reads. */
-async function streamCompleteText(file, onChunk, pace) {
-  const decoder = new StringDecoder('utf8');
-  let carry = '', read = 0;
-  const metadata = await stat(file);
-  if (!metadata.size) return true;
-  for await (const chunk of createReadStream(file, { highWaterMark: USAGE_CHUNK_BYTES, end: metadata.size - 1 })) {
-    const text = carry + decoder.write(chunk), end = text.lastIndexOf('\n') + 1;
-    if (end) await onChunk(text.slice(0, end));
-    carry = text.slice(end);
-    read += chunk.length;
-    await pace(chunk.length);
-  }
-  if (read !== metadata.size) throw new Error('TPS usage file changed while reading');
-  if (carry.trim()) {
-    if (!parsedRow(carry)) return false;
-    await onChunk(carry + '\n');
-  }
-  return true;
-}
-
-async function streamJsonRows(file, onBatch, pace) {
-  return streamCompleteText(file, async text => {
-    let batch = [];
-    for (const line of text.split('\n')) {
-      const row = parsedRow(line);
-      if (row) batch.push(row);
-      if (batch.length >= USAGE_STREAM_BATCH_ROWS) {
-        onBatch(batch);
-        batch = [];
-        await yieldToRequests();
-      }
-    }
-    if (batch.length) onBatch(batch);
-  }, pace);
-}
-
-function parsedRow(line) {
-  try { return object(JSON.parse(line)); } catch { return null; }
+/** Session logs stream through the incremental parsers; long text never becomes one JavaScript string. */
+async function readSessionRows(file, consume, pace, compact = true) {
+  const { size } = await stat(file);
+  if (!size) return true;
+  let read = 0;
+  const complete = await readJsonChunks(fileChunks(file, size), consume, {
+    compactAt: compact ? COMPACT_STRING_BYTES : 0, maxLine: Infinity, pace: bytes => { read += bytes; return pace(bytes); }
+  });
+  if (read !== size) throw new Error('TPS usage file changed while reading');
+  return complete;
 }
 
 /** Codex keeps its session id and folder in the first session_meta row. */
@@ -1416,7 +1429,7 @@ async function codexHeader(file) {
     const size = Math.min(MAX_HEADER_BYTES, (await handle.stat()).size);
     const buffer = Buffer.alloc(size), { bytesRead } = await handle.read(buffer, 0, size, 0);
     for (const line of buffer.subarray(0, bytesRead).toString('utf8').split('\n').slice(0, 30)) {
-      const payload = object(parsedRow(line)?.type === 'session_meta' ? parsedRow(line).payload : null);
+      const row = json(line), payload = row?.type === 'session_meta' ? object(row.payload) : null;
       if (payload) return { sessionId: shortText(payload.id), cwd: shortText(payload.cwd) };
     }
     return {};
@@ -1444,7 +1457,7 @@ function usageResult(days, rank) {
 async function addCodexStreamRecords(days, file, minDay, leaderboardDays, pace = readPacer()) {
   const { sessionId = null, cwd } = await codexHeader(file);
   const parser = createCodexParser(sessionId, { limit: Infinity });
-  const complete = await streamJsonRows(file, batch => parser.feed(batch), pace);
+  const complete = await readSessionRows(file, row => parser.feed([row]), pace);
   if (leaderboardDays?.records && !complete) leaderboardDays.complete = false;
   const records = parser.finish();
   accumulateRecords(days, 'codex', leaderboardDays?.records
@@ -1456,7 +1469,7 @@ async function addFileRecords(days, provider, file, minDay, isSubagent, leaderbo
   if (!metadata.isFile()) throw new Error('not_a_regular_file');
   if (metadata.size > USAGE_MAX_FILE_BYTES) throw Object.assign(new Error('session_file_too_large'), { code: 'too_large' });
   const cursor = createJsonlCursor('', provider, '', { isSubagent, limit: Infinity });
-  const complete = await streamCompleteText(file, text => cursor.feed(text), pace);
+  const complete = await readSessionRows(file, row => cursor.add(row), pace);
   if (leaderboardDays?.records && !complete) leaderboardDays.complete = false;
   const sessionId = cursor.sessionId ?? fallback.sessionId ?? null;
   const cwd = cursor.cwd ?? fallback.cwd ?? null;
@@ -1496,7 +1509,7 @@ async function fileUsageUnit(provider, file, rankWindow, onUnavailable, excludeO
         let first;
         try { first = (await readAt(handle, 0, 4096)).toString('utf8').split('\n', 1)[0]; }
         finally { await handle.close(); }
-        if (parsedRow(first)?.type === 'title') return usageResult(days, rank);
+        if (json(first)?.type === 'title') return usageResult(days, rank);
       }
       const pace = readPacer();
       if (provider === 'codex') await addCodexStreamRecords(days, file.path, minDay, rank, pace);
@@ -1604,7 +1617,8 @@ async function readAntigravityUsage(transcript, conversationId, rankWindow) {
   const days = {}, rank = rankedUsage(rankWindow);
   const native = await readAntigravityTimings(transcript);
   const cursor = createJsonlCursor('', 'antigravity', '', { sessionId: conversationId, limit: Infinity });
-  const complete = await streamCompleteText(transcript, text => cursor.feed(text), readPacer());
+  // Antigravity reads its model switches from message text, so its long strings stay whole.
+  const complete = await readSessionRows(transcript, row => cursor.add(row), readPacer(), false);
   if (rank?.records && !complete) rank.complete = false;
   const records = cursor.finish(native);
   const cwd = rank?.records ? await antigravityWorkspace(transcript, process.platform).catch(() => null) : null;
@@ -2575,11 +2589,11 @@ export function createJsonlCursor(text, provider, headerText = '', options = {})
   return {
     get sessionId() { return metadata.sessionId; },
     get cwd() { return metadata.cwd; },
-    feed(chunkText) {
-      const fed = jsonlRows(chunkText);
-      updateJsonlMetadata(metadata, fed, provider, options);
-      parser?.feed(fed);
+    add(row) {
+      updateJsonlMetadata(metadata, [row], provider, options);
+      parser?.feed([row]);
     },
+    feed(text) { for (const row of jsonlRows(text)) this.add(row); },
     finish: native => parser?.finish(native) ?? []
   };
 }
