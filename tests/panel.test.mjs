@@ -132,7 +132,8 @@ test('per-request card renders rocket icon, TPS value, and tokens/s unit on a si
 test('panel resolves per-record agent label from record.provider', async () => {
   const html = await readFile(panelPath, 'utf8');
   assert.match(html, /agentLabel\(\s*record\.provider\s*\)/, 'recordCard must pass record.provider to agentLabel');
-  assert.match(html, /function\s+agentLabel\(\s*provider\s*\)/, 'agentLabel must accept per-record provider override');
+  assert.match(html, /const agentLabel = provider => AGENT_LABELS\[provider \|\| current\?\.activeSession\?\.provider\]/,
+    'agentLabel must accept per-record provider override');
 });
 
 test('the panel title has a logo and Current Data shows the countdown icon and update time without a refresh button', async () => {
@@ -194,12 +195,12 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.ok(html.indexOf('.war-tabs {') < html.indexOf('.model-sort-tabs {'), '.model-sort-tabs must follow .war-tabs in cascade');
   const sortTabs = /<div class="war-tabs model-sort-tabs"[\s\S]*?<\/div>/.exec(html)?.[0] ?? '';
   assert.equal((sortTabs.match(/<svg\b/g) ?? []).length, 2);
-  assert.match(html, /function harnessBadge\(provider/);
-  assert.match(html, /head\.append\(rank\);[\s\S]*?head\.append\(harnessBadge\(provider, 18\)\)[\s\S]*?head\.append\(model, value\)/);
+  assert.match(html, /const harnessBadge = \(provider, size = 18\) =>/);
+  assert.match(html, /el\('span\.rank-index'[\s\S]*?\.\.\.icons\.values\(\),[\s\S]*?el\('span\.war-model'[\s\S]*?el\('span\.rank-tps'/);
   assert.match(html, /function warMetaMetric\(kind/);
   assert.match(html, /requests:\s*\['M4 9h16'/);
   assert.match(html, /speed:\s*\['M13 2 4 14h7l-1 8 9-12h-7l1-8Z'\]/);
-  assert.match(html, /warMetaMetric\('requests'[\s\S]*?warMetaMetric\('speed'/);
+  assert.match(html, /const requestsMetric = count => warMetaMetric\('requests'[\s\S]*?warMetaMetric\('speed'/);
   assert.doesNotMatch(html, /id="heat-sub"|id="heat-months"|id="heat-scroll"|class="heat-foot"|class="heat-legend"|heat-month-tile/);
   assert.match(html, /const HEAT_DAYS = 365;/);
   assert.match(html, /date\.setDate\(today\.getDate\(\) - offset\)/);
@@ -214,9 +215,9 @@ test('Personal Stats and the Leaderboard show calendar mode first and select it 
   assert.equal(css.get('.heat-cell.lv4')?.['clip-path'], undefined);
   assert.equal(css.get('.heat-tip')['white-space'], 'nowrap');
   assert.equal(css.get('.heat-tip').width, 'max-content');
-  assert.match(html, /heatTip\.style\.left = '0px';\s*heatTip\.hidden = false;/);
+  assert.match(html, /heatTip\.hidden = !cell[\s\S]*?heatTip\.style\.left = '0px';[\s\S]*?heatTip\.offsetWidth/);
   assert.match(html, /@keyframes star-fall\b[\s\S]*?@keyframes star-twinkle\b[\s\S]*?@keyframes star-ripple\b/);
-  assert.match(html, /function playStarMapIntro\(\)/);
+  assert.match(html, /restartClass\(byId\('heat-grid'\), 'is-waking'\)/);
   assert.match(html, /clearTimeout\(starIntroTimer\)/);
   assert.match(css.get('.heat-cell.lv2').animation, /star-twinkle/);
   for (const name of ['star-twinkle', 'star-twinkle-bright']) {
@@ -267,7 +268,10 @@ test('model usage rows show the speed icon with a value or a dash', async () => 
     /const numeric = [^\n]+/,
     /function number\(value, fraction = 0\) \{[\s\S]*?\n      \}/,
     /function speedText\(tps\) \{[\s\S]*?\n      \}/,
+    /const SVG_NS = [^\n]+/,
+    /function el\(spec[\s\S]*?\n    \}/,
     /function warMetaMetric\([\s\S]*?\n      \}/,
+    /const requestsMetric = [\s\S]*?\);\r?\n/,
     /function usageRow\([\s\S]*?\n      \}/
   ].map(pattern => pattern.exec(html)?.[0]);
   assert.ok(sources.every(Boolean));
@@ -333,7 +337,9 @@ test('Personal Stats counts up top totals and shows model deltas before counting
   const helpers = /const USAGE_COUNT_MS = [\s\S]*?(?=\n      const usageGroup = byId\('usage'\);)/.exec(html)?.[0];
   const funcs = /function setNodeText\([\s\S]*?(?=\n      const usageRangeTabs = )/.exec(html)?.[0];
   const syncFn = /function syncUsageTotal\([\s\S]*?\n      \}/.exec(html)?.[0];
-  assert.ok(helpers && funcs && syncFn);
+  const domHelpers = [/const SVG_NS = [^\n]+/, /function el\(spec[\s\S]*?\n    \}/, /function restartClass\([\s\S]*?\n    \}/]
+    .map(pattern => pattern.exec(html)?.[0]);
+  assert.ok(helpers && funcs && syncFn && domHelpers.every(Boolean));
 
   const frames = [];
   const makeNode = (text = '') => {
@@ -357,7 +363,7 @@ test('Personal Stats counts up top totals and shows model deltas before counting
         return [];
       },
       addEventListener() {},
-      setAttribute() {},
+      setAttribute(name, value) { if (name === 'class') this.className = value; },
       remove() {}
     };
     return node;
@@ -371,6 +377,7 @@ test('Personal Stats counts up top totals and shows model deltas before counting
   usageGroup.hidden = false;
   const run = new Function('document', 'usageGroup', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance', 'numeric', `
     let disposed = false;
+    ${domHelpers.join('\n')}
     ${helpers}
     ${funcs}
     ${syncFn}
@@ -1006,10 +1013,12 @@ test('top-right header places language picker beside settings gear and modal off
   const template = /<template id="record-template">([\s\S]*?)<\/template>/.exec(html)?.[1] ?? '';
   assert.doesNotMatch(template, /data-testid="agent"|class="agent"/);
   assert.match(template, /class="model-icon"[^>]*data-testid="harness-icon"[\s\S]*?<use[^>]*href="#harness-default"/);
+  const sprite = await readFile(path.join(path.dirname(panelPath), 'harness-icons.svg'), 'utf8');
+  assert.match(html, /<svg id="harness-sprite"[^>]*><\/svg>/);
+  assert.match(html, /if \(typeof icons === 'string'\) byId\('harness-sprite'\)\.innerHTML = icons;/);
   for (const id of ['claude', 'claude-desktop', 'codex', 'gemini', 'grokbuild', 'opencode', 'openclaw', 'hermes', 'pi', 'mcode', 'kimi', 'omp', 'antigravity', 'copilot', 'workbuddy', 'dsh', 'default']) {
-    assert.match(html, new RegExp(`<symbol id="harness-${id}"`));
+    assert.match(sprite, new RegExp(`<symbol id="harness-${id}"`));
   }
-  const sprite = /<svg id="harness-sprite"[\s\S]*?<\/svg>/.exec(html)?.[0] ?? '';
   assert.doesNotMatch(sprite, /#f7f8fa|color="#202938"/);
   const codex = /<symbol id="harness-codex"[\s\S]*?<\/symbol>/.exec(sprite)?.[0] ?? '';
   assert.doesNotMatch(codex, /fill="#fff"/);

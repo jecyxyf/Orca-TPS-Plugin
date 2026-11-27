@@ -24,8 +24,10 @@ export default async function activate(orca) {
   const migrationGuid = db.loadCollection(Date.now()).deviceGuid;
   const deviceGuid = validInstallationId(migrationGuid) ? migrationGuid : await orca.storage.get(INSTALLATION_KEY);
   const language = locales = await createLocalePreferences(orca.storage);
-  registrations.push(orca.panels.handle('tps.locale', payload => payload?.code === undefined
-    ? { ...language.response(true), pluginVersion: manifest.version }
+  const icons = readFile(new URL('./harness-icons.svg', import.meta.url), 'utf8')
+    .then(text => text.replace(/^<svg[^>]*>|<\/svg>\s*$/g, '')).catch(() => '');
+  registrations.push(orca.panels.handle('tps.locale', async payload => payload?.code === undefined
+    ? { ...language.response(true), pluginVersion: manifest.version, icons: await icons }
     : language.select(payload.code, () => { void controller?.refreshLocale(); })));
   stopPanelView = registerPanelView(orca, language.t);
   const localEnv = await readFile(new URL('../.env.leaderboard.local', import.meta.url), 'utf8').catch(() => '');
