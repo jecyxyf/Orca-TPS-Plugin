@@ -11,7 +11,14 @@ import {
   antigravityStepStart,
   parseJsonl
 } from '../src/harness_parser.mjs';
-import { scanSessions, readTargetSession } from '../src/harness_parser.mjs';
+import { discoverUsageUnits, normalizeComparePath } from '../src/harness_parser.mjs';
+
+// The manager stores these records and serves each channel by folder or session.
+async function antigravityRecords(brain) {
+  const units = await discoverUsageUnits(0, { roots: { antigravity: [brain] }, includeDefaults: false, includeRecords: true,
+    providers: ['antigravity'] });
+  return { units, records: (await Promise.all(units.map(unit => unit.read()))).flatMap(result => result.records) };
+}
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import('node:sqlite')); }
@@ -165,7 +172,7 @@ test('with the native store, rows carry model, exact latency, TTFT, and session-
   assert.equal(parsed.records.find(item => item.rawId === '9').durationMs, null);
 });
 
-test('discovery and targeted reads join the transcript with the native conversation store', sqliteTestOptions, async t => {
+test('discovery joins the transcript with the native conversation store', sqliteTestOptions, async t => {
   const root = await fixture(t), conversation = 'a1b2c3d4-0000-4000-8000-00000000abcd';
   const logs = path.join(root, 'brain', conversation, '.system_generated', 'logs');
   await mkdir(logs, { recursive: true });
@@ -182,21 +189,17 @@ test('discovery and targeted reads join the transcript with the native conversat
   db.prepare('INSERT INTO gen_metadata VALUES (?, ?)').run(3, generationData({ display: 'Gemini 3.8 Flash (High)', firstTokenMs: 2804, streamMs: 4 }));
   db.close();
 
-  const options = { roots: { antigravity: [path.join(root, 'brain')] }, includeDefaults: false };
-  const scan = await scanSessions(options);
-  assert.deepEqual(scan.sessions.map(session => session.id), [`antigravity:${conversation}`]);
-  const scanned = scan.sessions[0].records.find(record => record.rawId === '7');
+  const { units, records } = await antigravityRecords(path.join(root, 'brain'));
+  assert.equal(units.length, 1, 'rotated transcript copies are not counted');
+  const scanned = records.find(record => record.rawId === '7');
+  assert.equal(scanned.sessionId, conversation);
   assert.equal(scanned.model, 'gemini-3.8-flash-high');
   assert.equal(scanned.durationMs, 2808);
-  assert.ok(!JSON.stringify(scan).includes('PRIVATE-PAYLOAD'), 'step payloads must never be read');
-
-  const found = await readTargetSession({ provider: 'antigravity', sessionId: conversation }, options);
-  assert.equal(found.session.id, `antigravity:${conversation}`);
-  assert.equal(found.session.records.find(record => record.rawId === '7').firstTokenMs, 2804);
-  assert.equal((await readTargetSession({ provider: 'antigravity', sessionId: 'missing' }, options)).session, null);
+  assert.equal(scanned.firstTokenMs, 2804);
+  assert.ok(!JSON.stringify(records).includes('PRIVATE-PAYLOAD'), 'step payloads must never be read');
 });
 
-test('a conversation without a readable native store keeps tokens and warns instead of guessing', sqliteTestOptions, async t => {
+test('a conversation without a readable native store keeps tokens instead of guessing', sqliteTestOptions, async t => {
   const root = await fixture(t), conversation = 'b1b2c3d4-0000-4000-8000-00000000abcd';
   const logs = path.join(root, 'brain', conversation, '.system_generated', 'logs');
   await mkdir(logs, { recursive: true });
@@ -204,12 +207,10 @@ test('a conversation without a readable native store keeps tokens and warns inst
   await writeFile(path.join(logs, 'transcript.jsonl'), jsonl(transcriptRows()));
   await writeFile(path.join(root, 'conversations', `${conversation}.db`), 'not a sqlite database');
 
-  const options = { roots: { antigravity: [path.join(root, 'brain')] }, includeDefaults: false };
-  const scan = await scanSessions(options);
-  assert.equal(scan.sessions.length, 1);
-  assert.equal(scan.sessions[0].records.find(record => record.rawId === '7').durationMs, null);
-  assert.equal(scan.sessions[0].records.find(record => record.rawId === '7').outputTokens, 280);
-  assert.ok(scan.warnings.some(([code]) => code === 'notice.antigravity-database-unavailable'));
+  const { units, records } = await antigravityRecords(path.join(root, 'brain'));
+  assert.equal(units.length, 1);
+  assert.equal(records.find(record => record.rawId === '7').durationMs, null);
+  assert.equal(records.find(record => record.rawId === '7').outputTokens, 280);
 });
 
 test('project TPS discovers unregistered Antigravity sessions by their saved workspace', sqliteTestOptions, async t => {
@@ -229,10 +230,8 @@ test('project TPS discovers unregistered Antigravity sessions by their saved wor
       db.prepare("INSERT INTO trajectory_metadata_blob VALUES ('main', ?)").run(metadata);
     } finally { db.close(); }
   }
-  const result = await readTargetSession({ worktreePath: selected, worktreeId: 'selected', sessions: [] },
-    { roots: { antigravity: [brain] }, includeDefaults: false });
-  assert.deepEqual(result.warnings, []);
-  assert.equal(result.session.records.length, parseJsonl(jsonl(transcriptRows()), 'antigravity', '', { sessionId: 'selected' }).records.length);
-  assert.ok(result.session.records.length > 0);
-  assert.ok(result.session.records.every(record => record.provider === 'antigravity'));
+  const project = (await antigravityRecords(brain)).records.filter(record => record.cwd === normalizeComparePath(selected));
+  assert.equal(project.length, parseJsonl(jsonl(transcriptRows()), 'antigravity', '', { sessionId: 'selected' }).records.length);
+  assert.ok(project.length > 0);
+  assert.ok(project.every(record => record.provider === 'antigravity' && record.sessionId === 'selected'));
 });

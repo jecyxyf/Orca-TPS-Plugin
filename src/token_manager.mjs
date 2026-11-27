@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { bridgeOrca, createManagerLinks, createOrcaConnection, createSnapshotSender, MANAGER_PROTOCOL_VERSION, MESSAGE,
   TOKENS_LEASE_MS, TOKENS_ROOT } from './orca_connection.mjs';
 import { channelProvider, openRemoteDeviceCache, openTokensManagerDb } from './database.mjs';
-import { enrichChannelRecords, HarnessParser, normalizeComparePath, readTargetSession } from './harness_parser.mjs';
+import { enrichChannelRecords, HarnessParser, normalizeComparePath } from './harness_parser.mjs';
 import { calendarFor, makePersonalPacket, mergePersonalPackets, RETENTION_DAYS } from './personal_stats.mjs';
 import { HOUR_MS, leaderboardPacketFromPersonal, makeLeaderboardPacket, SPEED_SAMPLE_WINDOW_MS, SPEED_WINDOW_MS, TOKENS_LEADERBOARD,
   tokensIntervals, validInstallationId } from './leaderboard_stats.mjs';
@@ -189,11 +189,11 @@ export async function runTokensManager(root = TOKENS_ROOT, { clock = Date.now, s
 
 const harnessParser = new HarnessParser();
 
-export async function scanTokens(_root, db, { at = Date.now(), signal, progress = () => {} } = {}) {
+export async function scanTokens(_root, db, { at = Date.now(), signal, progress = () => {}, roots } = {}) {
   const cutoff = Date.parse(db.calendar.dayAgo(at, RETENTION_DAYS - 1)) - DAY_MS;
   let total = 0;
   for await (const { key, stamp, records } of harnessParser.readSince(cutoff, {
-    signal,
+    signal, roots,
     needsRead: source => db.sourceStamp(source.key) !== source.stamp,
     progress(event) {
       total = event.total;
@@ -209,22 +209,32 @@ export async function scanTokens(_root, db, { at = Date.now(), signal, progress 
 export async function readManagerChannel(db, target) {
   const sessions = target.sessions ?? (target.sessionId ? [{ provider: target.provider, sessionId: target.sessionId }] : []);
   const records = db.channelDetails(normalizeComparePath(target.worktreePath), sessions);
-  const fallback = records.length < 100
-    ? await readTargetSession(target, { ccSwitchDb: null, includeUsageRecords: true }).catch(() => null) : null;
-  const combined = new Map();
-  for (const row of [...(fallback?.usageRecords ?? []), ...records]) {
-    combined.set(JSON.stringify([channelProvider(row.provider), row.sessionId, row.id, row.completedAt]), row);
-  }
-  const display = (await enrichChannelRecords([...combined.values()], sessions))
-    .map(({ cwd, project, sessionId, ...record }) => record);
+  const display = (await enrichChannelRecords(records, sessions)).map(({ cwd, project, sessionId, ...record }) => record);
   return { session: {
     id: `channel:${target.worktreeId || target.key || 'active'}`, provider: 'channel', title: target.title,
     updatedAt: Date.now(), records: display
   }, warnings: [] };
 }
 
+// Orca names each pane's log; folders outside the default roots join later scans.
+function rememberRoots(roots, target) {
+  let added = false;
+  for (const { provider, transcriptPath, dbPath } of target.sessions ?? []) {
+    const family = channelProvider(provider);
+    const file = family === 'opencode' ? dbPath : transcriptPath;
+    if (typeof file !== 'string' || !path.isAbsolute(file) || !['codex', 'claude', 'pi', 'antigravity', 'opencode'].includes(family)) continue;
+    const folder = family === 'opencode' ? file : path.resolve(file, family === 'antigravity' ? '../../../..' : '..');
+    roots[family] ??= [];
+    if (roots[family].includes(folder) || roots[family].length >= 32) continue;
+    roots[family].push(folder);
+    added = true;
+  }
+  return added;
+}
+
 function createTokenCollection(root, { clock, scan, scanInterval, onProgress, onReset, onComplete }) {
   let db, scanJob, scanTimer, pendingZone;
+  const extraRoots = {};
   let publishedAt = 0;
   let ready = false, closed = false;
   let progress = { done: 0, total: 0 };
@@ -266,7 +276,7 @@ function createTokenCollection(root, { clock, scan, scanInterval, onProgress, on
       pendingZone = null;
     }
     scanJob = scan(root, db, {
-      at,
+      at, roots: extraRoots,
       progress(event) {
         progress = event;
         if (!ready && !closed) onProgress(event);
@@ -290,7 +300,10 @@ function createTokenCollection(root, { clock, scan, scanInterval, onProgress, on
     get db() { return db; },
     get progress() { return progress; },
     get ready() { return ready && !pendingZone && !closed; },
-    readChannel: target => readManagerChannel(db, target),
+    readChannel(target) {
+      if (rememberRoots(extraRoots, target)) scheduleScan(0);
+      return readManagerChannel(db, target);
+    },
     async close() {
       closed = true;
       clearTimeout(scanTimer);

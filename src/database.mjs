@@ -11,7 +11,8 @@ import { openReadonlyDatabase, withTransaction } from './sqlite.mjs';
 export { channelProvider };
 
 export const DETAIL_DAYS = 32;
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
+const CHANNEL_DETAILS = 100;
 const LEGACY_DATABASE_VERSION = 3;
 const MERGED_DAILY_GENERATION = 'mergedDailyGeneration';
 const MAIN_DATABASE = 'tpslugin.db';
@@ -143,7 +144,7 @@ const usageQueries = {
   deleteSetting: 'DELETE FROM settings WHERE key = ?',
   source: 'SELECT stamp FROM scan_progress WHERE source = ?',
   cursor: 'INSERT OR REPLACE INTO scan_progress VALUES (?, ?, ?)',
-  seen: 'SELECT id FROM seen WHERE id = ?',
+  seen: 'SELECT day FROM seen WHERE id = ?',
   remember: 'INSERT OR REPLACE INTO seen VALUES (?, ?)',
   detail: 'SELECT record FROM details WHERE id = ?',
   addDetail: 'INSERT OR REPLACE INTO details VALUES (?, ?, ?, ?)',
@@ -155,7 +156,12 @@ const usageQueries = {
   channelBySession: `SELECT c.id, c.at, d.record FROM detail_channels AS c JOIN details AS d USING (id)
     WHERE c.session = ? ORDER BY c.at DESC, c.id LIMIT 100`,
   details: 'SELECT record FROM details WHERE at >= ? ORDER BY at DESC, id',
-  pruneDetails: 'DELETE FROM details WHERE day < ?',
+  // Older details stay only while they are among the newest requests of a folder or session.
+  pruneDetails: `DELETE FROM details WHERE day < ?1 AND (day < ?2 OR id NOT IN (
+    SELECT id FROM (SELECT id, row_number() OVER (PARTITION BY cwd ORDER BY at DESC, id) AS n FROM detail_channels WHERE cwd IS NOT NULL)
+    WHERE n <= ${CHANNEL_DETAILS}
+    UNION ALL SELECT id FROM (SELECT id, row_number() OVER (PARTITION BY session ORDER BY at DESC, id) AS n FROM detail_channels
+    WHERE session IS NOT NULL) WHERE n <= ${CHANNEL_DETAILS}))`,
   pruneSeen: 'DELETE FROM seen WHERE day < ?',
   pruneProgress: 'DELETE FROM scan_progress WHERE scanned_at < ?',
   bucket: 'SELECT counters FROM buckets WHERE kind=? AND day=? AND at=? AND project=? AND provider=? AND model=?',
@@ -241,6 +247,12 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
   if (version === LEGACY_DATABASE_VERSION && generation) mergeDaily(main, legacyDaily, m, saveSetting, generation);
   else if (version === undefined && !generation && !lstatSync(legacyDaily, { throwIfNoEntry: false })) {
     reset(calendar);
+  } else if (version === 4 && generation) {
+    // Version 5 keeps older request details per channel. One rescan restores them; the seen table prevents recounting.
+    withTransaction(main, () => {
+      main.exec('DELETE FROM scan_progress');
+      saveSetting('version', DATABASE_VERSION);
+    });
   } else if (version !== DATABASE_VERSION || !generation) throw new Error('Invalid Tokens manager database version');
 
   // The merged database is ready even if a reader is still holding the old file open.
@@ -258,9 +270,13 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
     return true;
   }
 
+  function saveDetail(id, day, record, body) {
+    m.addDetail.run(id, day, record.completedAt, body);
+    indexDetail(id, record.completedAt, record);
+  }
+
   function commitSource(source, stamp, records, at = now()) {
     const firstDay = calendar.dayAgo(at, RETENTION_DAYS - 1);
-    const detailDay = calendar.dayAgo(at, DETAIL_DAYS - 1);
     withTransaction(main, () => {
       const buckets = new Map();
       for (const sourceRecord of records) {
@@ -277,25 +293,28 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
           const priorAlternate = m.detail.get(alternateKey);
           let other = alternateKey;
           record = details;
-          // Remember both source IDs in the same transaction as the usage.
+          // Remember both source IDs in the same transaction as the usage; '~' marks the alias.
           if (!previous && (priorAlternate || (!m.seen.get(id) && m.seen.get(alternateKey)))) {
             other = id;
             id = alternateKey;
             previous = priorAlternate;
             record.id = alternateId;
           }
-          if (!m.seen.get(other)) m.remember.run(other, day);
+          if (!m.seen.get(other)) m.remember.run(other, day + '~');
         }
-        const body = day >= detailDay ? JSON.stringify(record) : null;
-        if (previous?.record === body || (!previous && m.seen.get(id))) continue;
+        const body = JSON.stringify(record);
+        if (previous?.record === body) continue;
         const priorRecord = previous ? JSON.parse(previous.record) : null;
         if (record.dataSource === 'claude_desktop_ledger' && priorRecord?.dataSource === 'claude_desktop_audit') continue;
+        // A counted request whose detail was pruned only gets its detail back; an alias stays hidden.
+        const seen = previous ? null : m.seen.get(id);
+        if (seen) {
+          if (!seen.day.endsWith('~')) saveDetail(id, day, record, body);
+          continue;
+        }
         if (priorRecord) addBucket(buckets, calendar, priorRecord, -1);
         m.remember.run(id, day);
-        if (body) {
-          m.addDetail.run(id, day, record.completedAt, body);
-          indexDetail(id, record.completedAt, record);
-        }
+        saveDetail(id, day, record, body);
         addBucket(buckets, calendar, record, 1);
       }
       for (const { dimensions, counters } of buckets.values()) writeBucket(m, dimensions, counters);
@@ -308,7 +327,10 @@ function initializeDatabase(main, legacyDaily, guid, timeZone, now) {
     withTransaction(main, () => {
       m.pruneBuckets.run(firstDay);
       m.pruneSeen.run(firstDay);
-      m.pruneDetails.run(calendar.dayAgo(at, DETAIL_DAYS - 1));
+      if (setting('detailsPrunedDay') !== calendar.day(at)) {
+        m.pruneDetails.run(calendar.dayAgo(at, DETAIL_DAYS - 1), firstDay);
+        saveSetting('detailsPrunedDay', calendar.day(at));
+      }
       m.pruneProgress.run(Date.parse(firstDay + 'T00:00:00Z') - DAY_MS);
       saveSetting('lastScanAt', at);
       saveSetting('lastScanError', null);

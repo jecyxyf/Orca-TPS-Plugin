@@ -114,7 +114,8 @@ test('commits details, rollups and scan progress together, and retains each for 
   assert.equal(db.sourceStamp('fixture'), 'one');
   db.commitSource('mirror', 'one', [entry('today', 0), entry('oldest', 369)]);
   db.finishScan(at);
-  assert.deepEqual(db.details().map(x => x.id), ['today', 'boundary-in']);
+  // Older details stay while they are among the newest requests of their folder.
+  assert.deepEqual(db.details().map(x => x.id), ['today', 'boundary-in', 'boundary-out', 'oldest']);
   assert.equal(db.buckets(0).length, 4);
   assert.ok(db.buckets(0).every(row => row.counters[0] === 1));
   const packet = makePersonalPacket(db, at);
@@ -132,6 +133,23 @@ test('commits details, rollups and scan progress together, and retains each for 
   assert.equal(db.sourceStamp('fixture'), undefined);
   db.close();
   assert.equal(calendarFor('Asia/Seoul').day(Date.parse('2026-06-15T15:01:00Z')), '2026-06-16');
+});
+
+test('request details older than 32 days stay only among the newest 100 of their folder or session', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'tps-manager-details-'));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const db = openTokensManagerDb(root, { timeZone: 'UTC', now: () => at });
+  t.after(() => db.close());
+  const crowded = Array.from({ length: 101 }, (_, i) => ({ ...entry(`crowded-${i}`, 40 + i), cwd: '/crowded' }));
+  db.commitSource('fixture', 'one', [...crowded, { ...entry('session-old', 200), cwd: null, sessionId: 'kept' },
+    { ...entry('loose-old', 200), cwd: null }]);
+  db.finishScan(at);
+  const ids = new Set(db.details().map(x => x.id));
+  assert.equal([...ids].filter(id => id.startsWith('crowded-')).length, 100);
+  assert.ok(!ids.has('crowded-100'));
+  assert.ok(ids.has('session-old'));
+  assert.ok(!ids.has('loose-old'));
+  assert.equal(db.channelDetails(null, [{ provider: 'codex', sessionId: 'kept' }]).length, 1);
 });
 
 test('merges legacy databases and WAL changes without counting already-applied batches twice', async t => {

@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, rm, readFile, appendFile, utimes } from 'node:fs/promises';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { scanSessions, readTargetSession } from '../src/harness_parser.mjs';
-import { defaultRoots } from '../src/harness_parser.mjs';
+import { defaultRoots, discoverUsageUnits } from '../src/harness_parser.mjs';
 import { createTpsController } from '../src/controller.mjs';
+import { openTokensManagerDb } from '../src/database.mjs';
 import { readManagerChannel } from '../src/token_manager.mjs';
 
 let DatabaseSync;
@@ -24,67 +24,49 @@ async function fixture(t) {
 }
 const jsonl = values => values.map(value => JSON.stringify(value)).join('\n') + '\n';
 
-test('targeted JSONL lookup finds a conversation older than the latest 100 files', async t => {
+/** Records the Tokens manager stores for these roots, as one scan reads them. */
+async function usageRecords(roots, providers) {
+  const units = await discoverUsageUnits(0, { roots, includeDefaults: false, includeRecords: true, providers });
+  return (await Promise.all(units.map(unit => unit.read()))).flatMap(result => result.records);
+}
+
+/** Current Data for a channel, served from the manager database after one scan. */
+async function managerChannel(t, root, records, target) {
+  const db = openTokensManagerDb(path.join(root, 'manager'), { timeZone: 'UTC' });
+  t.after(() => db.close());
+  db.commitSource('fixture', 'stamp', records, Math.max(...records.map(record => record.completedAt)) + 1000);
+  return readManagerChannel(db, target);
+}
+
+function useProxyDatabase(t, file) {
+  const previous = process.env.CC_SWITCH_DB_PATH;
+  t.after(() => {
+    if (previous === undefined) delete process.env.CC_SWITCH_DB_PATH;
+    else process.env.CC_SWITCH_DB_PATH = previous;
+  });
+  process.env.CC_SWITCH_DB_PATH = file;
+}
+
+function codexRows(session = 'same-session', turn = 'one') {
+  return [
+    { type: 'session_meta', payload: { id: session, cwd: '/test' } },
+    { timestamp: '2026-01-01T00:00:00Z', type: 'event_msg', payload: { type: 'task_started', turn_id: turn } },
+    { timestamp: '2026-01-01T00:00:02Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { output_tokens: 200, input_tokens: 100, cached_input_tokens: 50 }, last_token_usage: { output_tokens: 200, input_tokens: 100, cached_input_tokens: 50 } } } }
+  ];
+}
+
+test('a pane session is found by its ID among many newer logs, and missing IDs never fall back', async t => {
   const root = await fixture(t), file = path.join(root, 'rollout-2020-01-01-old-session.jsonl');
   await writeFile(file, jsonl(codexRows('old-session')));
   await utimes(file, 1, 1);
   for (let i = 0; i < 101; i++) await writeFile(path.join(root, `recent-${i}.jsonl`), jsonl(codexRows(`recent-${i}`)));
-  const options = { roots: { codex: [root] }, includeDefaults: false };
-  assert.ok(!(await scanSessions(options)).sessions.some(session => session.id === 'codex:old-session'));
-  const target = { key: 'pane-old', provider: 'codex', sessionId: 'old-session' };
-  const found = await readTargetSession(target, options);
-  assert.equal(found.session.id, 'codex:old-session');
-  assert.equal(found.session.records[0].tokensPerSecond, 100);
-  assert.deepEqual(found.warnings, []);
-  assert.equal((await readTargetSession({ ...target, transcriptPath: file }, options)).session.id, 'codex:old-session');
-});
-
-test('targeted JSONL reads verify metadata even after scan cache hits and filename matches', async t => {
-  const root = await fixture(t), file = path.join(root, 'wanted.jsonl');
-  const options = { roots: { codex: [root] }, includeDefaults: false };
-  await writeFile(file, jsonl(codexRows('different')));
-  await scanSessions(options);
-  const target = { provider: 'codex', sessionId: 'wanted', transcriptPath: file };
-  assert.equal((await readTargetSession(target, options)).session, null);
-  assert.equal((await readTargetSession({ ...target, transcriptPath: undefined }, options)).session, null);
-  assert.equal((await readTargetSession({ ...target, sessionId: 'different' }, options)).session.id, 'codex:different');
-  // A replacement file must invalidate both the session records and its cached identity.
-  await writeFile(file, jsonl(codexRows('wanted', 'replacement-turn')));
-  assert.equal((await readTargetSession(target, options)).session.id, 'codex:wanted');
-  assert.equal((await readTargetSession({ ...target, sessionId: 'different' }, options)).session, null);
-});
-
-test('missing target paths or IDs never fall back to another conversation', async t => {
-  const root = await fixture(t), file = path.join(root, 'available.jsonl');
-  await writeFile(file, jsonl(codexRows('available')));
-  const options = { roots: { codex: [root] }, includeDefaults: false };
-  assert.equal((await readTargetSession({ provider: 'codex', sessionId: 'missing' }, options)).session, null);
-  assert.equal((await readTargetSession({ provider: 'codex', sessionId: 'available', transcriptPath: path.join(root, 'missing.jsonl') }, options)).session, null);
-  await writeFile(path.join(root, 'no-metadata.jsonl'), jsonl(codexRows().slice(1)));
-  assert.equal((await readTargetSession({ provider: 'codex', sessionId: 'no-metadata', transcriptPath: path.join(root, 'no-metadata.jsonl') }, options)).session, null);
-});
-
-test('targeted lookup supports renamed logs and scopes remembered paths to configured roots', async t => {
-  const root = await fixture(t), first = path.join(root, 'first'), second = path.join(root, 'second');
-  await mkdir(first); await mkdir(second);
-  await writeFile(path.join(first, 'renamed.jsonl'), jsonl(codexRows('wanted')));
-  await writeFile(path.join(second, 'renamed.jsonl'), jsonl(codexRows('different')));
-  const target = { provider: 'codex', sessionId: 'wanted', title: 'Current title' };
-  const result = await readTargetSession(target, { roots: { codex: [first] }, includeDefaults: false });
-  assert.equal(result.session.id, 'codex:wanted');
-  assert.equal(result.session.title, 'Current title');
-  assert.equal((await readTargetSession(target, { roots: { codex: [second] }, includeDefaults: false })).session, null);
-});
-
-test('Claude and Pi explicit paths require their own session metadata', async t => {
-  const root = await fixture(t);
-  for (const [provider, row] of [['claude', { sessionId: 'selected', cwd: '/test' }], ['pi', { type: 'session', id: 'selected', cwd: '/test' }]]) {
-    const file = path.join(root, `${provider}.jsonl`);
-    await writeFile(file, jsonl([row]));
-    const target = { provider, sessionId: 'selected', transcriptPath: file };
-    assert.equal((await readTargetSession(target, { includeDefaults: false })).session.id, `${provider}:selected`);
-    assert.equal((await readTargetSession({ ...target, sessionId: 'other' }, { includeDefaults: false })).session, null);
-  }
+  const records = await usageRecords({ codex: [root] });
+  const channel = await managerChannel(t, root, records, { worktreeId: 'pane', sessions: [{ provider: 'codex', sessionId: 'old-session' }] });
+  assert.equal(channel.session.records.length, 1);
+  assert.equal(channel.session.records[0].tokensPerSecond, 100);
+  const missing = await managerChannel(t, path.join(root, 'other'), records,
+    { worktreeId: 'pane', sessions: [{ provider: 'codex', sessionId: 'missing' }] });
+  assert.deepEqual(missing.session.records, []);
 });
 
 test('Claude session collects subagents/*.jsonl and subagents/workflows/*/*.jsonl without leaking prompts', async t => {
@@ -115,23 +97,23 @@ test('Claude session collects subagents/*.jsonl and subagents/workflows/*/*.json
   ]));
   await writeFile(path.join(wfDir, 'journal.jsonl'), jsonl([{ event: 'step_done' }]));
 
-  const res = await readTargetSession({ provider: 'claude', sessionId: sid, transcriptPath: mainFile }, { includeDefaults: false });
-  assert.equal(res.session.records.length, 3);
-  assert.equal(res.session.records[0].rawId, 'msg-wf-1');
-  assert.equal(res.session.records[0].isSubagent, true);
-  assert.equal(res.session.records[0].tokensPerSecond, 150);
-  assert.equal(res.session.records[1].rawId, 'msg-main');
-  assert.equal(res.session.records[1].tokensPerSecond, 60);
-  assert.equal(res.session.records[2].rawId, 'msg-sub-1');
-  assert.equal(res.session.records[2].tokensPerSecond, 100);
-  assert.ok(!JSON.stringify(res).includes('SECRET_'));
+  const records = (await usageRecords({ claude: [root] })).sort((a, b) => b.completedAt - a.completedAt);
+  assert.equal(records.length, 3);
+  assert.equal(records[0].rawId, 'msg-wf-1');
+  assert.equal(records[0].isSubagent, true);
+  assert.equal(records[0].tokensPerSecond, 150);
+  assert.equal(records[1].rawId, 'msg-main');
+  assert.equal(records[1].tokensPerSecond, 60);
+  assert.equal(records[2].rawId, 'msg-sub-1');
+  assert.equal(records[2].tokensPerSecond, 100);
+  assert.ok(records.every(record => record.sessionId === sid && record.cwd === '/proj'));
+  assert.ok(!JSON.stringify(records).includes('SECRET_'));
 });
 
-test('readTargetSession merges 2xx proxy rows from cc-switch.db in read-only mode without crossing sessions', sqliteTestOptions, async t => {
+test('channel reads merge 2xx proxy rows from cc-switch.db in read-only mode without crossing sessions', sqliteTestOptions, async t => {
   const root = await fixture(t);
   const sid = 'claude-proxy-test';
-  const mainFile = path.join(root, `${sid}.jsonl`);
-  await writeFile(mainFile, jsonl([
+  await writeFile(path.join(root, `${sid}.jsonl`), jsonl([
     { type: 'user', uuid: 'u1', sessionId: sid, timestamp: '2026-11-07T00:00:00Z' },
     { type: 'assistant', uuid: 'a1', parentUuid: 'u1', timestamp: '2026-11-07T00:00:05Z',
       message: { id: 'm1', model: 'claude-sonnet-5-5', stop_reason: 'end_turn',
@@ -154,125 +136,47 @@ test('readTargetSession merges 2xx proxy rows from cc-switch.db in read-only mod
     // Unrelated session's proxy row must NOT leak into sid:
     ins.run('proxy-other', 'other-session', 'claude', 'claude-sonnet-5-5', null, null, 100, 500, 0, 0, 0, 2000, 500, 200, createdSec, 'proxy');
   } finally { db.close(); }
+  const bytes = await readFile(ccDbFile);
 
-  const res = await readTargetSession(
-    { provider: 'claude', sessionId: sid, transcriptPath: mainFile },
-    { includeDefaults: false, ccSwitchDb: ccDbFile }
-  );
-  assert.equal(res.session.records.length, 1);
-  assert.equal(res.session.records[0].dataSource, 'proxy');
-  assert.equal(res.session.records[0].isEstimatedSpeed, false);
-  assert.equal(res.session.records[0].tokensPerSecond, 50);
-
-  const previousProxyPath = process.env.CC_SWITCH_DB_PATH;
-  t.after(() => {
-    if (previousProxyPath === undefined) delete process.env.CC_SWITCH_DB_PATH;
-    else process.env.CC_SWITCH_DB_PATH = previousProxyPath;
-  });
-  process.env.CC_SWITCH_DB_PATH = ccDbFile;
-  const channel = await readManagerChannel({ channelDetails: () => [] },
-    { provider: 'claude', sessionId: sid, transcriptPath: mainFile });
+  useProxyDatabase(t, ccDbFile);
+  const channel = await managerChannel(t, root, await usageRecords({ claude: [root] }),
+    { worktreeId: 'app', sessions: [{ provider: 'claude', sessionId: sid }] });
   assert.equal(channel.session.records.length, 1);
   assert.equal(channel.session.records[0].dataSource, 'proxy');
+  assert.equal(channel.session.records[0].isEstimatedSpeed, false);
   assert.equal(channel.session.records[0].tokensPerSecond, 50);
   assert.equal(channel.session.records[0].firstTokenMs, 2000);
+  assert.deepEqual(await readFile(ccDbFile), bytes);
 });
 
-test('targeted SQLite lookup reads old IDs, separates v1/v2 and never falls back', sqliteTestOptions, async t => {
+test('SQLite usage reads old sessions, separates v1/v2, stays read-only and reads live WAL', sqliteTestOptions, async t => {
   const root = await fixture(t), file = path.join(root, 'opencode.db');
   const db = new DatabaseSync(file);
   try {
-    db.exec(`CREATE TABLE session (id TEXT PRIMARY KEY,title TEXT,time_updated INTEGER,parent_id TEXT);
-      CREATE TABLE message (id TEXT PRIMARY KEY,session_id TEXT,data TEXT,time_created INTEGER);
-      CREATE TABLE session_v2 (id TEXT PRIMARY KEY,title TEXT,time_updated INTEGER);
+    db.exec(`PRAGMA journal_mode=WAL;
+      CREATE TABLE session_v2 (id TEXT PRIMARY KEY,title TEXT,directory TEXT,time_updated INTEGER);
       CREATE TABLE session_message (id TEXT PRIMARY KEY,session_id TEXT,type TEXT,seq INTEGER,data TEXT,time_created INTEGER);
-      INSERT INTO session VALUES ('old','Old V1',1,NULL);
-      INSERT INTO session_v2 VALUES ('old','Old V2',1);
-      WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM numbers WHERE n<101)
-      INSERT INTO session SELECT 'recent-'||n,'Recent',n+10,NULL FROM numbers;`);
-    const insert = db.prepare('INSERT INTO message VALUES (?,?,?,?)');
-    insert.run('u', 'old', '{"role":"user"}', 1000);
-    insert.run('a', 'old', JSON.stringify({ role: 'assistant', finish: 'stop', tokens: { output: 200 }, time: { created: 1000, streamed: 5000, completed: 9000 } }), 1000);
+      CREATE TABLE session (id TEXT PRIMARY KEY,title TEXT,time_updated INTEGER);
+      CREATE TABLE message (id TEXT PRIMARY KEY,session_id TEXT,data TEXT,time_created INTEGER);
+      INSERT INTO session_v2 VALUES ('v2','V2 statistics','/project',6000);
+      INSERT INTO session VALUES ('v1','V1 statistics',1);`);
     const insert2 = db.prepare('INSERT INTO session_message VALUES (?,?,?,?,?,?)');
-    insert2.run('u2', 'old', 'user', 1, '{}', 1000);
-    insert2.run('a2', 'old', 'assistant', 2, JSON.stringify({ tokens: { output: 300, reasoning: 100 }, time: { created: 1000, streamed: 5000, completed: 9000 } }), 1000);
-    insert2.run('idle', 'old', 'idle', 3, '{}', 9000);
-  } finally { db.close(); }
-  const options = { roots: { opencode: [file] }, includeDefaults: false };
-  // Populate the broad-scan cache before exact lookup; the old v1 session is absent.
-  assert.ok(!(await scanSessions(options)).sessions.some(session => session.id === 'opencode:old'));
-  const target = { provider: 'opencode', sessionId: 'old', dbPath: file };
-  const v1 = await readTargetSession(target, options);
-  assert.equal(v1.session.id, 'opencode:old');
-  assert.equal(v1.session.records[0].tokensPerSecond, 50);
-  const v2 = await readTargetSession({ ...target, provider: 'opencode2' }, options);
-  assert.equal(v2.session.id, 'opencode2:old');
-  assert.equal(v2.session.records[0].tokensPerSecond, 100);
-  assert.equal((await readTargetSession({ ...target, dbPath: undefined }, options)).session.id, 'opencode:old');
-  assert.equal((await readTargetSession({ ...target, sessionId: "old' OR 1=1 --" }, options)).session, null);
-  assert.equal((await readTargetSession({ ...target, dbPath: path.join(root, 'absent.db') }, options)).session, null);
-});
-
-function codexRows(session = 'same-session', turn = 'one') {
-  return [
-    { type: 'session_meta', payload: { id: session, cwd: '/test' } },
-    { timestamp: '2026-01-01T00:00:00Z', type: 'event_msg', payload: { type: 'task_started', turn_id: turn } },
-    { timestamp: '2026-01-01T00:00:02Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { output_tokens: 200, input_tokens: 100, cached_input_tokens: 50 }, last_token_usage: { output_tokens: 200, input_tokens: 100, cached_input_tokens: 50 } } } }
-  ];
-}
-
-test('append cursors retain an unfinished request across a full live-tail window and rebuild on truncation', async t => {
-  const root = await fixture(t);
-  const file = path.join(root, 'test-append.jsonl');
-  const [header, start, finish] = codexRows('append');
-  await writeFile(file, jsonl([header, start]) + '\n');
-  const target = { provider: 'codex', sessionId: 'append', transcriptPath: file };
-  const read = () => readTargetSession(target, { includeDefaults: false });
-  assert.equal((await read()).session.records.length, 0);
-  const padding = JSON.stringify({ type: 'ignored', padding: 'x'.repeat(9 * 1024 * 1024) }) + '\n';
-  await appendFile(file, padding);
-  assert.equal((await read()).session.records.length, 0);
-  await appendFile(file, padding + JSON.stringify(finish));
-  assert.equal((await read()).session.records.length, 0);
-  await appendFile(file, '\n');
-  const completed = (await read()).session.records;
-  assert.equal(completed.length, 1);
-  assert.equal(completed[0].tokensPerSecond, 100);
-  assert.deepEqual((await read()).session.records, completed);
-
-  const replacement = codexRows('append');
-  replacement[2].payload.info.last_token_usage.output_tokens = 400;
-  replacement[2].payload.info.total_token_usage.output_tokens = 400;
-  await writeFile(file, jsonl(replacement) + '\n');
-  const replaced = (await read()).session.records;
-  assert.equal(replaced.length, 1);
-  assert.equal(replaced[0].outputTokens, 400);
-});
-
-test('incremental SQLite reads include edits to old rows and remove deleted rows', sqliteTestOptions, async t => {
-  const root = await fixture(t);
-  const dbPath = path.join(root, 'opencode.db');
-  const db = new DatabaseSync(dbPath);
-  const clock = Date.parse('2026-01-01T00:00:00Z');
-  const message = (index, output) => JSON.stringify({ tokens: { output },
-    time: { created: clock + index * 3000, completed: clock + index * 3000 + 2000 } });
-  try {
-    db.exec('PRAGMA journal_mode=WAL; CREATE TABLE session_v2 (id TEXT PRIMARY KEY, time_updated INTEGER);' +
-      'CREATE TABLE session_message (id TEXT PRIMARY KEY, session_id TEXT, type TEXT, seq INTEGER, time_created INTEGER, time_updated INTEGER, data TEXT);' +
-      "INSERT INTO session_v2 VALUES ('delta', 1234);");
-    const insert = db.prepare("INSERT INTO session_message VALUES (?, 'delta', 'assistant', ?, ?, ?, ?)");
-    for (let i = 0; i < 16; i++) insert.run(String(i), i, clock + i, clock + i, message(i, 200 + i));
-    const target = { provider: 'opencode2', sessionId: 'delta', dbPath };
-    const read = () => readTargetSession(target, { includeDefaults: false });
-    assert.equal((await read()).session.records.length, 16);
-    db.prepare("UPDATE session_message SET data=?, time_updated=? WHERE id='1'").run(message(1, 543), clock + 1000);
-    db.exec("DELETE FROM session_message WHERE id='2'");
-    insert.run('16', 16, clock + 16, clock + 16, message(16, 310));
-    const { records } = (await read()).session;
-    assert.equal(records.length, 16);
-    assert.equal(records[0].outputTokens, 310);
-    assert.ok(records.some(record => record.outputTokens === 543));
-    assert.ok(records.every(record => record.outputTokens !== 202));
+    insert2.run('u2', 'v2', 'user', 1, '{}', 1000);
+    insert2.run('a2', 'v2', 'assistant', 2, JSON.stringify({ tokens: { output: 120, reasoning: 80, input: 10, cache: { read: 80, write: 10 } }, time: { created: 2000, streamed: 4000, completed: 6000 } }), 2000);
+    insert2.run('idle', 'v2', 'idle', 3, '{}', 6000);
+    const insert1 = db.prepare('INSERT INTO message VALUES (?,?,?,?)');
+    insert1.run('u1', 'v1', '{"role":"user"}', 1000);
+    insert1.run('a1', 'v1', JSON.stringify({ role: 'assistant', finish: 'stop', tokens: { output: 200, input: 10, cache: { read: 0, write: 0 } }, time: { created: 1000, streamed: 5000, completed: 8000 } }), 1000);
+    const before = db.prepare('SELECT count(*) AS n FROM session_message').get().n;
+    const records = await usageRecords({ opencode: [file] });
+    assert.equal(records.length, 2);
+    const v2 = records.find(record => record.provider === 'opencode2'), v1 = records.find(record => record.provider === 'opencode');
+    assert.equal(v2.tokensPerSecond, 100);
+    assert.equal(v2.sessionId, 'v2');
+    assert.equal(v2.cwd, '/project');
+    assert.equal(v1.tokensPerSecond, 50);
+    assert.equal(v1.sessionId, 'v1');
+    assert.equal(db.prepare('SELECT count(*) AS n FROM session_message').get().n, before);
   } finally { db.close(); }
 });
 
@@ -286,124 +190,52 @@ test('portable defaults respect Windows roaming, Linux XDG homes and CC Switch d
   assert.equal(win.ccSwitchDb, 'C:\\Users\\person\\.cc-switch\\cc-switch.db');
 });
 
-test('scan deduplicates mirrored sessions, reads no credentials and does not expose prompts', async t => {
+test('copied sessions count once, credentials are never read and prompts never leave the parser', async t => {
   const root = await fixture(t), mirror = path.join(root, 'mirror');
   await mkdir(mirror);
   await writeFile(path.join(root, 'rollout.jsonl'), jsonl(codexRows()));
   await writeFile(path.join(mirror, 'copy.jsonl'), jsonl(codexRows()));
   await writeFile(path.join(root, 'auth.json'), '{"secret":"DO_NOT_READ_ME"}');
-  const result = await scanSessions({ roots: { codex: [root] }, includeDefaults: false });
-  assert.equal(result.sessions.length, 1);
-  assert.equal(result.sessions[0].records[0].tokensPerSecond, 100);
-  assert.ok(!JSON.stringify(result).includes('DO_NOT_READ_ME'));
+  const records = await usageRecords({ codex: [root] });
+  const channel = await managerChannel(t, root, records, { worktreeId: 'app', worktreePath: '/test', sessions: [] });
+  assert.equal(channel.session.records.length, 1);
+  assert.equal(channel.session.records[0].tokensPerSecond, 100);
+  assert.ok(!JSON.stringify(records).includes('DO_NOT_READ_ME'));
 });
 
-test('changed file invalidates the parse cache while partial final JSON stays uncounted', async t => {
+test('a half-written final JSON line stays uncounted until it completes', async t => {
   const root = await fixture(t), file = path.join(root, 'rollout.jsonl');
   const rows = codexRows();
   await writeFile(file, jsonl(rows.slice(0, 2)));
-  const options = { roots: { codex: [root] }, includeDefaults: false };
-  assert.deepEqual((await scanSessions(options)).sessions[0].records, []);
-  await appendFile(file, JSON.stringify(rows[2]));
-  assert.deepEqual((await scanSessions(options)).sessions[0].records, []);
-  await appendFile(file, '\n');
-  assert.equal((await scanSessions(options)).sessions[0].records.length, 1);
+  assert.deepEqual(await usageRecords({ codex: [root] }), []);
+  const last = JSON.stringify(rows[2]);
+  await appendFile(file, last.slice(0, 40));
+  assert.deepEqual(await usageRecords({ codex: [root] }), []);
+  await appendFile(file, last.slice(40) + '\n');
+  assert.equal((await usageRecords({ codex: [root] })).length, 1);
 });
 
-test('JSONL cache preserves truncation warnings without retaining another source warning', async t => {
-  const root = await fixture(t), large = path.join(root, 'large.jsonl'), small = path.join(root, 'small.jsonl');
-  const largeRows = codexRows('large-session');
-  await writeFile(large, Buffer.concat([
-    Buffer.from(jsonl(largeRows.slice(0, 1))), Buffer.alloc(16 * 1024 * 1024, 32),
-    Buffer.from('\n' + jsonl(largeRows.slice(1)))
-  ]));
-  await writeFile(small, jsonl(codexRows('small-session')));
-  const first = await scanSessions({ roots: { codex: [homedir(), large, small] }, includeDefaults: false });
-  assert.deepEqual(first.warnings, [['notice.invalid-session-folder', 'codex'], ['notice.large-session', 'codex']]);
-  const cachedLarge = await scanSessions({ roots: { codex: [large] }, includeDefaults: false });
-  assert.deepEqual(cachedLarge.warnings, [['notice.large-session', 'codex']]);
-  const cachedSmall = await scanSessions({ roots: { codex: [small] }, includeDefaults: false });
-  assert.deepEqual(cachedSmall.warnings, []);
-});
-
-test('SQLite scans v2 and v1 separately, stays read-only and reads live WAL', sqliteTestOptions, async t => {
-  const root = await fixture(t), file = path.join(root, 'opencode.db');
-  const db = new DatabaseSync(file);
-  try {
-    db.exec(`PRAGMA journal_mode=WAL;
-      CREATE TABLE session_v2 (id TEXT PRIMARY KEY,title TEXT,directory TEXT,time_updated INTEGER);
-      CREATE TABLE session_message (id TEXT PRIMARY KEY,session_id TEXT,type TEXT,seq INTEGER,data TEXT,time_created INTEGER);
-      CREATE TABLE session (id TEXT PRIMARY KEY,title TEXT,time_updated INTEGER);
-      CREATE TABLE message (id TEXT PRIMARY KEY,session_id TEXT,data TEXT,time_created INTEGER);
-      INSERT INTO session_v2 VALUES ('v2','V2 statistics','/project',6000);
-      INSERT INTO session VALUES ('v1','V1 statistics',5000);`);
-    const insert2 = db.prepare('INSERT INTO session_message VALUES (?,?,?,?,?,?)');
-    insert2.run('u2', 'v2', 'user', 1, '{}', 1000);
-    insert2.run('a2', 'v2', 'assistant', 2, JSON.stringify({ tokens: { output: 120, reasoning: 80, input: 10, cache: { read: 80, write: 10 } }, time: { created: 2000, streamed: 4000, completed: 6000 } }), 2000);
-    insert2.run('idle', 'v2', 'idle', 3, '{}', 6000);
-    const insert1 = db.prepare('INSERT INTO message VALUES (?,?,?,?)');
-    insert1.run('u1', 'v1', '{"role":"user"}', 1000);
-    insert1.run('a1', 'v1', JSON.stringify({ role: 'assistant', finish: 'stop', tokens: { output: 200, input: 10, cache: { read: 0, write: 0 } }, time: { created: 1000, streamed: 5000, completed: 8000 } }), 1000);
-    const before = db.prepare('SELECT count(*) AS n FROM session_message').get().n;
-    const result = await scanSessions({ roots: { opencode: [file] }, includeDefaults: false });
-    assert.deepEqual(result.warnings, []);
-    assert.equal(result.sessions.length, 2);
-    assert.equal(result.sessions.find(value => value.provider === 'opencode2').records[0].tokensPerSecond, 100);
-    assert.equal(result.sessions.find(value => value.provider === 'opencode').records[0].tokensPerSecond, 50);
-    assert.equal(db.prepare('SELECT count(*) AS n FROM session_message').get().n, before);
-  } finally { db.close(); }
-});
-
-test('unsupported database and missing roots return warnings or empty data, never estimates', sqliteTestOptions, async t => {
+test('unsupported databases and missing roots return empty data without writing', sqliteTestOptions, async t => {
   const root = await fixture(t), file = path.join(root, 'other.db');
   const db = new DatabaseSync(file); db.exec('CREATE TABLE unrelated (id TEXT)'); db.close();
   const bytes = await readFile(file);
-  const result = await scanSessions({ roots: { opencode: [file], pi: [path.join(root, 'missing')] }, includeDefaults: false });
-  assert.deepEqual(result.sessions, []);
-  assert.ok(result.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
-  const cached = await scanSessions({ roots: { opencode: [file] }, includeDefaults: false });
-  assert.deepEqual(cached.warnings, result.warnings);
+  assert.deepEqual(await usageRecords({ opencode: [file], pi: [path.join(root, 'missing')] }), []);
   assert.deepEqual(await readFile(file), bytes);
 });
 
-test('SQLite cache retains row truncation without copying warnings from another database', sqliteTestOptions, async t => {
-  const root = await fixture(t), large = path.join(root, 'large.db'), unsupported = path.join(root, 'unsupported.db');
-  const db = new DatabaseSync(large);
-  try {
-    db.exec(`CREATE TABLE session (id TEXT PRIMARY KEY);
-      CREATE TABLE message (id TEXT PRIMARY KEY,session_id TEXT,data TEXT,time_created INTEGER);
-      INSERT INTO session VALUES ('large');
-      WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM numbers WHERE n<10001)
-      INSERT INTO message SELECT 'message-'||n,'large','{"role":"system"}',n FROM numbers;`);
-  } finally { db.close(); }
-  const other = new DatabaseSync(unsupported);
-  try { other.exec('CREATE TABLE unrelated (id TEXT)'); } finally { other.close(); }
-  const first = await scanSessions({ roots: { opencode: [unsupported, large] }, includeDefaults: false });
-  assert.ok(first.warnings.some(([code]) => code === 'notice.opencode-message-limit'));
-  assert.ok(first.warnings.some(([code]) => code === 'notice.opencode-schema-unavailable'));
-  const cachedLarge = await scanSessions({ roots: { opencode: [large] }, includeDefaults: false });
-  assert.deepEqual(cachedLarge.warnings, [['notice.opencode-message-limit']]);
-  const cachedOther = await scanSessions({ roots: { opencode: [unsupported] }, includeDefaults: false });
-  assert.deepEqual(cachedOther.warnings, [['notice.opencode-schema-unavailable']]);
-});
-
-test('channel target merges registered panes and unregistered CWD sessions across providers while isolating parent worktree', sqliteTestOptions, async t => {
+test('channel views merge registered panes and same-folder sessions across providers while isolating the parent worktree', sqliteTestOptions, async t => {
   const root = await fixture(t);
   const claudeRoot = path.join(root, 'claude');
   const codexPrimary = path.join(root, 'codex-home');
   const codexMirror = path.join(root, 'codex-runtime');
   const agyBrain = path.join(root, 'agy', 'brain', 'agy-conv-1', '.system_generated', 'logs');
-  await mkdir(claudeRoot, { recursive: true });
-  await mkdir(codexPrimary, { recursive: true });
-  await mkdir(codexMirror, { recursive: true });
-  await mkdir(agyBrain, { recursive: true });
+  for (const directory of [claudeRoot, codexPrimary, codexMirror, agyBrain]) await mkdir(directory, { recursive: true });
 
   const channelWinSlash = 'D:/orca/workspace/Orca-TPS-Plugin/1.5.0';
   const channelWinBackslash = 'D:\\orca\\workspace\\Orca-TPS-Plugin\\1.5.0';
 
   // 1. Registered Terminal 1: Claude session at t=2000ms
-  const claudeMain = path.join(claudeRoot, 'claude-t1.jsonl');
-  await writeFile(claudeMain, jsonl([
+  await writeFile(path.join(claudeRoot, 'claude-t1.jsonl'), jsonl([
     { type: 'user', uuid: 'u1', sessionId: 'claude-t1', cwd: channelWinBackslash, timestamp: '2026-11-13T01:00:00Z', message: { content: 'SECRET_T1' } },
     { type: 'assistant', uuid: 'a1', parentUuid: 'u1', timestamp: '2026-11-13T01:00:02Z',
       message: { id: 'msg-t1', model: 'claude-opus-5-5', stop_reason: 'end_turn',
@@ -459,173 +291,69 @@ test('channel target merges registered panes and unregistered CWD sessions acros
     } }
   ]));
 
-  // 6. Registered Antigravity session in the same channel (no cwd in transcript, resolved via target.sessions)
-  const agyTranscript = path.join(agyBrain, 'transcript.jsonl');
-  await writeFile(agyTranscript, jsonl([
+  // 6. Registered Antigravity session in the same channel (no workspace in its store, resolved via target.sessions)
+  await writeFile(path.join(agyBrain, 'transcript.jsonl'), jsonl([
     { step_index: 1, created_at: '2026-11-13T01:00:07Z', input_tokens: 80, output_tokens: 220, cache_read_tokens: 20 }
   ]));
 
-  const channelTarget = {
-    key: 'ch-key',
-    worktreeId: `repo-1::${channelWinSlash}`,
-    worktreePath: channelWinSlash,
-    title: 'Orca-TPS-Plugin/1.5.0',
-    sessions: [
-      { provider: 'claude', sessionId: 'claude-t1', transcriptPath: claudeMain },
-      { provider: 'antigravity', sessionId: 'agy-conv-1', transcriptPath: agyTranscript }
-    ]
-  };
-  const res = await readTargetSession(channelTarget, {
-    roots: {
-      claude: [claudeRoot],
-      codex: [codexPrimary, codexMirror],
-      opencode: [ocDb],
-      antigravity: [path.join(root, 'agy', 'brain')]
-    },
-    includeDefaults: false,
-    platform: 'win32'
+  const records = await usageRecords({
+    claude: [claudeRoot], codex: [codexPrimary, codexMirror], opencode: [ocDb], antigravity: [path.join(root, 'agy', 'brain')]
+  });
+  const channel = await managerChannel(t, root, records, {
+    key: 'ch-key', worktreeId: `repo-1::${channelWinSlash}`, worktreePath: channelWinSlash, title: 'Orca-TPS-Plugin/1.5.0',
+    sessions: [{ provider: 'claude', sessionId: 'claude-t1' }, { provider: 'antigravity', sessionId: 'agy-conv-1' }]
   });
 
-  assert.equal(res.session.id, `channel:repo-1::${channelWinSlash}`);
-  assert.equal(res.session.provider, 'channel');
-  assert.equal(res.session.title, 'Orca-TPS-Plugin/1.5.0');
+  assert.equal(channel.session.id, `channel:repo-1::${channelWinSlash}`);
+  assert.equal(channel.session.provider, 'channel');
+  assert.equal(channel.session.title, 'Orca-TPS-Plugin/1.5.0');
   assert.deepEqual(
-    res.session.records.map(r => `${r.provider}:${r.model ?? 'agy'}`),
-    [
-      'antigravity:agy',
-      'opencode2:glm-5.3',
-      'codex:gpt-6.1-sol',
-      'claude:claude-opus-5-5',
-      'claude:claude-haiku-5-5'
-    ],
+    channel.session.records.map(r => `${r.provider}:${r.model ?? 'agy'}`),
+    ['antigravity:agy', 'opencode2:glm-5.3', 'codex:gpt-6.1-sol', 'claude:claude-opus-5-5', 'claude:claude-haiku-5-5'],
     'all 5 channel requests appear newest-first with no mirror duplicates and no parent-repo leaks'
   );
-  assert.ok(!JSON.stringify(res).includes('SECRET_'));
+  assert.ok(!JSON.stringify(channel).includes('SECRET_'));
 });
 
-test('empty channel returns empty records without error warnings and fresh refresh immediately sees a newly spawned terminal', async t => {
+test('Codex records keep the folder from session_meta headers larger than 16 KiB', async t => {
   const root = await fixture(t), codexRoot = path.join(root, 'codex');
   await mkdir(codexRoot, { recursive: true });
-  const channelTarget = {
-    key: 'new-ch',
-    worktreeId: 'repo-1::/workspace/app/feat-x',
-    worktreePath: '/workspace/app/feat-x',
-    title: 'app/feat-x',
-    sessions: []
-  };
-  const opts = { roots: { codex: [codexRoot] }, includeDefaults: false, platform: 'linux' };
-  const emptyRes = await readTargetSession(channelTarget, opts);
-  assert.equal(emptyRes.session.id, 'channel:repo-1::/workspace/app/feat-x');
-  assert.deepEqual(emptyRes.session.records, []);
-  assert.deepEqual(emptyRes.warnings, []);
-
-  // Spawn a brand-new session in Terminal 2 immediately afterwards and force a fresh read:
-  await writeFile(path.join(codexRoot, 'rollout-new.jsonl'), jsonl([
-    { type: 'session_meta', payload: { id: 'new-t2', cwd: '/workspace/app/feat-x/' } },
-    { timestamp: '2026-11-13T02:00:00Z', type: 'event_msg', payload: { type: 'task_started', turn_id: '1' } },
-    { timestamp: '2026-11-13T02:00:02Z', type: 'event_msg', payload: {
-      type: 'token_count',
-      info: { model: 'gpt-6.1-sol', total_token_usage: { output_tokens: 260, input_tokens: 100, cached_input_tokens: 0 }, last_token_usage: { output_tokens: 260, input_tokens: 100, cached_input_tokens: 0 } }
-    } }
-  ]));
-  const refreshed = await readTargetSession(channelTarget, { ...opts, fresh: true });
-  assert.equal(refreshed.session.records.length, 1);
-  assert.equal(refreshed.session.records[0].provider, 'codex');
-  assert.equal(refreshed.session.records[0].tokensPerSecond, 130);
-});
-
-test('channel CWD lookup parses Codex session_meta headers larger than 16 KiB', async t => {
-  const root = await fixture(t), codexRoot = path.join(root, 'codex');
-  await mkdir(codexRoot, { recursive: true });
-  const bigInstructions = 'x'.repeat(30_000);
   await writeFile(path.join(codexRoot, 'rollout-big-header.jsonl'), jsonl([
-    { type: 'session_meta', payload: { id: 'codex-big-meta', cwd: 'D:\\orca\\workspace\\Orca-TPS-Plugin\\1.5.0', base_instructions: bigInstructions } },
+    { type: 'session_meta', payload: { id: 'codex-big-meta', cwd: 'D:\\orca\\workspace\\Orca-TPS-Plugin\\1.5.0', base_instructions: 'x'.repeat(30_000) } },
     { timestamp: '2026-11-13T03:00:00Z', type: 'event_msg', payload: { type: 'task_started', turn_id: '1' } },
     { timestamp: '2026-11-13T03:00:02Z', type: 'event_msg', payload: {
       type: 'token_count',
       info: { model: 'gpt-6.1-sol', total_token_usage: { output_tokens: 300, input_tokens: 100, cached_input_tokens: 50 }, last_token_usage: { output_tokens: 300, input_tokens: 100, cached_input_tokens: 50 } }
     } }
   ]));
-  const res = await readTargetSession({
-    key: 'ch-big',
-    worktreeId: 'repo-1::D:/orca/workspace/Orca-TPS-Plugin/1.5.0',
-    worktreePath: 'D:/orca/workspace/Orca-TPS-Plugin/1.5.0',
-    sessions: []
-  }, { roots: { codex: [codexRoot] }, includeDefaults: false, platform: 'win32' });
-  assert.equal(res.session.records.length, 1);
-  assert.equal(res.session.records[0].provider, 'codex');
-  assert.equal(res.session.records[0].tokensPerSecond, 150);
+  const channel = await managerChannel(t, root, await usageRecords({ codex: [codexRoot] }),
+    { worktreeId: 'repo-1', worktreePath: 'D:/orca/workspace/Orca-TPS-Plugin/1.5.0', sessions: [] });
+  assert.equal(channel.session.records.length, 1);
+  assert.equal(channel.session.records[0].provider, 'codex');
+  assert.equal(channel.session.records[0].tokensPerSecond, 150);
 });
 
-test('channel OpenCode lookup filters the directory before limiting recent sessions', sqliteTestOptions, async t => {
-  const root = await fixture(t), file = path.join(root, 'opencode.db');
-  const db = new DatabaseSync(file);
-  try {
-    db.exec(`CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, time_updated INTEGER);
-      CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, data TEXT, time_created INTEGER);`);
-    const insert = db.prepare('INSERT INTO session VALUES (?,?,?)');
-    insert.run('wanted', 'D:\\projects\\app\\', 1);
-    for (let i = 0; i < 501; i++) insert.run(`other-${i}`, 'D:\\projects\\other', i + 2);
-    db.prepare('INSERT INTO message VALUES (?,?,?,?)').run('wanted-request', 'wanted', JSON.stringify({
-      role: 'assistant', tokens: { input: 100, output: 300 }, time: { created: 1000, completed: 3000 }
-    }), 1000);
-  } finally { db.close(); }
-  const result = await readTargetSession({ worktreeId: 'app', worktreePath: 'd:/projects/app', sessions: [] }, {
-    roots: { opencode: [file] }, includeDefaults: false, platform: 'win32'
-  });
-  assert.equal(result.session.records.length, 1);
-  assert.equal(result.session.records[0].rawId, 'wanted-request');
-  assert.deepEqual(result.warnings, []);
-});
-
-test('channel header lookup retries an unchanged large header after its read budget was exhausted', async t => {
-  const root = await fixture(t), channel = '/test';
-  // Cold reads leave only 48 KiB for the next file: its 60 KiB header cannot finish this pass.
-  const sizes = [16 * 1024 * 1024, 16 * 1024 * 1024, 16 * 1024 * 1024,
-    16 * 1024 * 1024 - 4 * 32768 - 48 * 1024];
-  for (const [i, size] of sizes.entries()) {
-    const file = path.join(root, `filler-${i}.jsonl`), content = Buffer.alloc(size, 32);
-    content.write(jsonl([{ type: 'session_meta', payload: { id: `filler-${i}`, cwd: channel } }]));
-    content[size - 1] = 10;
-    await writeFile(file, content);
-    await utimes(file, 100 + i, 100 + i);
-  }
-  const file = path.join(root, 'large-header.jsonl'), rows = codexRows('deferred-header');
-  rows[0].payload.base_instructions = 'x'.repeat(60_000);
-  await writeFile(file, jsonl(rows));
-  await utimes(file, 1, 1);
-  const target = { worktreeId: 'app', worktreePath: channel, sessions: [] };
-  const options = { roots: { codex: [root] }, includeDefaults: false, platform: 'linux', fresh: true };
-  assert.equal((await readTargetSession(target, options)).session.records.length, 0);
-  const retried = await readTargetSession(target, options);
-  assert.equal(retried.session.records.length, 1, 'a deferred header must be retried without changing the file');
-  assert.match(retried.session.records[0].id, /deferred-header/);
-});
-
-test('unavailable registered channel files retain the last statistics and recover on the next refresh', async t => {
-  const root = await fixture(t), file = path.join(root, 'recover.jsonl'), emptyFile = path.join(root, 'empty.jsonl');
-  await writeFile(file, jsonl(codexRows('recover')));
-  await writeFile(emptyFile, jsonl([{ type: 'session_meta', payload: { id: 'empty', cwd: '/test' } }]));
-  let target = { worktreeId: 'app', sessions: [
-    { provider: 'codex', sessionId: 'recover', transcriptPath: file },
-    { provider: 'codex', sessionId: 'empty', transcriptPath: emptyFile }
-  ] };
+test('an unavailable channel read retains the last statistics and recovers on the next refresh', async t => {
+  const records = [{ id: 'one', provider: 'codex', completedAt: 1000, outputTokens: 1 }];
+  let target = { worktreeId: 'app', sessions: [{ provider: 'codex', sessionId: 'recover' }] }, available = true;
   const register = () => ({ dispose() {} });
   const controller = createTpsController({
     storage: { get: async () => null }, panels: { handle: register, post() {} },
     commands: { register }, host: { call: async () => {} }, log() {}
   }, {
     readActive: async () => ({ target }),
-    readSession: active => readTargetSession(active, { includeDefaults: false }), focusPollMs: 0
+    readSession: async active => !available ? { session: null, warnings: [['notice.session-read-failed', 'codex', 'ENOENT']] }
+      : { session: { id: `channel:${active.worktreeId}`, provider: 'channel', records: active.worktreeId === 'app' ? records : [] }, warnings: [] },
+    focusPollMs: 0
   });
   t.after(() => controller.stop());
   await controller.start();
   assert.equal(controller.state().records.length, 1);
-  await rm(file);
+  available = false;
   await controller.refresh();
   assert.equal(controller.state().records.length, 1, 'an unavailable channel is not a successfully empty channel');
   assert.ok(controller.state().warnings.length > 0);
-  await writeFile(file, jsonl(codexRows('recover')));
+  available = true;
   await controller.refresh();
   assert.equal(controller.state().records.length, 1);
   assert.deepEqual(controller.state().warnings, []);
@@ -638,12 +366,12 @@ test('unavailable registered channel files retain the last statistics and recove
 test('channel proxy matching keeps different sessions with identical usage as distinct requests', sqliteTestOptions, async t => {
   const root = await fixture(t), sessions = [];
   for (const [i, sessionId] of ['first', 'second'].entries()) {
-    const file = path.join(root, `${sessionId}.jsonl`), rows = codexRows(sessionId);
+    const rows = codexRows(sessionId);
     rows[1].timestamp = new Date(Date.parse(rows[1].timestamp) + i * 10000).toISOString();
     rows[2].timestamp = new Date(Date.parse(rows[2].timestamp) + i * 10000).toISOString();
     rows[2].payload.info.model = 'gpt-test';
-    await writeFile(file, jsonl(rows));
-    sessions.push({ provider: 'codex', sessionId, transcriptPath: file });
+    await writeFile(path.join(root, `${sessionId}.jsonl`), jsonl(rows));
+    sessions.push({ provider: 'codex', sessionId });
   }
   const dbPath = path.join(root, 'proxy.db'), db = new DatabaseSync(dbPath);
   try {
@@ -655,7 +383,8 @@ test('channel proxy matching keeps different sessions with identical usage as di
     insert.run('proxy-first', 'codex', 'gpt-test', 50, 200, 50, 0, 2000, 500, 200, start);
     insert.run('proxy-second', 'codex', 'gpt-test', 50, 200, 50, 0, 4000, 1000, 200, start + 10);
   } finally { db.close(); }
-  const result = await readTargetSession({ worktreeId: 'app', sessions }, { includeDefaults: false, ccSwitchDb: dbPath });
-  assert.deepEqual(result.session.records.map(record => record.id), ['proxy:proxy-second', 'proxy:proxy-first']);
-  assert.ok(result.session.records.every(record => record.provider === 'codex' && !record.isEstimatedSpeed));
+  useProxyDatabase(t, dbPath);
+  const channel = await managerChannel(t, root, await usageRecords({ codex: [root] }), { worktreeId: 'app', sessions });
+  assert.deepEqual(channel.session.records.map(record => record.id), ['proxy:proxy-second', 'proxy:proxy-first']);
+  assert.ok(channel.session.records.every(record => record.provider === 'codex' && !record.isEstimatedSpeed));
 });

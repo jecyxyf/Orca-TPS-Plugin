@@ -6,12 +6,16 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
-import { defaultRoots } from '../src/harness_parser.mjs';
-import { discoverUsageUnits, readTargetSession } from '../src/harness_parser.mjs';
+import { defaultRoots, discoverUsageUnits } from '../src/harness_parser.mjs';
 import { leaderboardDay, leaderboardDayStart } from '../src/leaderboard_stats.mjs';
 import { localDayKey } from '../src/personal_stats.mjs';
 
-const options = root => ({ roots: { hermes: [root] }, includeDefaults: false, ccSwitchDb: null });
+const options = root => ({ roots: { hermes: [root] }, includeDefaults: false });
+// The manager stores these records and serves each channel by folder or session.
+async function hermesRecords(root) {
+  const [unit] = await discoverUsageUnits(0, { ...options(root), includeRecords: true });
+  return (await unit.read()).records;
+}
 const localTime = clock => {
   const field = value => String(value).padStart(2, '0');
   return `${localDayKey(clock.getTime())} ${field(clock.getHours())}:${field(clock.getMinutes())}:${field(clock.getSeconds())},000`;
@@ -35,7 +39,7 @@ test('Hermes home discovery includes native Windows and configured roots', () =>
   assert.deepEqual(defaultRoots({ platform: 'linux', home: '/home/a', env: {} }).roots.hermes, ['/home/a/.hermes']);
 });
 
-test('Hermes reads project and pane sessions with optional cache fields, keeping session metadata private', async t => {
+test('Hermes records carry project folders, subagent marks and optional cache fields, keeping session metadata private', async t => {
   const { root, file } = await fixture(t);
   const project = path.join(root, 'project'), unrelated = path.join(root, 'another-project');
   const db = new DatabaseSync(path.join(root, 'state.db'));
@@ -49,10 +53,8 @@ test('Hermes reads project and pane sessions with optional cache fields, keeping
   await writeFile(file, call(1) + call(2, { session: 'local-other' }) +
     call(3, { session: 'local-subagent', cache: 'cache=300/500 (60%) write=50' }) +
     call(4, { session: 'local-pane', cache: 'write=25' }));
-  const { session, warnings } = await readTargetSession({
-    worktreePath: project, sessions: [{ provider: 'hermes', sessionId: 'local-pane' }]
-  }, options(root));
-  assert.deepEqual(warnings, []);
+  const records = (await hermesRecords(root)).filter(record => record.cwd === project || record.sessionId === 'local-pane');
+  const session = { records };
   assert.equal(session.records.length, 3);
   const logged = session.records.find(record => record.cacheHitRate === 0.6);
   assert.equal(logged.freshInputTokens, 150);
@@ -68,10 +70,10 @@ test('Hermes reads project and pane sessions with optional cache fields, keeping
   assert.equal(writeOnly.freshInputTokens, 475);
   assert.equal(writeOnly.cacheHitRate, undefined);
   assert.ok(session.records.every(record => record.provider === 'hermes'));
-  assert.doesNotMatch(JSON.stringify(session), /PRIVATE_SESSION_TITLE|local-other/);
+  assert.doesNotMatch(JSON.stringify(await hermesRecords(root)), /PRIVATE_SESSION_TITLE/);
 });
 
-test('Hermes usage preserves all timestamped requests and deduplicates rotations beyond the 100-card limit', async t => {
+test('Hermes usage preserves all timestamped requests and deduplicates rotations', async t => {
   const { root, file } = await fixture(t);
   const rankDay = leaderboardDay(Date.now());
   const start = leaderboardDayStart(rankDay);
@@ -87,15 +89,14 @@ test('Hermes usage preserves all timestamped requests and deduplicates rotations
   assert.equal(requests, 131);
   assert.equal(result.leaderboardFrom, rankFrom);
   assert.deepEqual(result.leaderboardDays, { [rankDay]: 130 * 556, [rankFrom]: 556 });
-  const live = await readTargetSession({ provider: 'hermes', sessionId: 'local-hermes' }, options(root));
-  assert.equal(live.session.records.length, 100);
+  assert.equal((await hermesRecords(root)).length, 131);
 });
 
 test('Hermes notices equal-size replacements and reads each complete appended request once', async t => {
   const { root, file } = await fixture(t);
   const clock = new Date();
   const entry = (id, model, at = clock) => call(id, { model, clock: at, responseId: '' });
-  const read = async () => (await readTargetSession({ provider: 'hermes', sessionId: 'local-hermes' }, options(root))).session.records;
+  const read = async () => (await hermesRecords(root)).filter(record => record.sessionId === 'local-hermes');
   await writeFile(file, entry(1, 'model-a'));
   assert.deepEqual((await read()).map(row => row.model), ['model-a']);
   await writeFile(file, entry(2, 'model-b'));

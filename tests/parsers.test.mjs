@@ -4,7 +4,6 @@ import { formatHitRatePercent, formatSpeedDisplay, formatTokensPerSecond } from 
 import {
   computeSpeedMetrics,
   mergeChannelProxyRecords,
-  mergeProxyRecords,
   normalizeCodexModel,
   parseJsonl,
   parseOpenCodeRows
@@ -248,7 +247,7 @@ test('Pi parses per-request assistant latency and unpacks official subagent tool
   assert.equal(sub.tokensPerSecond, null);
 });
 
-test('mergeProxyRecords upgrades matching session records to exact post-TTFT proxy speed within ±600s', () => {
+test('channel merging upgrades matching session records to exact post-TTFT proxy speed within ±600s', () => {
   const sessionResult = parseJsonl(text([
     row(1, { type: 'user', uuid: 'u1', sessionId: 's1', message: { content: 'hi' } }),
     row(6, {
@@ -263,7 +262,7 @@ test('mergeProxyRecords upgrades matching session records to exact post-TTFT pro
   assert.equal(sessionResult.records[0].tokensPerSecond, null);
 
   // Matching 2xx proxy record has exact TTFT (3000ms) and total latency (5000ms) -> 2000ms generation -> 75 tok/s!
-  const merged = mergeProxyRecords(sessionResult.records, [{
+  const merged = mergeChannelProxyRecords([{ provider: 'claude', sessionId: 's1', records: sessionResult.records, proxyRows: [{
     request_id: 'proxy-uuid-1',
     session_id: 's1',
     app_type: 'claude',
@@ -276,7 +275,7 @@ test('mergeProxyRecords upgrades matching session records to exact post-TTFT pro
     latency_ms: 5000,
     first_token_ms: 3000,
     created_at: Math.floor((epoch + 6000) / 1000) + 2
-  }], 'claude', 's1');
+  }] }]);
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].dataSource, 'proxy');

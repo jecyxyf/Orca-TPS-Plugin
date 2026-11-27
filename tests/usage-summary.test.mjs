@@ -215,7 +215,7 @@ test('discovery reads Antigravity conversations with native model and cache coun
 });
 
 test('streamed Codex usage equals a whole-file parse, and a file name is counted once across roots', async t => {
-  const { readCodexUsageFile, parseJsonl } = await import('../src/harness_parser.mjs');
+  const { parseJsonl } = await import('../src/harness_parser.mjs');
   const root = await fixture(t), now = Date.now();
   const iso = offset => new Date(now - offset).toISOString();
   // Cumulative totals: each snapshot adds one request of 1000 input (800 cached) and 240 output tokens.
@@ -228,7 +228,8 @@ test('streamed Codex usage equals a whole-file parse, and a file name is counted
   ];
   const sessionFile = path.join(root, 'rollout-a.jsonl');
   await writeFile(sessionFile, jsonl(rows) + '{"partial":');
-  const streamed = await readCodexUsageFile(sessionFile, dayKeyAgo(now, 364));
+  const [unit] = await discoverUsageUnits(0, { roots: { codex: [root] }, includeDefaults: false });
+  const streamed = await unit.read();
   const whole = {};
   accumulateRecords(whole, 'codex', parseJsonl(jsonl(rows), 'codex', '', { limit: Infinity }).records, { minDay: dayKeyAgo(now, 364) });
   assert.deepEqual(streamed, whole, 'the unfinished trailing line is not counted');
