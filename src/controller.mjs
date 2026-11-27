@@ -1,8 +1,6 @@
 import { sourceMessage, sourceNotice } from './locales.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { harnessFamily, SESSION_HARNESSES } from './harnesses.mjs';
-const STORE_KEY = 'preferences-v1';
-const EMPTY_ROOTS = () => Object.fromEntries(SESSION_HARNESSES.map(key => [key, []]));
+import { harnessFamily } from './harnesses.mjs';
 const cleanText = (value, limit = 160) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, limit);
 const routineWarningCodes = ['notice.recent-files-limit', 'notice.codex-large-session'];
 const HIDDEN_ROUTINE_WARNINGS = new Set([...routineWarningCodes, ...routineWarningCodes.map(code => sourceMessage(code))]);
@@ -35,23 +33,6 @@ export function formatHitRatePercent(rate, locale) {
     return rate.toLocaleString(locale, { style: 'percent', minimumFractionDigits: digits, maximumFractionDigits: digits });
   }
   return `${percent.toFixed(percent >= 99.95 ? 0 : 1)}%`;
-}
-
-export function validateRoots(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(sourceMessage('notice.invalid-roots'));
-  const roots = EMPTY_ROOTS();
-  for (const key of Object.keys(value)) {
-    if (!SESSION_HARNESSES.includes(key)) throw new Error(sourceMessage('notice.unknown-root-type'));
-    if (!Array.isArray(value[key]) || value[key].length > 16) throw new Error(sourceMessage('notice.root-limit'));
-    roots[key] = [...new Set(value[key].map(path => {
-      if (typeof path !== 'string' || path.length > 4096 || /[\u0000\r\n]/.test(path)) throw new Error(sourceMessage('notice.invalid-path'));
-      const trimmed = path.trim();
-      if (/^[a-z]+:\/\//i.test(trimmed)) throw new Error(sourceMessage('notice.local-path-required'));
-      return trimmed;
-    }).filter(Boolean))];
-  }
-  if (Buffer.byteLength(JSON.stringify(roots), 'utf8') > 16 * 1024) throw new Error(sourceMessage('notice.root-size-limit'));
-  return roots;
 }
 
 const isChannelTarget = target => Boolean(target && (target.worktreePath !== undefined || Array.isArray(target.sessions)));
@@ -87,13 +68,13 @@ function isTransientPage(notice) {
 export function createTpsController(orca, {
   readActive, readSession, now = Date.now, pollMs = 5000, focusPollMs = 250,
   livePollMs = focusPollMs, backgroundPollMs = pollMs, backgroundLimit = 2, watchWorkspace = false,
-  holdActivityMs = 120_000, onTargetChange = () => {}, onOpenTargets = () => {}, onSessionRead, cache, locales
+  holdActivityMs = 120_000, onOpenTargets = () => {}, cache, locales
 } = {}) {
   const t = locales?.t ?? sourceMessage;
   const translateNotice = locales?.notice ?? sourceNotice;
   const instanceId = randomUUID();
   let target = null, key = null, sessionsSig = '', session = null;
-  let roots = EMPTY_ROOTS(), warnings = [];
+  let warnings = [];
   let updatedAt = null, loading = true, generation = 0;
   let emptyNotice = ['notice.detecting-channel'];
   let stopped = false, started = false;
@@ -198,7 +179,6 @@ export function createTpsController(orca, {
       target = next;
       emptyNotice = notice;
       rememberOpenTargets(context, next);
-      if (changed) onTargetChange(target);
       if (changed || messageChanged || loadingCleared) void publish();
     })();
     contextPending = task;
@@ -206,18 +186,8 @@ export function createTpsController(orca, {
     finally { if (contextPending === task) contextPending = null; }
   }
 
-  async function loadSession(requestedTarget, options) {
-    const result = await readSession(requestedTarget, options);
-    if (!stopped && onSessionRead && matchesTarget(result?.session, requestedTarget)) {
-      try { onSessionRead(requestedTarget, result); }
-      catch (error) { orca.log(t('notice.usage-read-failed', error?.code ?? error?.message ?? 'unknown')); }
-    }
-    return result;
-  }
-
-  function readProject(requestedTarget, force) {
-    const options = { roots: structuredClone(roots), ...(force ? { fresh: true } : {}) };
-    if (!cache || !isChannelTarget(requestedTarget)) return loadSession(requestedTarget, options);
+  function readProject(requestedTarget) {
+    if (!cache || !isChannelTarget(requestedTarget)) return readSession(requestedTarget);
     const channel = targetKey(requestedTarget);
     if (projectReads.has(channel)) return projectReads.get(channel);
     channelReadAt.set(channel, now());
@@ -225,7 +195,7 @@ export function createTpsController(orca, {
     const pending = (async () => {
       await cache.get(id);
       if (stopped) return { session: null, warnings: [] };
-      const result = await loadSession(requestedTarget, options);
+      const result = await readSession(requestedTarget);
       if (stopped || !matchesTarget(result.session, requestedTarget)) return result;
       const saved = cache.set(id, result.session.records, { display: channel === key && !result.warnings?.length });
       return { ...result, cachedAt: saved.updatedAt, session: { ...result.session, records: saved.records } };
@@ -246,7 +216,7 @@ export function createTpsController(orca, {
       }
     }
     if (!candidate) return;
-    const pending = readProject(candidate, false)
+    const pending = readProject(candidate)
       .catch(() => {})
       .finally(() => backgroundReads.delete(pending));
     backgroundReads.add(pending);
@@ -264,7 +234,7 @@ export function createTpsController(orca, {
       void publish();
       if (stopped || requestedGeneration !== generation) return state();
       try {
-        const result = await readProject(requestedTarget, force);
+        const result = await readProject(requestedTarget);
         if (stopped || requestedGeneration !== generation) return state();
         const loaded = matchesTarget(result.session, requestedTarget) ? result.session : null;
         if (loaded) {
@@ -318,11 +288,6 @@ export function createTpsController(orca, {
   async function start({ background = false } = {}) {
     if (started) return;
     started = true;
-    try {
-      const saved = await orca.storage.get(STORE_KEY);
-      if (saved?.roots) roots = validateRoots(saved.roots);
-    } catch { orca.log(t('notice.path-settings-unavailable')); }
-    if (stopped) return;
     registrations.push(
       orca.panels.handle('tps.state', state),
       orca.panels.handle('tps.refresh', refresh),

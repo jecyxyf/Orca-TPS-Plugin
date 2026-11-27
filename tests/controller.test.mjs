@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTpsController, publicChannelId, validateRoots } from '../src/controller.mjs';
+import { createTpsController, publicChannelId } from '../src/controller.mjs';
 import { createChannelCache } from '../src/channel-cache.mjs';
 import { openLocalUsageDb } from '../src/local-usage-db.mjs';
 import { createLocalePreferences } from '../src/locales.mjs';
@@ -25,12 +25,11 @@ const deferred = () => { let resolve, reject; const promise = new Promise((a, b)
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
 test('follows the active target and displays latest record speed (with CC Switch ≈ / integer formatting) plus cache', async () => {
-  const host = fakeHost({ selectedId: 'codex:other', roots: { codex: ['/saved'] } });
+  const host = fakeHost();
   const controller = createTpsController(host.orca, {
     readActive: async () => ({ target: target('old-open-conversation') }),
-    readSession: async (active, options) => {
+    readSession: async active => {
       assert.equal(active.sessionId, 'old-open-conversation');
-      assert.deepEqual(options.roots.codex, ['/saved']);
       return result(active.sessionId, 26.4, 0.75, true);
     }, focusPollMs: 0
   });
@@ -408,14 +407,6 @@ test('open channels are collected in the background and switching displays cache
   assert.equal(host.posts.length, posts, 'same records must not refresh the panel');
 });
 
-test('legacy custom roots remain bounded and validated without exposing a settings UI', () => {
-  assert.deepEqual(validateRoots({ codex: [' ~/sessions ', '~/sessions', ''] }).codex, ['~/sessions']);
-  assert.throws(() => validateRoots({ codex: ['https://example.com'] }), /本机/);
-  assert.throws(() => validateRoots({ codex: ['a\nsecret'] }), /路径/);
-  assert.throws(() => validateRoots({ credentials: [] }), /未知/);
-  assert.throws(() => validateRoots({ codex: Array.from({ length: 8 }, (_, i) => `${i}${'a'.repeat(3000)}`) }), /过长/);
-});
-
 test('channel target aggregates records, refreshes in-place when channel panes change, and clears on channel switch', async () => {
   const host = fakeHost();
   let currentTarget = {
@@ -428,8 +419,8 @@ test('channel target aggregates records, refreshes in-place when channel panes c
   const calls = [];
   const controller = createTpsController(host.orca, {
     readActive: async () => ({ target: currentTarget }),
-    readSession: async (active, opts) => {
-      calls.push({ count: active.sessions?.length ?? 0, fresh: Boolean(opts.fresh) });
+    readSession: async active => {
+      calls.push({ count: active.sessions?.length ?? 0 });
       const id = `channel:${active.worktreeId}`;
       return {
         session: {
@@ -454,7 +445,6 @@ test('channel target aggregates records, refreshes in-place when channel panes c
   assert.equal(controller.state().activeSession.provider, 'channel');
   assert.equal(controller.state().activeSession.title, 'proj/1.5.0');
   assert.equal(controller.state().records[0].tokensPerSecond, 60);
-  assert.equal(calls[0].fresh, true, 'manual/initial refresh passes fresh: true');
   assert.ok(!JSON.stringify(controller.state()).includes('/private'));
 
   // Same channel gains a second registered pane within pollMs: refreshes in-place without wiping prior records or bumping generation.
